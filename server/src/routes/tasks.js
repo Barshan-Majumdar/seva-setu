@@ -165,4 +165,40 @@ router.get('/my', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/tasks
+ * @desc    Get all tasks for coordinator dashboard
+ * @access  Private (Coordinator)
+ */
+router.get('/', auth, async (req, res) => {
+  if (req.user.role !== 'coordinator') {
+    return res.status(403).json({ message: 'Access denied' });
+  }
+
+  try {
+    const tasks = await prisma.$queryRaw`
+      SELECT
+        t.id AS task_id,
+        t.status AS task_status,
+        t.assigned_at,
+        t.checked_in_at,
+        t.completed_at,
+        t.need_id,
+        n.title AS need_title,
+        n.status AS need_status,
+        u.id AS volunteer_id,
+        u.name AS volunteer_name
+      FROM tasks t
+      JOIN needs n ON t.need_id = n.id
+      JOIN users u ON t.assigned_volunteer_id = u.id
+      ORDER BY t.assigned_at DESC
+    `;
+
+    res.json(tasks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

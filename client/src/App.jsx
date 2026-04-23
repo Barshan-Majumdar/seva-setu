@@ -1,19 +1,17 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import {
-  Show,
-  RedirectToSignIn,
-  SignIn,
-  SignUp,
-} from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
+import ProtectedRoute from './components/ProtectedRoute';
 
-// ✅ Lazy load pages for performance (Code Splitting)
+// Lazy load pages for performance
 const LandingPage = lazy(() => import('./pages/LandingPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const FieldForm = lazy(() => import('./pages/FieldForm'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const VolunteerPage = lazy(() => import('./pages/VolunteerPage'));
 
 const PageLoader = () => (
   <div className="min-h-screen bg-surface-primary flex items-center justify-center">
@@ -33,64 +31,35 @@ function App() {
       <Router>
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* Public */}
             <Route path="/" element={<LandingPage />} />
-            
-            <Route
-              path="/sign-in/*"
-              element={
-                <div className="min-h-screen flex items-center justify-center bg-surface-primary relative overflow-hidden">
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent-sky/[0.03] rounded-full blur-[120px]" />
-                  <div className="relative z-10 w-full max-w-md px-6">
-                    <div className="flex justify-center mb-8">
-                      <Logo size={48} />
-                    </div>
-                    <SignIn routing="path" path="/sign-in" fallbackRedirectUrl="/field" />
-                  </div>
-                </div>
-              }
-            />
-            <Route
-              path="/sign-up/*"
-              element={
-                <div className="min-h-screen flex items-center justify-center bg-surface-primary relative overflow-hidden">
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent-indigo/[0.03] rounded-full blur-[120px]" />
-                  <div className="relative z-10 w-full max-w-md px-6">
-                    <div className="flex justify-center mb-8">
-                      <Logo size={48} />
-                    </div>
-                    <SignUp routing="path" path="/sign-up" fallbackRedirectUrl="/field" />
-                  </div>
-                </div>
-              }
-            />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/sign-in/*" element={<Navigate to="/login" replace />} />
+            <Route path="/sign-up/*" element={<Navigate to="/register" replace />} />
 
-            {/* Protected Routes using MainLayout */}
             <Route
               path="/field"
               element={
-                <>
-                  <Show when="signed-in">
-                    <FieldForm />
-                  </Show>
-                  <Show when="signed-out">
-                    <RedirectToSignIn />
-                  </Show>
-                </>
+                <ProtectedRoute>
+                  <FieldForm />
+                </ProtectedRoute>
               }
             />
             
             <Route
               path="/dashboard"
               element={
-                <>
-                  <Show when="signed-in">
-                    <DashboardPage />
-                  </Show>
-                  <Show when="signed-out">
-                    <RedirectToSignIn />
-                  </Show>
-                </>
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/volunteer"
+              element={
+                <ProtectedRoute>
+                  <VolunteerPage />
+                </ProtectedRoute>
               }
             />
 

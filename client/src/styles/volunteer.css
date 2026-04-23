@@ -1,0 +1,165 @@
+.volunteer-shell {
+  padding-block: clamp(1.5rem, 2vw + 1rem, 2.8rem);
+  display: grid;
+  gap: 0.9rem;
+}
+
+.volunteer-hero {
+  padding: 1rem;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-surface-card) 85%, var(--color-accent-green) 15%),
+    color-mix(in oklab, var(--color-surface-card) 91%, var(--color-accent-sky) 9%)
+  );
+}
+
+.volunteer-title {
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
+  line-height: 1.12;
+}
+
+.volunteer-subtitle {
+  margin-top: 0.6rem;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
+.volunteer-stats-grid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.volunteer-stat {
+  padding: 0.85rem;
+}
+
+.volunteer-stat-label {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.volunteer-stat-value {
+  margin-top: 0.35rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.volunteer-availability {
+  padding: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.volunteer-toggle-btn {
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  padding: 0.4rem 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
+.volunteer-task-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.volunteer-task-card {
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.volunteer-task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.volunteer-task-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: var(--color-text-secondary);
+  font-size: 0.77rem;
+}
+
+.volunteer-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.volunteer-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.volunteer-pill-assigned {
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
+}
+
+.volunteer-pill-in-progress {
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.volunteer-pill-completed {
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #34d399;
+}
+
+.volunteer-pill-default {
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.volunteer-celebration {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.12);
+  color: #8cf3c5;
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.volunteer-loading,
+.volunteer-error,
+.volunteer-empty,
+.volunteer-bg-sync {
+  padding: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.volunteer-error {
+  color: #ffc4cf;
+  border-color: rgba(251, 113, 133, 0.4);
+}
+
+@media (min-width: 760px) {
+  .volunteer-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

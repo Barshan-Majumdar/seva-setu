@@ -19,6 +19,7 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@clerk/backend": "^2.7.1",
     "@prisma/client": "^6.19.3",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",

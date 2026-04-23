@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Show, UserButton } from '@clerk/react';
 import Logo from '../components/Logo';
+import { useAuth } from '../hooks/useAuth';
 
 const MainLayout = ({ children }) => {
+  const { isAuthenticated, currentUser, logout } = useAuth();
+
   return (
     <div className="min-h-screen bg-surface-primary flex flex-col">
 
@@ -17,28 +19,37 @@ const MainLayout = ({ children }) => {
 
           {/* Nav actions */}
           <div className="flex items-center gap-3">
-            <Show when="signed-out">
-              <Link to="/sign-in" className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-3 py-2">
+            {!isAuthenticated ? (
+              <>
+                <Link to="/login" className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-3 py-2">
                 Sign in
-              </Link>
-              <Link to="/sign-up" className="btn-primary text-sm py-2 px-5">
-                Get Started
-              </Link>
-            </Show>
-            <Show when="signed-in">
-              <Link to="/field" className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-3 py-2">
+                </Link>
+                <Link to="/register" className="btn-primary text-sm py-2 px-5">
+                  Get Started
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link to="/field" className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-3 py-2">
                 Report Need
-              </Link>
-              <Link to="/dashboard" className="btn-primary text-sm py-2 px-5">
-                Dashboard
-              </Link>
-              <div className="pl-3 border-l border-border">
-                <UserButton
-                  appearance={{ elements: { userButtonAvatarBox: 'w-8 h-8' } }}
-                  signOutBackToUrl="/"
-                />
-              </div>
-            </Show>
+                </Link>
+                <Link to="/dashboard" className="btn-primary text-sm py-2 px-5">
+                  Dashboard
+                </Link>
+                <div className="pl-3 border-l border-border flex items-center gap-2">
+                  <span className="text-xs text-text-muted hidden sm:inline">
+                    {currentUser?.name || currentUser?.email || 'User'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors px-2 py-1"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </nav>
       </header>

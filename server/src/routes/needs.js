@@ -86,7 +86,7 @@ router.get('/', auth, async (req, res) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const needs = await prisma.$queryRawUnsafe(
-      `SELECT id, title, need_type, urgency_score, status, ward, district, created_at,
+      `SELECT id, title, description, need_type, people_affected, urgency_score, status, ward, district, is_disaster_zone, created_at, updated_at,
               ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat
        FROM needs
        ${whereClause}

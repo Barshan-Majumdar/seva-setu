@@ -10,7 +10,7 @@ const FinalCtaSection = () => (
           Bring your NGO operations, field teams, and volunteer dispatch into one clean command flow.
         </p>
         <div className="landing-hero-actions">
-          <Link to="/sign-up" className="btn-primary">
+          <Link to="/register" className="btn-primary">
             Join SevaSetu
             <ArrowRight className="w-4 h-4" />
           </Link>
@@ -24,4 +24,3 @@ const FinalCtaSection = () => (
 );
 
 export default FinalCtaSection;
-

@@ -159,7 +159,7 @@
 }
 
 .landing-feature-card li::before {
-  content: '• ';
+  content: '- ';
   color: var(--color-accent-sky);
 }
 
@@ -236,3 +236,190 @@
   }
 }
 
+.auth-shell {
+  padding-block: clamp(2rem, 3vw, 4.2rem);
+}
+
+.auth-card-wrap {
+  position: relative;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.auth-card-wrap::before,
+.auth-card-wrap::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.auth-card-wrap::before {
+  width: clamp(240px, 32vw, 420px);
+  height: clamp(240px, 32vw, 420px);
+  top: -40px;
+  left: -20px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.18), transparent 70%);
+}
+
+.auth-card-wrap::after {
+  width: clamp(220px, 28vw, 360px);
+  height: clamp(220px, 28vw, 360px);
+  bottom: -20px;
+  right: -10px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.18), transparent 70%);
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  max-width: 28rem;
+  margin-inline: auto;
+  border-radius: 1.25rem;
+  padding: clamp(1.2rem, 2vw, 1.8rem);
+  background: color-mix(in oklab, var(--color-surface-card) 89%, var(--color-accent-sky) 11%);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.auth-title {
+  font-size: clamp(1.45rem, 2.2vw, 2rem);
+  line-height: 1.15;
+  margin-bottom: 0.45rem;
+}
+
+.auth-subtitle {
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+  margin-bottom: 1rem;
+}
+
+.cl-rootBox,
+.cl-cardBox,
+.cl-signIn-root,
+.cl-signUp-root {
+  width: 100%;
+}
+
+.cl-card {
+  width: 100% !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.cl-headerTitle {
+  display: none !important;
+}
+
+.cl-headerSubtitle {
+  display: none !important;
+}
+
+.cl-formButtonPrimary {
+  background: var(--color-text-primary) !important;
+  color: #071017 !important;
+  border-radius: 0.75rem !important;
+}
+
+.cl-formFieldInput {
+  background: var(--color-surface-secondary) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.cl-formFieldLabel,
+.cl-formFieldAction,
+.cl-socialButtonsBlockButtonText {
+  color: var(--color-text-primary) !important;
+}
+
+.cl-formFieldHintText,
+.cl-formFieldWarningText,
+.cl-formFieldSuccessText,
+.cl-dividerText,
+.cl-footerActionText,
+.cl-navbarButton,
+.cl-identityPreviewText {
+  color: var(--color-text-secondary) !important;
+}
+
+.cl-formFieldInput::placeholder {
+  color: color-mix(in oklab, var(--color-text-secondary) 84%, transparent) !important;
+}
+
+.cl-dividerLine {
+  background: color-mix(in oklab, var(--color-border) 80%, transparent) !important;
+}
+
+.cl-socialButtonsBlockButton {
+  background: color-mix(in oklab, var(--color-surface-secondary) 90%, transparent) !important;
+  border-color: var(--color-border) !important;
+}
+
+.cl-footerActionLink,
+.cl-identityPreviewEditButton {
+  color: var(--color-accent-sky) !important;
+}
+
+.cl-socialButtonsProviderIcon__github,
+.cl-socialButtonsProviderIcon__google,
+.cl-socialButtonsProviderIcon__apple {
+  filter: brightness(0.92);
+}
+
+.landing-hero {
+  padding-block: clamp(4rem, 5vw + 2rem, 7.2rem);
+}
+
+.landing-hero-grid {
+  align-items: start;
+}
+
+.landing-display {
+  max-width: 14ch;
+}
+
+.landing-feature-grid {
+  gap: 1.15rem;
+}
+
+.landing-feature-card {
+  transition: border-color 220ms ease, transform 220ms ease, background-color 220ms ease;
+}
+
+.landing-feature-card:hover {
+  border-color: var(--color-border-hover);
+  transform: translateY(-2px);
+  background: color-mix(in oklab, var(--color-surface-card) 89%, var(--color-accent-sky) 11%);
+}
+
+.landing-timeline {
+  gap: 1rem;
+}
+
+.landing-timeline-item {
+  padding: 1.05rem 1.15rem;
+}
+
+.landing-cta-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-cta-shell::after {
+  content: '';
+  position: absolute;
+  inset: auto -40px -60px auto;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.18), transparent 70%);
+}
+
+@media (min-width: 760px) {
+  .auth-card {
+    max-width: 30rem;
+  }
+}

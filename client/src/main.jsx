@@ -3,19 +3,22 @@ import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import { dark } from '@clerk/themes'
 import App from './App.jsx'
+import AuthTokenBridge from './components/AuthTokenBridge.jsx'
+import 'leaflet/dist/leaflet.css'
 import './index.css'
 import './styles/landing.css'
 import './styles/dashboard.css'
+import './styles/volunteer.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!PUBLISHABLE_KEY) {
-  throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY in your .env file")
+  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in your .env file')
 }
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ClerkProvider 
+    <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
       appearance={{
         baseTheme: dark,
@@ -27,13 +30,22 @@ createRoot(document.getElementById('root')).render(
           borderRadius: '0.75rem',
           fontFamily: 'Manrope, Segoe UI, sans-serif',
         },
-        elements: {
-          card: 'shadow-2xl border border-white/[0.06]',
-          formButtonPrimary: 'bg-gradient-to-r from-sky-400 to-indigo-400 hover:shadow-lg hover:shadow-sky-500/25 transition-all',
-        }
       }}
     >
+      <AuthTokenBridge />
       <App />
     </ClerkProvider>
   </React.StrictMode>,
 )
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.error('Service worker registration failed:', err);
+    });
+  });
+} else if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    registrations.forEach((registration) => registration.unregister());
+  });
+}
