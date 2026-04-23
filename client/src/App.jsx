@@ -1,19 +1,19 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import {
   Show,
   RedirectToSignIn,
   SignIn,
   SignUp,
 } from '@clerk/react';
-import { ChevronLeft, Activity, Loader2 } from 'lucide-react';
-import MainLayout from './layouts/MainLayout';
+import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
 
 // ✅ Lazy load pages for performance (Code Splitting)
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const FieldForm = lazy(() => import('./pages/FieldForm'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 
 const PageLoader = () => (
   <div className="min-h-screen bg-surface-primary flex items-center justify-center">
@@ -83,28 +83,14 @@ function App() {
             <Route
               path="/dashboard"
               element={
-                <MainLayout>
+                <>
                   <Show when="signed-in">
-                    <div className="py-12 px-4">
-                      <div className="max-w-4xl mx-auto">
-                        <div className="mb-8">
-                          <h1 className="text-2xl font-bold text-text-primary mb-1">Command Center</h1>
-                          <p className="text-sm text-text-muted">Strategic Coordination Hub</p>
-                        </div>
-                        <div className="card p-16 text-center border-dashed border-2" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                          <Activity className="w-12 h-12 text-text-muted mx-auto mb-4 opacity-30" />
-                          <h2 className="text-base font-semibold text-text-primary mb-2">Intelligence Dashboard</h2>
-                          <p className="text-sm text-text-muted max-w-xs mx-auto">
-                            Connecting real-time field data to regional coordinators. Coming in Phase 3.4.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    <DashboardPage />
                   </Show>
                   <Show when="signed-out">
                     <RedirectToSignIn />
                   </Show>
-                </MainLayout>
+                </>
               }
             />
 
