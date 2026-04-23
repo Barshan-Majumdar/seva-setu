@@ -23,15 +23,15 @@ erDiagram
         string name
         string email UK
         string password_hash
-        enum role "coordinator | volunteer | field_worker"
+        string role
         uuid org_id FK
         timestamp created_at
     }
 
     VOLUNTEERS {
         uuid user_id PK_FK
-        text_array skills "medical, logistics, etc."
-        point location "PostGIS POINT (SRID 4326)"
+        text_array skills
+        point location
         boolean is_available
         int tasks_completed
         float completion_rate
@@ -41,13 +41,13 @@ erDiagram
         uuid id PK
         string title
         text description
-        enum need_type "medical | food | shelter | education | other"
-        point location "PostGIS POINT (SRID 4326)"
+        string need_type
+        point location
         string ward
         string district
         int people_affected
-        float urgency_score "1-10 scale"
-        enum status "open | assigned | in_progress | completed"
+        float urgency_score
+        string status
         boolean is_disaster_zone
         uuid reported_by FK
         timestamp created_at
@@ -58,7 +58,7 @@ erDiagram
         uuid id PK
         uuid need_id FK
         uuid assigned_volunteer_id FK
-        enum status "assigned | in_progress | completed"
+        string status
         timestamp assigned_at
         timestamp checked_in_at
         timestamp completed_at
