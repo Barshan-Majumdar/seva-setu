@@ -1,0 +1,16 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env/
+venv/
+
+# Environment Variables
+.env
+.env.*
+!.env.example

@@ -24,20 +24,20 @@
 - [x] Create a `LICENSE` file (MIT)
 
 ### 0.2 Define Monorepo Folder Structure
-- [ ] Create `/client` folder for the React frontend
-- [ ] Create `/server` folder for the backend API
-- [ ] Create `/docs` folder for wireframes, ERDs, and pitch assets
-- [ ] Create `docker-compose.yml` at root (optional but recommended for local DB)
+- [x] Create `/client` folder for the React frontend
+- [x] Create `/server` folder for the backend API
+- [x] Create `/docs` folder for wireframes, ERDs, and pitch assets
+- [x] Create `docker-compose.yml` at root (optional but recommended for local DB)
 
 ### 0.3 Environment Configuration
-- [ ] Create `.env.example` files in both `/client` and `/server`
-- [ ] Document required env variables: `DATABASE_URL`, `JWT_SECRET`, `PORT`, `MAPBOX_TOKEN` (or Leaflet, no key needed)
-- [ ] Add `.env` to `.gitignore`
+- [x] Create `.env.example` files in both `/client` and `/server`
+- [x] Document required env variables: `DATABASE_URL`, `JWT_SECRET`, `PORT`, `MAPBOX_TOKEN` (or Leaflet, no key needed)
+- [x] Add `.env` to `.gitignore`
 
 ### 0.4 Team Coordination
-- [ ] Assign GitHub usernames and roles to each team member
-- [ ] Create a shared task board (GitHub Projects, Notion, or Linear)
-- [ ] Do a 15-min kickoff call to align on API contracts between frontend and backend
+- [x] Assign GitHub usernames and roles to each team member
+- [x] Create a shared task board (GitHub Projects, Notion, or Linear)
+- [x] Do a 15-min kickoff call to align on API contracts between frontend and backend
 
 ---
 
