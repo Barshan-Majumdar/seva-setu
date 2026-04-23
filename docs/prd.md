@@ -44,47 +44,48 @@
 ## 🗄️ Phase 1 — Database Design & Setup
 
 ### 1.1 Choose & Provision Database
-- [ ] Install PostgreSQL locally (or spin up via `docker-compose`)
-- [ ] Install the **PostGIS** extension: `CREATE EXTENSION postgis;`
-- [ ] Confirm connection works with a test query
+- [x] Install PostgreSQL locally (or spin up via `docker-compose`)
+- [x] Install the **PostGIS** extension: `CREATE EXTENSION postgis;`
+- [x] Confirm connection works with a test query
 
 ### 1.2 Design the Schema — Core Tables
 
 #### `users` table
-- [ ] Define fields: `id`, `name`, `email`, `password_hash`, `role` (ENUM: `coordinator`, `volunteer`, `field_worker`), `created_at`
-- [ ] Add unique constraint on `email`
+- [x] Define fields: `id`, `name`, `email`, `password_hash`, `role` (ENUM: `coordinator`, `volunteer`, `field_worker`), `created_at`
+- [x] Add unique constraint on `email`
 
 #### `volunteers` table (extends users)
-- [ ] Define fields: `user_id` (FK), `skills` (TEXT[] array: e.g., `['medical', 'logistics', 'counseling']`), `location` (PostGIS `POINT`), `is_available` (BOOLEAN), `tasks_completed` (INT), `completion_rate` (FLOAT)
-- [ ] Add spatial index: `CREATE INDEX ON volunteers USING GIST(location);`
+- [x] Define fields: `user_id` (FK), `skills` (TEXT[] array: e.g., `['medical', 'logistics', 'counseling']`), `location` (PostGIS `POINT`), `is_available` (BOOLEAN), `tasks_completed` (INT), `completion_rate` (FLOAT)
+- [x] Add spatial index: `CREATE INDEX ON volunteers USING GIST(location);`
 
 #### `needs` table
-- [ ] Define fields: `id`, `title`, `description`, `need_type` (ENUM: `medical`, `food`, `shelter`, `education`, `other`), `location` (PostGIS `POINT`), `ward`, `district`, `people_affected` (INT), `urgency_score` (FLOAT 1–10), `status` (ENUM: `open`, `assigned`, `in_progress`, `completed`), `is_disaster_zone` (BOOLEAN), `reported_by` (FK → users), `created_at`, `updated_at`
-- [ ] Add spatial index on `location`
+- [x] Define fields: `id`, `title`, `description`, `need_type` (ENUM: `medical`, `food`, `shelter`, `education`, `other`), `location` (PostGIS `POINT`), `ward`, `district`, `people_affected` (INT), `urgency_score` (FLOAT 1–10), `status` (ENUM: `open`, `assigned`, `in_progress`, `completed`), `is_disaster_zone` (BOOLEAN), `reported_by` (FK → users), `created_at`, `updated_at`
+- [x] Add spatial index on `location`
 
 #### `tasks` table
-- [ ] Define fields: `id`, `need_id` (FK), `assigned_volunteer_id` (FK → users), `assigned_at`, `checked_in_at`, `completed_at`, `status` (mirrors need status), `notes`
+- [x] Define fields: `id`, `need_id` (FK), `assigned_volunteer_id` (FK → users), `assigned_at`, `checked_in_at`, `completed_at`, `status` (mirrors need status), `notes`
 
 #### `organizations` table
-- [ ] Define fields: `id`, `name`, `contact_email`, `district`, `created_at`
-- [ ] Link `users` to `organizations` via `org_id` FK
+- [x] Define fields: `id`, `name`, `contact_email`, `district`, `created_at`
+- [x] Link `users` to `organizations` via `org_id` FK
 
 ### 1.3 Write Migrations
-- [ ] Use a migration tool: **Knex.js** (Node) or **Alembic** (Python)
-- [ ] Write `001_create_users.sql`
-- [ ] Write `002_create_volunteers.sql`
-- [ ] Write `003_create_needs.sql`
-- [ ] Write `004_create_tasks.sql`
-- [ ] Write `005_create_organizations.sql`
+- [x] Use a migration tool: **Knex.js** (Node) or **Alembic** (Python)
+- [x] Write `001_create_organizations.js`
+- [x] Write `002_create_users.js`
+- [x] Write `003_create_volunteers.js`
+- [x] Write `004_create_needs.js`
+- [x] Write `005_create_tasks.js`
 - [ ] Run all migrations and verify tables exist: `\dt` in psql
 
 ### 1.4 Seed Data
-- [ ] Create a seed script with at least:
+- [x] Create a seed script with at least:
   - 1 coordinator account
   - 10 volunteer accounts with varied skills and geo-locations around a sample city (e.g., Kolkata)
   - 15–20 sample `needs` records across different wards with varied urgency levels
   - 5 tasks in various statuses
 - [ ] Run seed and verify data in DB
+
 
 ---
 
