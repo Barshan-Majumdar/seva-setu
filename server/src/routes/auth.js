@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const db = require('../db');
+const prisma = require('../db');
 
 const router = express.Router();
 
@@ -14,7 +14,7 @@ router.post('/register', async (req, res) => {
 
   try {
     // 1. Check if user exists
-    const userExists = await db('users').where({ email }).first();
+    const userExists = await prisma.user.findUnique({ where: { email } });
     if (userExists) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -24,22 +24,25 @@ router.post('/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, salt);
 
     // 3. Create user in a transaction
-    const newUser = await db.transaction(async (trx) => {
-      const [user] = await trx('users')
-        .insert({
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
           name,
           email,
-          password_hash,
+          passwordHash: password_hash,
           role,
-          org_id: org_id || null
-        })
-        .returning(['id', 'name', 'email', 'role']);
+          orgId: org_id || null,
+        },
+        select: { id: true, name: true, email: true, role: true },
+      });
 
       // If volunteer, create volunteer record
       if (role === 'volunteer') {
-        await trx('volunteers').insert({
-          user_id: user.id,
-          skills: skills || []
+        await tx.volunteer.create({
+          data: {
+            userId: user.id,
+            skills: skills || [],
+          },
         });
       }
 
@@ -55,7 +58,7 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       token,
-      user: newUser
+      user: newUser,
     });
   } catch (err) {
     console.error(err);
@@ -72,13 +75,13 @@ router.post('/login', async (req, res) => {
 
   try {
     // 1. Check user
-    const user = await db('users').where({ email }).first();
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // 2. Validate password
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -96,8 +99,8 @@ router.post('/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
   } catch (err) {
     console.error(err);

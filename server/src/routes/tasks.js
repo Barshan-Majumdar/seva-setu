@@ -1,5 +1,5 @@
 const express = require('express');
-const db = require('../db');
+const prisma = require('../db');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -17,24 +17,25 @@ router.post('/', auth, async (req, res) => {
   const { need_id, assigned_volunteer_id, notes } = req.body;
 
   try {
-    const taskId = await db.transaction(async (trx) => {
+    const taskId = await prisma.$transaction(async (tx) => {
       // 1. Create task
-      const [task] = await trx('tasks')
-        .insert({
-          need_id,
-          assigned_volunteer_id,
+      const task = await tx.task.create({
+        data: {
+          needId: need_id,
+          assignedVolunteerId: assigned_volunteer_id,
           notes,
           status: 'assigned',
-          assigned_at: new Date()
-        })
-        .returning('id');
-
-      const id = task.id || task;
+          assignedAt: new Date(),
+        },
+      });
 
       // 2. Update need status
-      await trx('needs').where({ id: need_id }).update({ status: 'assigned', updated_at: new Date() });
+      await tx.need.update({
+        where: { id: need_id },
+        data: { status: 'assigned', updatedAt: new Date() },
+      });
 
-      return id;
+      return task.id;
     });
 
     res.status(201).json({ taskId, message: 'Volunteer assigned successfully' });
@@ -51,18 +52,24 @@ router.post('/', auth, async (req, res) => {
  */
 router.patch('/:id/checkin', auth, async (req, res) => {
   try {
-    const task = await db('tasks').where({ id: req.params.id }).first();
+    const task = await prisma.task.findUnique({ where: { id: req.params.id } });
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
-    await db.transaction(async (trx) => {
-      await trx('tasks').where({ id: req.params.id }).update({
-        status: 'in_progress',
-        checked_in_at: new Date()
+    await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: req.params.id },
+        data: {
+          status: 'in_progress',
+          checkedInAt: new Date(),
+        },
       });
 
-      await trx('needs').where({ id: task.need_id }).update({
-        status: 'in_progress',
-        updated_at: new Date()
+      await tx.need.update({
+        where: { id: task.needId },
+        data: {
+          status: 'in_progress',
+          updatedAt: new Date(),
+        },
       });
     });
 
@@ -80,32 +87,43 @@ router.patch('/:id/checkin', auth, async (req, res) => {
  */
 router.patch('/:id/complete', auth, async (req, res) => {
   try {
-    const task = await db('tasks').where({ id: req.params.id }).first();
+    const task = await prisma.task.findUnique({ where: { id: req.params.id } });
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
-    await db.transaction(async (trx) => {
+    await prisma.$transaction(async (tx) => {
       // 1. Update task
-      await trx('tasks').where({ id: req.params.id }).update({
-        status: 'completed',
-        completed_at: new Date()
+      await tx.task.update({
+        where: { id: req.params.id },
+        data: {
+          status: 'completed',
+          completedAt: new Date(),
+        },
       });
 
       // 2. Update need
-      await trx('needs').where({ id: task.need_id }).update({
-        status: 'completed',
-        updated_at: new Date()
+      await tx.need.update({
+        where: { id: task.needId },
+        data: {
+          status: 'completed',
+          updatedAt: new Date(),
+        },
       });
 
       // 3. Update volunteer stats
-      const volunteer = await trx('volunteers').where({ user_id: task.assigned_volunteer_id }).first();
-      const newCompleted = (volunteer.tasks_completed || 0) + 1;
-      
-      // Simple logic: if they finish, rate goes up. For demo purposes.
-      const newRate = Math.min(1.0, (volunteer.completion_rate || 0) + 0.05);
+      const volunteer = await tx.volunteer.findUnique({
+        where: { userId: task.assignedVolunteerId },
+      });
+      const newCompleted = (volunteer.tasksCompleted || 0) + 1;
 
-      await trx('volunteers').where({ user_id: task.assigned_volunteer_id }).update({
-        tasks_completed: newCompleted,
-        completion_rate: newRate
+      // Simple logic: if they finish, rate goes up. For demo purposes.
+      const newRate = Math.min(1.0, (volunteer.completionRate || 0) + 0.05);
+
+      await tx.volunteer.update({
+        where: { userId: task.assignedVolunteerId },
+        data: {
+          tasksCompleted: newCompleted,
+          completionRate: newRate,
+        },
       });
     });
 
@@ -122,21 +140,23 @@ router.patch('/:id/complete', auth, async (req, res) => {
  */
 router.get('/my', auth, async (req, res) => {
   try {
-    const tasks = await db('tasks as t')
-      .join('needs as n', 't.need_id', 'n.id')
-      .where({ 't.assigned_volunteer_id': req.user.id })
-      .select(
-        't.id as task_id',
-        't.status as task_status',
-        't.assigned_at',
-        'n.title',
-        'n.need_type',
-        'n.urgency_score',
-        'n.ward',
-        'n.district'
-      )
-      .select(db.raw('ST_X(n.location::geometry) as lng, ST_Y(n.location::geometry) as lat'))
-      .orderBy('t.assigned_at', 'desc');
+    const tasks = await prisma.$queryRaw`
+      SELECT
+        t.id as task_id,
+        t.status as task_status,
+        t.assigned_at,
+        n.title,
+        n.need_type,
+        n.urgency_score,
+        n.ward,
+        n.district,
+        ST_X(n.location::geometry) as lng,
+        ST_Y(n.location::geometry) as lat
+      FROM tasks t
+      JOIN needs n ON t.need_id = n.id
+      WHERE t.assigned_volunteer_id = ${req.user.id}::uuid
+      ORDER BY t.assigned_at DESC
+    `;
 
     res.json(tasks);
   } catch (err) {

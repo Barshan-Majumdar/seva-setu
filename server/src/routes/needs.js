@@ -1,5 +1,5 @@
 const express = require('express');
-const db = require('../db');
+const prisma = require('../db');
 const auth = require('../middleware/auth');
 const { calculateScore } = require('../services/scoringService');
 
@@ -18,37 +18,34 @@ router.post('/', auth, async (req, res) => {
       need_type,
       people_affected,
       is_disaster_zone,
-      created_at: new Date()
+      created_at: new Date(),
     });
 
-    const [needId] = await db.transaction(async (trx) => {
-      const [need] = await trx('needs')
-        .insert({
+    const needId = await prisma.$transaction(async (tx) => {
+      const need = await tx.need.create({
+        data: {
           title,
           description,
-          need_type,
+          needType: need_type,
           ward,
           district,
-          people_affected,
-          urgency_score,
-          is_disaster_zone,
-          reported_by: req.user.id,
-          status: 'open'
-        })
-        .returning('id');
-
-      const id = need.id || need;
+          peopleAffected: people_affected,
+          urgencyScore: urgency_score,
+          isDisasterZone: is_disaster_zone,
+          reportedBy: req.user.id,
+          status: 'open',
+        },
+      });
 
       // Set PostGIS location
-      await trx.raw(
-        `UPDATE needs SET location = ST_SetSRID(ST_MakePoint(?, ?), 4326) WHERE id = ?`,
-        [lng, lat, id]
-      );
+      await tx.$executeRaw`
+        UPDATE needs SET location = ST_SetSRID(ST_MakePoint(${lng}::float, ${lat}::float), 4326) WHERE id = ${need.id}::uuid
+      `;
 
-      return [id];
+      return need.id;
     });
 
-    const fullNeed = await db('needs').where({ id: needId }).first();
+    const fullNeed = await prisma.need.findUnique({ where: { id: needId } });
     res.status(201).json(fullNeed);
   } catch (err) {
     console.error(err);
@@ -65,16 +62,38 @@ router.get('/', auth, async (req, res) => {
   const { status, district, need_type, min_urgency } = req.query;
 
   try {
-    let query = db('needs')
-      .select('id', 'title', 'need_type', 'urgency_score', 'status', 'ward', 'district', 'created_at')
-      .select(db.raw('ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat'));
+    // Build WHERE clauses dynamically
+    const conditions = [];
+    const params = [];
 
-    if (status) query.where({ status });
-    if (district) query.where({ district });
-    if (need_type) query.where({ need_type });
-    if (min_urgency) query.where('urgency_score', '>=', min_urgency);
+    if (status) {
+      params.push(status);
+      conditions.push(`status = $${params.length}::need_status`);
+    }
+    if (district) {
+      params.push(district);
+      conditions.push(`district = $${params.length}`);
+    }
+    if (need_type) {
+      params.push(need_type);
+      conditions.push(`need_type = $${params.length}::need_type`);
+    }
+    if (min_urgency) {
+      params.push(parseFloat(min_urgency));
+      conditions.push(`urgency_score >= $${params.length}`);
+    }
 
-    const needs = await query.orderBy('urgency_score', 'desc');
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const needs = await prisma.$queryRawUnsafe(
+      `SELECT id, title, need_type, urgency_score, status, ward, district, created_at,
+              ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat
+       FROM needs
+       ${whereClause}
+       ORDER BY urgency_score DESC`,
+      ...params
+    );
+
     res.json(needs);
   } catch (err) {
     console.error(err);
@@ -88,11 +107,14 @@ router.get('/', auth, async (req, res) => {
  */
 router.get('/heatmap', async (req, res) => {
   try {
-    const data = await db('needs')
-      .select('urgency_score')
-      .select(db.raw('ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat'))
-      .whereNot('status', 'completed');
-    
+    const data = await prisma.$queryRaw`
+      SELECT urgency_score,
+             ST_X(location::geometry) as lng,
+             ST_Y(location::geometry) as lat
+      FROM needs
+      WHERE status != 'completed'
+    `;
+
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -106,14 +128,17 @@ router.get('/heatmap', async (req, res) => {
  */
 router.get('/:id', auth, async (req, res) => {
   try {
-    const need = await db('needs')
-      .where({ id: req.params.id })
-      .select('*')
-      .select(db.raw('ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat'))
-      .first();
+    const need = await prisma.$queryRaw`
+      SELECT *,
+             ST_X(location::geometry) as lng,
+             ST_Y(location::geometry) as lat
+      FROM needs
+      WHERE id = ${req.params.id}::uuid
+      LIMIT 1
+    `;
 
-    if (!need) return res.status(404).json({ message: 'Need not found' });
-    res.json(need);
+    if (!need || need.length === 0) return res.status(404).json({ message: 'Need not found' });
+    res.json(need[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -133,7 +158,10 @@ router.patch('/:id/status', auth, async (req, res) => {
   const { status } = req.body;
 
   try {
-    await db('needs').where({ id: req.params.id }).update({ status, updated_at: new Date() });
+    await prisma.need.update({
+      where: { id: req.params.id },
+      data: { status, updatedAt: new Date() },
+    });
     res.json({ message: 'Status updated' });
   } catch (err) {
     console.error(err);

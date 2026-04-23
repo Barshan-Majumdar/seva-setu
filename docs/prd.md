@@ -10,7 +10,7 @@
 | **Product Name** | SevaSetu |
 | **Type** | Web Platform (PWA) |
 | **Target Users** | NGO Coordinators, Volunteers, Field Workers |
-| **Core Stack** | React + Tailwind, Node.js/FastAPI, PostgreSQL + PostGIS |
+| **Core Stack** | React + Tailwind, Node.js (Express) + Prisma ORM, PostgreSQL + PostGIS |
 | **Timeline** | 3–7 Days (Hackathon Sprint) |
 
 ---
@@ -69,22 +69,21 @@
 - [x] Define fields: `id`, `name`, `contact_email`, `district`, `created_at`
 - [x] Link `users` to `organizations` via `org_id` FK
 
-### 1.3 Write Migrations
-- [x] Use a migration tool: **Knex.js** (Node) or **Alembic** (Python)
-- [x] Write `001_create_organizations.js`
-- [x] Write `002_create_users.js`
-- [x] Write `003_create_volunteers.js`
-- [x] Write `004_create_needs.js`
-- [x] Write `005_create_tasks.js`
+### 1.3 Write Schema & Migrations
+- [x] Use **Prisma ORM** with `prisma/schema.prisma` for schema definition
+- [x] Define all models: `Organization`, `User`, `Volunteer`, `Need`, `Task`
+- [x] Define enums: `UserRole`, `NeedType`, `NeedStatus`, `TaskStatus`
+- [x] Add PostGIS extension support via `extensions = [postgis]`
+- [x] Create raw SQL migration for PostGIS geometry columns & GIST indexes (`prisma/migrations/0_init/migration.sql`)
 - [ ] Run all migrations and verify tables exist: `\dt` in psql
 
 ### 1.4 Seed Data
-- [x] Create a seed script with at least:
+- [x] Create a Prisma seed script (`prisma/seed.js`) with at least:
   - 1 coordinator account
   - 10 volunteer accounts with varied skills and geo-locations around a sample city (e.g., Kolkata)
   - 15–20 sample `needs` records across different wards with varied urgency levels
   - 5 tasks in various statuses
-- [ ] Run seed and verify data in DB
+- [ ] Run seed and verify data in DB: `npm run seed`
 
 
 ---
@@ -94,8 +93,8 @@
 ### 2.1 Project Bootstrap
 - [x] Initialize project: `npm init` (Express) or `fastapi` scaffold (Python)
 - [x] Install core dependencies:
-  - Express: `express`, `pg`, `knex`, `bcrypt`, `jsonwebtoken`, `cors`, `dotenv`
-  - FastAPI: `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg2`, `python-jose`, `passlib`
+  - Express: `express`, `pg`, `@prisma/client`, `bcrypt`, `jsonwebtoken`, `cors`, `dotenv`
+  - Dev: `prisma`, `nodemon`
 - [x] Set up a basic `health check` endpoint: `GET /api/health → { status: "ok" }`
 - [x] Verify the server starts and the health check works
 
@@ -290,8 +289,8 @@ match_score =
 ### 5.1 Backend Deployment
 - [ ] Create a `Procfile` or `railway.json` for Railway/Render
 - [ ] Provision a PostgreSQL database on Railway (free tier)
-- [ ] Run migrations on the production database
-- [ ] Run seed script on production
+- [ ] Run Prisma migrations on the production database: `npx prisma migrate deploy`
+- [ ] Run seed script on production: `npm run seed`
 - [ ] Set all environment variables in the Railway/Render dashboard
 - [ ] Verify `GET /api/health` returns 200 on the live URL
 
@@ -369,9 +368,10 @@ match_score =
 | Frontend framework | React + Vite | Fast setup, team familiarity |
 | Styling | Tailwind CSS | Rapid UI without custom CSS |
 | Maps | Leaflet.js + react-leaflet | No API key required |
-| Backend | Node.js (Express) or FastAPI | Pick team's fastest language |
+| Backend | Node.js (Express) | Team's fastest language |
+| ORM / Migrations | Prisma | Type-safe queries, declarative schema, auto-generated client |
 | Database | PostgreSQL + PostGIS | Geospatial queries for matching |
-| Auth | JWT (manual) or Firebase Auth | JWT is simple + no vendor lock |
+| Auth | JWT (manual) | Simple + no vendor lock |
 | Offline | Service Workers + IndexedDB | PWA standard, no extra library |
 | Frontend deploy | Vercel | Free, instant GitHub deploy |
 | Backend deploy | Railway or Render | Free tier, Postgres included |
@@ -392,4 +392,4 @@ match_score =
 
 ---
 
-*Last updated: Sprint kickoff | Version 1.0*
+*Last updated: Sprint kickoff | Version 1.1 — Migrated from Knex to Prisma ORM*

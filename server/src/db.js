@@ -1,11 +1,11 @@
 /**
- * Knex database connection instance.
+ * Prisma database client instance.
  * Import this wherever you need to run queries.
  */
-const knex = require('knex');
-const knexConfig = require('../knexfile');
+const { PrismaClient } = require('@prisma/client');
 
-const environment = process.env.NODE_ENV || 'development';
-const db = knex(knexConfig[environment]);
+const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+});
 
-module.exports = db;
+module.exports = prisma;

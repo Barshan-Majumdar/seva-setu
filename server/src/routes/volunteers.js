@@ -1,5 +1,5 @@
 const express = require('express');
-const db = require('../db');
+const prisma = require('../db');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -15,10 +15,15 @@ router.get('/', auth, async (req, res) => {
   }
 
   try {
-    const volunteers = await db('volunteers as v')
-      .join('users as u', 'v.user_id', 'u.id')
-      .select('u.id', 'u.name', 'u.email', 'v.skills', 'v.is_available', 'v.tasks_completed', 'v.completion_rate')
-      .select(db.raw('ST_X(v.location::geometry) as lng, ST_Y(v.location::geometry) as lat'));
+    const volunteers = await prisma.$queryRaw`
+      SELECT
+        u.id, u.name, u.email,
+        v.skills, v.is_available, v.tasks_completed, v.completion_rate,
+        ST_X(v.location::geometry) as lng,
+        ST_Y(v.location::geometry) as lat
+      FROM volunteers v
+      JOIN users u ON v.user_id = u.id
+    `;
 
     res.json(volunteers);
   } catch (err) {
@@ -35,7 +40,10 @@ router.patch('/me/availability', auth, async (req, res) => {
   const { is_available } = req.body;
 
   try {
-    await db('volunteers').where({ user_id: req.user.id }).update({ is_available });
+    await prisma.volunteer.update({
+      where: { userId: req.user.id },
+      data: { isAvailable: is_available },
+    });
     res.json({ message: 'Availability updated' });
   } catch (err) {
     console.error(err);
@@ -51,10 +59,9 @@ router.patch('/me/location', auth, async (req, res) => {
   const { lat, lng } = req.body;
 
   try {
-    await db.raw(
-      `UPDATE volunteers SET location = ST_SetSRID(ST_MakePoint(?, ?), 4326) WHERE user_id = ?`,
-      [lng, lat, req.user.id]
-    );
+    await prisma.$executeRaw`
+      UPDATE volunteers SET location = ST_SetSRID(ST_MakePoint(${lng}::float, ${lat}::float), 4326) WHERE user_id = ${req.user.id}::uuid
+    `;
     res.json({ message: 'Location updated' });
   } catch (err) {
     console.error(err);
@@ -68,7 +75,9 @@ router.patch('/me/location', auth, async (req, res) => {
  */
 router.get('/me/stats', auth, async (req, res) => {
   try {
-    const stats = await db('volunteers').where({ user_id: req.user.id }).first();
+    const stats = await prisma.volunteer.findUnique({
+      where: { userId: req.user.id },
+    });
     res.json(stats);
   } catch (err) {
     console.error(err);
