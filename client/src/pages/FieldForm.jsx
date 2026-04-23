@@ -1,300 +1,243 @@
-import { useState } from 'react';
-import { useUser, UserButton } from '@clerk/clerk-react';
-import { Link } from 'react-router-dom';
-import axios from 'axios';
 import {
-  MapPin,
-  AlertTriangle,
-  Users,
-  CheckCircle2,
-  Send,
-  ChevronLeft,
-  Loader2,
-  Crosshair,
-  Heart,
-  Flame,
+  MapPin, Send, Users, Activity, AlertTriangle,
+  CheckCircle2, Crosshair, Loader2, Heart, Flame
 } from 'lucide-react';
+import { useFieldForm } from '../hooks/useFieldForm';
+import MainLayout from '../layouts/MainLayout';
 
 const NEED_TYPES = [
-  { value: 'medical', label: 'Medical', icon: Heart, color: 'text-accent-rose' },
-  { value: 'food', label: 'Food', icon: Flame, color: 'text-accent-amber' },
-  { value: 'shelter', label: 'Shelter', icon: MapPin, color: 'text-accent-indigo' },
-  { value: 'education', label: 'Education', icon: Users, color: 'text-accent-sky' },
-  { value: 'other', label: 'Other', icon: AlertTriangle, color: 'text-accent-emerald' },
+  { value: 'medical',   label: 'Medical',   icon: Heart,          color: 'text-accent-rose' },
+  { value: 'food',      label: 'Food',       icon: Flame,          color: 'text-accent-amber' },
+  { value: 'shelter',   label: 'Shelter',    icon: MapPin,         color: 'text-accent-indigo' },
+  { value: 'education', label: 'Education',  icon: Users,          color: 'text-accent-sky' },
+  { value: 'other',     label: 'Other',      icon: AlertTriangle,  color: 'text-accent-green' },
 ];
 
 const FieldForm = () => {
-  const { user } = useUser();
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    need_type: '',
-    ward: '',
-    district: '',
-    people_affected: '',
-    is_disaster_zone: false,
-    lat: null,
-    lng: null,
-  });
-  const [loading, setLoading] = useState(false);
-  const [locLoading, setLocLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const {
+    formData, loading, locLoading, success, error,
+    updateField, resetForm, getLocation, submitForm,
+  } = useFieldForm();
 
-  const set = (key, value) => setFormData((p) => ({ ...p, [key]: value }));
-
-  const getLocation = () => {
-    setLocLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        set('lat', pos.coords.latitude);
-        set('lng', pos.coords.longitude);
-        setLocLoading(false);
-      },
-      () => {
-        setError('Could not get location. Please enable GPS.');
-        setLocLoading(false);
-      }
-    );
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.need_type) return setError('Please select a need type.');
-
-    setLoading(true);
-    setError('');
-    try {
-      await axios.post(`${import.meta.env.VITE_API_BASE_URL}/needs`, {
-        ...formData,
-        people_affected: parseInt(formData.people_affected) || 0,
-      });
-      setSuccess(true);
-    } catch (err) {
-      setError('Submission failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ── Success State ─────────────────────────────────────────────── */
+  /* ── Success ────────────────────────────────────────────────── */
   if (success) {
     return (
-      <div className="min-h-screen bg-surface-primary flex items-center justify-center p-6">
-        <div className="card p-10 max-w-md w-full text-center animate-fade-in">
-          <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.12)' }}>
-            <CheckCircle2 className="w-10 h-10 text-accent-emerald" />
+      <MainLayout>
+        <div className="min-h-[70vh] flex items-center justify-center px-4">
+          <div className="card p-12 max-w-md w-full text-center">
+            <div className="w-16 h-16 rounded-2xl bg-accent-green/10 border border-accent-green/20 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-8 h-8 text-accent-green" />
+            </div>
+            <h2 className="text-2xl font-bold text-text-primary mb-3">Report Submitted</h2>
+            <p className="text-sm text-text-secondary leading-relaxed mb-8">
+              Your field report has been transmitted and is being scored for urgency.
+              The nearest qualified responder will be notified shortly.
+            </p>
+            <button onClick={resetForm} className="btn-primary w-full py-3 text-sm">
+              Submit Another Report
+            </button>
           </div>
-          <h2 className="text-2xl font-bold text-text-primary mb-2">Report Submitted</h2>
-          <p className="text-text-secondary text-sm leading-relaxed mb-8">
-            Your need has been sent to the command center. It will be scored and dispatched to the nearest qualified volunteer.
-          </p>
-          <button
-            onClick={() => {
-              setSuccess(false);
-              setFormData({
-                title: '', description: '', need_type: '', ward: '', district: '',
-                people_affected: '', is_disaster_zone: false, lat: null, lng: null,
-              });
-            }}
-            className="btn-primary w-full py-4"
-          >
-            Submit Another Report
-          </button>
         </div>
-      </div>
+      </MainLayout>
     );
   }
 
-  /* ── Form ──────────────────────────────────────────────────────── */
+  /* ── Form ───────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-surface-primary">
-      {/* Header */}
-      <header className="sticky top-0 z-20 backdrop-blur-xl bg-surface-primary/80 border-b border-white/[0.06]">
-        <div className="max-w-2xl mx-auto flex items-center justify-between px-5 py-4">
-          <div className="flex items-center space-x-3">
-            <Link to="/" className="btn-ghost p-2">
-              <ChevronLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <h1 className="text-lg font-bold text-text-primary">New Report</h1>
-              <p className="text-xs text-text-muted">Field Worker Entry</p>
-            </div>
-          </div>
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </header>
+    <MainLayout>
+      <div className="py-12 px-4">
+        <div className="max-w-2xl mx-auto">
 
-      {/* Form Body */}
-      <main className="max-w-2xl mx-auto px-5 py-8">
-        <form onSubmit={handleSubmit} className="space-y-8 animate-fade-in">
-          {/* Error Banner */}
-          {error && (
-            <div className="flex items-center space-x-3 p-4 rounded-xl bg-accent-rose/10 border border-accent-rose/20 text-accent-rose text-sm">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* ── Need Type Picker ─────────────────────────────────────── */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-3">What kind of need?</label>
-            <div className="grid grid-cols-5 gap-2">
-              {NEED_TYPES.map((type) => {
-                const active = formData.need_type === type.value;
-                return (
-                  <button
-                    type="button"
-                    key={type.value}
-                    onClick={() => set('need_type', type.value)}
-                    className={`flex flex-col items-center p-3 rounded-xl border transition-all duration-200 ${
-                      active
-                        ? 'border-accent-sky bg-accent-sky/10 shadow-lg shadow-accent-sky/10'
-                        : 'border-white/[0.06] bg-surface-card hover:border-white/10 hover:bg-surface-hover'
-                    }`}
-                  >
-                    <type.icon className={`w-5 h-5 mb-1.5 ${active ? 'text-accent-sky' : type.color}`} />
-                    <span className={`text-[11px] font-medium ${active ? 'text-accent-sky' : 'text-text-muted'}`}>{type.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+          {/* Page header */}
+          <div className="mb-10">
+            <h1 className="text-2xl font-bold text-text-primary mb-1">Field Report</h1>
+            <p className="text-sm text-text-muted">Intelligence Intake — Field Personnel System</p>
           </div>
 
-          {/* ── Title ─────────────────────────────────────────────────── */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">Report Title</label>
-            <input
-              required
-              className="input-field"
-              placeholder="e.g. Flood victims need medical supplies in Ward 64"
-              value={formData.title}
-              onChange={(e) => set('title', e.target.value)}
-            />
-          </div>
+          <form onSubmit={submitForm} className="space-y-8">
 
-          {/* ── Location Row ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text-secondary mb-2">Ward</label>
-              <input
-                className="input-field"
-                placeholder="Ward 64"
-                value={formData.ward}
-                onChange={(e) => set('ward', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary mb-2">District</label>
-              <input
-                className="input-field"
-                placeholder="Kolkata"
-                value={formData.district}
-                onChange={(e) => set('district', e.target.value)}
-              />
-            </div>
-          </div>
+            {/* Error */}
+            {error && (
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-accent-rose/10 border border-accent-rose/20 text-accent-rose text-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {error}
+              </div>
+            )}
 
-          {/* ── People Affected ───────────────────────────────────────── */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">People Affected</label>
-            <div className="relative">
-              <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-              <input
-                type="number"
-                className="input-field pl-11"
-                placeholder="Estimated number of people"
-                value={formData.people_affected}
-                onChange={(e) => set('people_affected', e.target.value)}
-              />
+            {/* ── Need Type ──────────────────────────────────────────── */}
+            <div className="card p-6">
+              <label className="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-4">
+                Requirement Category
+              </label>
+              <div className="grid grid-cols-5 gap-2">
+                {NEED_TYPES.map((type) => {
+                  const active = formData.need_type === type.value;
+                  return (
+                    <button
+                      type="button"
+                      key={type.value}
+                      onClick={() => updateField('need_type', type.value)}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all duration-200 ${
+                        active
+                          ? 'border-text-primary bg-surface-hover'
+                          : 'border-border bg-surface-secondary hover:border-border-hover'
+                      }`}
+                    >
+                      <type.icon className={`w-5 h-5 ${active ? 'text-text-primary' : type.color}`} />
+                      <span className={`text-[10px] font-semibold ${active ? 'text-text-primary' : 'text-text-muted'}`}>
+                        {type.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* ── Description ───────────────────────────────────────────── */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
-            <textarea
-              className="input-field h-28 resize-none"
-              placeholder="Describe the situation, what resources are needed, and any access constraints..."
-              value={formData.description}
-              onChange={(e) => set('description', e.target.value)}
-            />
-          </div>
+            {/* ── Core Details ───────────────────────────────────────── */}
+            <div className="card p-6 space-y-5">
+              <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                <Send className="w-4 h-4 text-text-muted" />
+                Core Incident Data
+              </h2>
 
-          {/* ── Disaster Zone Toggle ──────────────────────────────────── */}
-          <button
-            type="button"
-            onClick={() => set('is_disaster_zone', !formData.is_disaster_zone)}
-            className={`w-full flex items-center space-x-3 p-4 rounded-xl border transition-all duration-200 ${
-              formData.is_disaster_zone
-                ? 'bg-accent-rose/10 border-accent-rose/30 text-accent-rose'
-                : 'bg-surface-card border-white/[0.06] text-text-muted hover:border-white/10'
-            }`}
-          >
-            <AlertTriangle className="w-5 h-5 shrink-0" />
-            <div className="text-left">
-              <span className="block text-sm font-semibold">Disaster Zone</span>
-              <span className="block text-xs opacity-70">Enable to boost urgency scoring by 1.5×</span>
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">Report Headline *</label>
+                <input
+                  required
+                  className="input-field"
+                  placeholder="Summarize the immediate need..."
+                  value={formData.title}
+                  onChange={(e) => updateField('title', e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1.5">Ward / Block</label>
+                  <input
+                    className="input-field"
+                    placeholder="e.g. Ward 64"
+                    value={formData.ward}
+                    onChange={(e) => updateField('ward', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1.5">District</label>
+                  <input
+                    className="input-field"
+                    placeholder="e.g. Kolkata"
+                    value={formData.district}
+                    onChange={(e) => updateField('district', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-text-muted mb-1.5">People Affected</label>
+                  <div className="relative">
+                    <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                    <input
+                      type="number"
+                      className="input-field pl-9"
+                      placeholder="Approx. count"
+                      value={formData.people_affected}
+                      onChange={(e) => updateField('people_affected', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => updateField('is_disaster_zone', !formData.is_disaster_zone)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 ${
+                    formData.is_disaster_zone
+                      ? 'border-accent-rose/40 bg-accent-rose/10 text-accent-rose'
+                      : 'border-border bg-surface-secondary text-text-muted hover:border-border-hover'
+                  }`}
+                >
+                  <AlertTriangle className={`w-4 h-4 shrink-0 ${formData.is_disaster_zone ? 'animate-pulse' : ''}`} />
+                  <span className="text-xs font-semibold flex-1 text-left">Disaster Zone</span>
+                  {/* Toggle pill */}
+                  <div className={`w-8 h-5 rounded-full relative transition-colors ${formData.is_disaster_zone ? 'bg-accent-rose' : 'bg-surface-hover'}`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.is_disaster_zone ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                  </div>
+                </button>
+              </div>
             </div>
-            <div
-              className={`ml-auto w-10 h-6 rounded-full relative transition-all duration-200 ${
-                formData.is_disaster_zone ? 'bg-accent-rose' : 'bg-white/10'
-              }`}
-            >
-              <div
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
-                  formData.is_disaster_zone ? 'translate-x-5' : 'translate-x-1'
+
+            {/* ── Deployment Intel ───────────────────────────────────── */}
+            <div className="card p-6 space-y-5">
+              <h2 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-text-muted" />
+                Deployment Intelligence
+              </h2>
+
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">Operational Brief</label>
+                <textarea
+                  className="input-field resize-none h-32"
+                  placeholder="Describe situational constraints, resources required, hazard levels..."
+                  value={formData.description}
+                  onChange={(e) => updateField('description', e.target.value)}
+                />
+              </div>
+
+              {/* GPS capture */}
+              <button
+                type="button"
+                onClick={getLocation}
+                disabled={locLoading}
+                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 border-dashed transition-all duration-300 ${
+                  formData.lat
+                    ? 'border-accent-green/40 bg-accent-green/5 text-accent-green'
+                    : 'border-border text-text-muted hover:border-border-hover hover:text-text-secondary'
                 }`}
-              />
+              >
+                {locLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : formData.lat ? (
+                  <CheckCircle2 className="w-5 h-5" />
+                ) : (
+                  <Crosshair className="w-5 h-5" />
+                )}
+                <div className="text-left">
+                  <div className="text-sm font-semibold">
+                    {formData.lat ? 'Coordinates Captured' : 'Capture GPS Location'}
+                  </div>
+                  <div className="text-xs mt-0.5 opacity-60">
+                    {formData.lat
+                      ? `${formData.lat.toFixed(5)}, ${formData.lng.toFixed(5)}`
+                      : 'Required for spatial matching'}
+                  </div>
+                </div>
+              </button>
             </div>
-          </button>
 
-          {/* ── GPS Capture ───────────────────────────────────────────── */}
-          <button
-            type="button"
-            onClick={getLocation}
-            disabled={locLoading}
-            className={`w-full flex items-center justify-center space-x-2 py-4 rounded-xl border-2 border-dashed transition-all duration-200 ${
-              formData.lat
-                ? 'bg-accent-emerald/10 border-accent-emerald/30 text-accent-emerald'
-                : 'border-white/10 text-text-muted hover:border-accent-sky/30 hover:text-accent-sky'
-            }`}
-          >
-            {locLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : formData.lat ? (
-              <>
-                <MapPin className="w-5 h-5" />
-                <span className="text-sm font-medium">
-                  {formData.lat.toFixed(4)}, {formData.lng.toFixed(4)}
-                </span>
-              </>
-            ) : (
-              <>
-                <Crosshair className="w-5 h-5" />
-                <span className="text-sm font-medium">Capture GPS Location</span>
-              </>
-            )}
-          </button>
+            {/* ── Submit ─────────────────────────────────────────────── */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full py-4 text-sm font-semibold"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Transmit Report
+                </>
+              )}
+            </button>
 
-          {/* ── Submit ────────────────────────────────────────────────── */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full py-4 text-base flex items-center justify-center space-x-2"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <Send className="w-5 h-5" />
-                <span>Submit Report</span>
-              </>
-            )}
-          </button>
-        </form>
-      </main>
-    </div>
+            <p className="text-center text-xs text-text-muted">
+              Encrypted end-to-end · Precision Dispatch v2.4
+            </p>
+
+          </form>
+        </div>
+      </div>
+    </MainLayout>
   );
 };
 
