@@ -214,34 +214,34 @@ match_score =
 > This is your hero view. Make it impressive.
 
 #### 3.4.1 Layout & Shell
-- [ ] Build `DashboardPage.jsx` with a two-panel layout: left sidebar (stats + filters) + right main area (map + list)
-- [ ] Add top nav: SevaSetu logo, coordinator name, logout
-- [ ] Add summary cards row: Total Open Needs | Active Volunteers | Tasks In Progress | Completed Today
+- [x] Build `DashboardPage.jsx` with a two-panel layout: left sidebar (stats + filters) + right main area (map + list)
+- [x] Add top nav: SevaSetu logo, coordinator name, logout
+- [x] Add summary cards row: Total Open Needs | Active Volunteers | Tasks In Progress | Completed Today
 
 #### 3.4.2 Needs Heatmap
-- [ ] Integrate `react-leaflet` with OpenStreetMap tiles (no API key needed)
-- [ ] Plot each need as a circle marker â€” color-coded by urgency: ðŸ”´ 8â€“10, ðŸŸ  5â€“7, ðŸŸ¢ 1â€“4
-- [ ] Make markers clickable â€” popup shows: need title, urgency score, people affected, status, "Dispatch" button
-- [ ] Add a legend component showing urgency color scale
-- [ ] Center the map on the district with the most open needs
+- [x] Integrate `react-leaflet` with OpenStreetMap tiles (no API key needed)
+- [x] Plot each need as a circle marker — color-coded by urgency: 🔴 8–10, 🟠 5–7, 🟢 1–4
+- [x] Make markers clickable — popup shows: need title, urgency score, people affected, status, "Dispatch" button
+- [x] Add a legend component showing urgency color scale
+- [x] Center the map on the district with the most open needs
 
 #### 3.4.3 Needs List Panel
-- [ ] Build `NeedsList.jsx` â€” sortable table/card list below or beside the map
-- [ ] Columns: Ward, Need Type, Urgency Score (badge), People Affected, Status (pill), Time Since Reported, Actions
-- [ ] Add filter controls: by Status, by Need Type, by District
-- [ ] Clicking a row highlights the corresponding map marker
+- [x] Build `NeedsList.jsx` — sortable table/card list below or beside the map
+- [x] Columns: Ward, Need Type, Urgency Score (badge), People Affected, Status (pill), Time Since Reported, Actions
+- [x] Add filter controls: by Status, by Need Type, by District
+- [x] Clicking a row highlights the corresponding map marker
 
 #### 3.4.4 Volunteer Dispatch Flow
-- [ ] When coordinator clicks "Dispatch" on a need, open a `MatchModal.jsx`
-- [ ] `MatchModal` calls `GET /api/needs/:id/matches` and displays top 3 volunteers:
+- [x] When coordinator clicks "Dispatch" on a need, open a `MatchModal.jsx`
+- [x] `MatchModal` calls `GET /api/needs/:id/matches` and displays top 3 volunteers:
   - Volunteer name, skills (tag pills), distance from need, availability status, completion rate (%)
-- [ ] "Assign" button on each volunteer card â†’ calls `POST /api/tasks` â†’ closes modal â†’ updates need status to `assigned`
-- [ ] Show a success toast notification on assignment
+- [x] "Assign" button on each volunteer card → calls `POST /api/tasks` → closes modal → updates need status to `assigned`
+- [x] Show a success toast notification on assignment
 
 #### 3.4.5 Task Status Pipeline
-- [ ] Build a `KanbanBoard.jsx` or pipeline view: Open â†’ Assigned â†’ In Progress â†’ Completed
-- [ ] Each task card shows: need title, assigned volunteer, time elapsed
-- [ ] Allow drag-and-drop or button-based status updates (button approach is faster to build)
+- [x] Build a `KanbanBoard.jsx` or pipeline view: Open → Assigned → In Progress → Completed
+- [x] Each task card shows: need title, assigned volunteer, time elapsed
+- [x] Allow drag-and-drop or button-based status updates (button approach is faster to build)
 
 ### 3.5 Volunteer App (View 3)
 > Mobile-friendly web app â€” volunteers use this on their phones.
@@ -393,6 +393,7 @@ match_score =
 ---
 
 *Last updated: Sprint kickoff | Version 1.1 â€” Migrated from Knex to Prisma ORM*
+
 
 
 
