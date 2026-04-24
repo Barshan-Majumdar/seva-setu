@@ -61,6 +61,7 @@ model User {
   clerkId      String?  @unique @map("clerk_id")
   name         String
   email        String   @unique
+  phoneNumber  String?  @unique @map("phone_number")
   passwordHash String   @map("password_hash")
   role         UserRole @default(volunteer)
   orgId        String?  @map("org_id") @db.Uuid
@@ -72,6 +73,15 @@ model User {
   assignedTasks Task[]       @relation("AssignedTasks")
 
   @@map("users")
+}
+
+model BotSession {
+  phoneNumber String   @id @map("phone_number")
+  step        String   @default("idle")
+  stateData   Json?    @map("state_data")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("bot_sessions")
 }
 
 model Volunteer {
