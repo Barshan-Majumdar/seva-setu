@@ -94,13 +94,18 @@ const KanbanBoard = ({ needs, tasks, onDispatch, onUpdateTask }) => {
                     </button>
                   )}
                   
-                  <p style={{ 
-                    fontSize: '0.8125rem', 
-                    fontWeight: '700', 
-                    lineHeight: '1.4', 
-                    color: 'var(--color-text-primary)',
-                    paddingRight: laneKey === 'completed' ? '1.5rem' : '0' 
-                  }}>{need.title}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                    {need.title?.toLowerCase().includes('whatsapp') && (
+                      <span style={{ background: '#25D366', color: 'white', padding: '1px 5px', borderRadius: '4px', fontSize: '8px', fontWeight: '900' }}>WA</span>
+                    )}
+                    <p style={{ 
+                      fontSize: '0.8125rem', 
+                      fontWeight: '700', 
+                      lineHeight: '1.4', 
+                      color: 'var(--color-text-primary)',
+                      paddingRight: laneKey === 'completed' ? '1.5rem' : '0' 
+                    }}>{need.title}</p>
+                  </div>
                   
                   <p style={{ 
                     fontSize: '0.65rem', 
