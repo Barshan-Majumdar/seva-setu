@@ -53,7 +53,8 @@ const NeedsHeatmap = ({ needs, selectedNeedId, setSelectedNeedId, onDispatch }) 
 
         {needs.map((need) => {
           const isSelected = selectedNeedId === need.id;
-          const color = urgencyColor(need.urgency_score);
+          const isWhatsApp = need.title?.toLowerCase().includes('whatsapp');
+          const color = isWhatsApp ? '#25D366' : urgencyColor(need.urgency_score);
 
           return (
             <CircleMarker
@@ -61,25 +62,41 @@ const NeedsHeatmap = ({ needs, selectedNeedId, setSelectedNeedId, onDispatch }) 
               center={[Number(need.lat), Number(need.lng)]}
               radius={isSelected ? 12 : 9}
               pathOptions={{
-                color,
+                color: isWhatsApp ? '#128C7E' : color,
                 fillColor: color,
-                fillOpacity: isSelected ? 0.8 : 0.55,
+                fillOpacity: isSelected ? 0.9 : 0.65,
                 weight: isSelected ? 3 : 1,
+                className: `pulse-marker ${isWhatsApp ? 'whatsapp-marker' : ''}`,
               }}
               eventHandlers={{ click: () => setSelectedNeedId(need.id) }}
             >
               <Popup>
                 <div className="space-y-2 min-w-48">
-                  <p className="font-semibold text-sm">{need.title}</p>
+                  <div className="flex items-center gap-2">
+                    {isWhatsApp && (
+                      <span 
+                        style={{ background: '#25D366', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}
+                      >
+                        WHATSAPP
+                      </span>
+                    )}
+                    <p className="font-semibold text-sm">{need.title}</p>
+                  </div>
                   <p className="text-xs text-slate-600">Urgency: {need.urgency_score}</p>
                   <p className="text-xs text-slate-600">People affected: {need.people_affected || 0}</p>
                   <p className="text-xs text-slate-600">Status: {need.status}</p>
                   <p className="text-xs text-slate-600">Reported: {formatElapsed(need.created_at)}</p>
+                  {need.description && (
+                    <p className="text-xs text-slate-500 italic mt-2 border-l-2 border-slate-200 pl-2">
+                      "{need.description}"
+                    </p>
+                  )}
                   <button
                     type="button"
                     className="dashboard-dispatch-btn"
                     onClick={() => onDispatch(need)}
                     disabled={need.status !== 'open'}
+                    style={{ marginTop: '0.5rem', width: '100%' }}
                   >
                     Dispatch
                   </button>
