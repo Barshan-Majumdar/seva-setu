@@ -26,6 +26,8 @@ const PageLoader = () => (
   </div>
 );
 
+const NeedsArchivePage = lazy(() => import('./pages/NeedsArchivePage'));
+
 function App() {
   return (
     <ErrorBoundary>
@@ -54,6 +56,15 @@ function App() {
               element={
                 <ProtectedRoute requiredRole="coordinator">
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/needs-archive"
+              element={
+                <ProtectedRoute requiredRole="coordinator">
+                  <NeedsArchivePage />
                 </ProtectedRoute>
               }
             />

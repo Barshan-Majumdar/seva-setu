@@ -29,10 +29,11 @@ router.post('/', auth, async (req, res) => {
         },
       });
 
-      // 2. Update need status
+      // 2. Update need status safely
       await tx.need.update({
         where: { id: need_id },
         data: { status: 'assigned', updatedAt: new Date() },
+        select: { id: true },
       });
 
       return task.id;
@@ -70,6 +71,7 @@ router.patch('/:id/checkin', auth, async (req, res) => {
           status: 'in_progress',
           updatedAt: new Date(),
         },
+        select: { id: true },
       });
     });
 
@@ -107,24 +109,28 @@ router.patch('/:id/complete', auth, async (req, res) => {
           status: 'completed',
           updatedAt: new Date(),
         },
+        select: { id: true },
       });
 
       // 3. Update volunteer stats
       const volunteer = await tx.volunteer.findUnique({
         where: { userId: task.assignedVolunteerId },
+        select: { tasksCompleted: true, completionRate: true },
       });
-      const newCompleted = (volunteer.tasksCompleted || 0) + 1;
 
-      // Simple logic: if they finish, rate goes up. For demo purposes.
-      const newRate = Math.min(1.0, (volunteer.completionRate || 0) + 0.05);
+      if (volunteer) {
+        const newCompleted = (volunteer.tasksCompleted || 0) + 1;
+        const newRate = Math.min(1.0, (volunteer.completionRate || 0) + 0.05);
 
-      await tx.volunteer.update({
-        where: { userId: task.assignedVolunteerId },
-        data: {
-          tasksCompleted: newCompleted,
-          completionRate: newRate,
-        },
-      });
+        await tx.volunteer.update({
+          where: { userId: task.assignedVolunteerId },
+          data: {
+            tasksCompleted: newCompleted,
+            completionRate: newRate,
+          },
+          select: { userId: true },
+        });
+      }
     });
 
     res.json({ message: 'Task completed! Impact updated.' });

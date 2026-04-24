@@ -45,8 +45,14 @@ router.post('/', auth, async (req, res) => {
       return need.id;
     });
 
-    const fullNeed = await prisma.need.findUnique({ where: { id: needId } });
-    res.status(201).json(fullNeed);
+    const fullNeeds = await prisma.$queryRaw`
+      SELECT id, title, description, need_type, people_affected, urgency_score, status, ward, district, is_disaster_zone, created_at, updated_at,
+             ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat
+      FROM needs
+      WHERE id = ${needId}::uuid
+      LIMIT 1
+    `;
+    res.status(201).json(fullNeeds[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -161,6 +167,7 @@ router.patch('/:id/status', auth, async (req, res) => {
     await prisma.need.update({
       where: { id: req.params.id },
       data: { status, updatedAt: new Date() },
+      select: { id: true }, // Avoid fetching geometry column
     });
     res.json({ message: 'Status updated' });
   } catch (err) {

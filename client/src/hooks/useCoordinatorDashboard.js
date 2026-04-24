@@ -43,8 +43,8 @@ export const useCoordinatorDashboard = () => {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
+  const loadDashboard = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     setError('');
 
     try {
@@ -60,13 +60,13 @@ export const useCoordinatorDashboard = () => {
       console.error(err);
       setError(err?.response?.data?.message || 'Failed to load dashboard data.');
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
-      loadDashboard();
+      loadDashboard(true);
     });
   }, [loadDashboard]);
 
@@ -77,6 +77,9 @@ export const useCoordinatorDashboard = () => {
 
   const filteredNeeds = useMemo(() => {
     return needs.filter((need) => {
+      // Always exclude archived needs unless explicitly requested (which we don't have a filter for yet)
+      if (need.status === 'archived') return false;
+      
       if (filters.status !== 'all' && need.status !== filters.status) return false;
       if (filters.needType !== 'all' && need.need_type !== filters.needType) return false;
       if (filters.district !== 'all' && need.district !== filters.district) return false;
@@ -179,6 +182,11 @@ export const useCoordinatorDashboard = () => {
   };
 
   const updatePipelineStatus = async (task, action) => {
+    // Optimistic update for archiving to ensure zero-lag UI
+    if (action === 'archive') {
+      setNeeds(prev => prev.map(n => n.id === task.need_id ? { ...n, status: 'archived' } : n));
+    }
+
     try {
       if (action === 'checkin') {
         await checkInTask(task.task_id);
@@ -186,13 +194,16 @@ export const useCoordinatorDashboard = () => {
         await completeTask(task.task_id);
       } else if (action === 'reopen') {
         await updateNeedStatus({ needId: task.need_id, status: 'open' });
+      } else if (action === 'archive') {
+        await updateNeedStatus({ needId: task.need_id, status: 'archived' });
       }
 
-      await loadDashboard();
-      showToast('Task pipeline updated.');
+      // Background refresh (silent)
+      await loadDashboard(false);
+      showToast(action === 'archive' ? 'Need archived.' : 'Task pipeline updated.');
     } catch (err) {
       console.error(err);
-      showToast('Could not update task status.', 'error');
+      showToast(err?.response?.data?.message || 'Could not update task status.', 'error');
     }
   };
 

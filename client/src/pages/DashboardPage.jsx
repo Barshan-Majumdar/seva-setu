@@ -97,13 +97,21 @@ const DashboardPage = () => {
                 />
 
                 <NeedsList
-                  needs={sortedNeeds}
+                  needs={sortedNeeds.slice(0, 6)}
                   selectedNeedId={selectedNeedId}
                   setSelectedNeedId={setSelectedNeedId}
                   sorting={sorting}
                   setSort={setSort}
                   onDispatch={openDispatchModal}
                 />
+
+                {sortedNeeds.length > 6 && (
+                  <div className="text-center mt-4">
+                    <Link to="/needs-archive" className="btn-ghost" style={{ fontSize: '0.8rem' }}>
+                      View All Issues ({sortedNeeds.length - 6} more)
+                    </Link>
+                  </div>
+                )}
               </div>
             </section>
 

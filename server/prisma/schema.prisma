@@ -33,6 +33,7 @@ enum NeedStatus {
   assigned
   in_progress
   completed
+  archived
 }
 
 enum TaskStatus {
@@ -76,7 +77,7 @@ model User {
 model Volunteer {
   userId         String  @id @map("user_id") @db.Uuid
   skills         String[] @default([])
-  // location is a PostGIS geometry column — managed via raw SQL
+  location       Unsupported("geometry")?
   isAvailable    Boolean @default(true) @map("is_available")
   tasksCompleted Int     @default(0) @map("tasks_completed")
   completionRate Float   @default(0.0) @map("completion_rate")
@@ -91,7 +92,7 @@ model Need {
   title          String
   description    String?
   needType       NeedType   @map("need_type")
-  // location is a PostGIS geometry column — managed via raw SQL
+  location       Unsupported("geometry")?
   ward           String?
   district       String?
   peopleAffected Int        @default(0) @map("people_affected")

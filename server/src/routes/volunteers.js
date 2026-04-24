@@ -40,10 +40,9 @@ router.patch('/me/availability', auth, async (req, res) => {
   const { is_available } = req.body;
 
   try {
-    await prisma.volunteer.update({
-      where: { userId: req.user.id },
-      data: { isAvailable: is_available },
-    });
+    await prisma.$executeRaw`
+      UPDATE volunteers SET is_available = ${is_available} WHERE user_id = ${req.user.id}::uuid
+    `;
     res.json({ message: 'Availability updated' });
   } catch (err) {
     console.error(err);
@@ -75,10 +74,13 @@ router.patch('/me/location', auth, async (req, res) => {
  */
 router.get('/me/stats', auth, async (req, res) => {
   try {
-    const stats = await prisma.volunteer.findUnique({
-      where: { userId: req.user.id },
-    });
-    res.json(stats);
+    const stats = await prisma.$queryRaw`
+      SELECT skills, is_available, tasks_completed, completion_rate
+      FROM volunteers
+      WHERE user_id = ${req.user.id}::uuid
+      LIMIT 1
+    `;
+    res.json(stats[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

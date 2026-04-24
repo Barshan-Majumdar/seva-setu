@@ -6,7 +6,27 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
-api.interceptors.request.use((config) => {
+let tokenProvider = null;
+
+export const setTokenProvider = (provider) => {
+  tokenProvider = provider;
+};
+
+api.interceptors.request.use(async (config) => {
+  // Try dynamic provider first (guarantees fresh token from Clerk)
+  if (tokenProvider) {
+    try {
+      const token = await tokenProvider();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        return config;
+      }
+    } catch (err) {
+      console.error('Token provider failed:', err);
+    }
+  }
+
+  // Fallback to localStorage (for SSR or legacy compatibility)
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
