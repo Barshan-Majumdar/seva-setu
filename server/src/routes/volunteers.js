@@ -90,4 +90,59 @@ router.get('/me/stats', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   POST /api/volunteers/me/beacon-offline
+ * @desc    Emergency "Go Offline" signal via navigator.sendBeacon (fires on tab/browser close)
+ *          sendBeacon sends Content-Type: text/plain, so we parse the body manually.
+ */
+router.post('/me/beacon-offline', async (req, res) => {
+  try {
+    // sendBeacon can send either JSON string or plain text
+    let userId = null;
+    
+    if (typeof req.body === 'string') {
+      try {
+        const parsed = JSON.parse(req.body);
+        userId = parsed.userId;
+      } catch { userId = null; }
+    } else if (req.body?.userId) {
+      userId = req.body.userId;
+    }
+
+    if (!userId) {
+      return res.status(400).json({ message: 'Missing userId' });
+    }
+
+    await prisma.$executeRaw`
+      UPDATE volunteers SET is_available = false, updated_at = now() WHERE user_id = ${userId}::uuid
+    `;
+    console.log(`[BEACON] Volunteer ${userId} marked OFFLINE (browser closed).`);
+    res.json({ message: 'Marked offline' });
+  } catch (err) {
+    console.error('[BEACON] Error:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * Heartbeat Staleness Sweeper
+ * Every 5 minutes, mark any volunteer as unavailable if their last update was > 10 minutes ago.
+ * This catches cases where sendBeacon fails (e.g., browser crash, network drop).
+ */
+setInterval(async () => {
+  try {
+    const result = await prisma.$executeRaw`
+      UPDATE volunteers 
+      SET is_available = false 
+      WHERE is_available = true 
+        AND updated_at < NOW() - INTERVAL '10 minutes'
+    `;
+    if (result > 0) {
+      console.log(`[HEARTBEAT] Marked ${result} stale volunteer(s) as OFFLINE.`);
+    }
+  } catch (err) {
+    console.error('[HEARTBEAT] Sweep error:', err.message);
+  }
+}, 5 * 60 * 1000); // Every 5 minutes
+
 module.exports = router;

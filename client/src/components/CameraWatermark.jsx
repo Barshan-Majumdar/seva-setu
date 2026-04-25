@@ -1,18 +1,35 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, SwitchCamera, X, Check, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Camera, SwitchCamera, X, Check, Loader2, ChevronLeft } from 'lucide-react';
 
 const CameraWatermark = ({ onCapture, onCancel }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   
   const [stream, setStream] = useState(null);
-  const [facingMode, setFacingMode] = useState('environment'); // Default to back camera
+  const [facingMode, setFacingMode] = useState('environment');
   const [location, setLocation] = useState(null);
   const [locError, setLocError] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [cameraCount, setCameraCount] = useState(0); // 0 = unknown, 1 = laptop, 2+ = mobile
 
-  // 1. Get GPS Location
+  // 1. Device Enumeration — detect how many cameras exist
+  useEffect(() => {
+    const detectCameras = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        setCameraCount(videoInputs.length);
+        console.log(`[Camera] Detected ${videoInputs.length} camera(s).`);
+      } catch (err) {
+        console.warn('[Camera] Device enumeration failed:', err);
+        setCameraCount(1); // Assume single camera on failure
+      }
+    };
+    detectCameras();
+  }, []);
+
+  // 2. Get GPS Location
   useEffect(() => {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -33,16 +50,19 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
     }
   }, []);
 
-  // 2. Camera Management
-  const stopCamera = () => {
+  // 3. Camera Lifecycle Management
+  const stopCamera = useCallback(() => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
-  };
+  }, [stream]);
 
-  const startCamera = async (mode) => {
-    stopCamera();
+  const startCamera = useCallback(async (mode) => {
+    // Stop any existing stream first
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { 
@@ -56,9 +76,9 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
         videoRef.current.srcObject = newStream;
       }
     } catch (err) {
-      console.error('Error accessing camera:', err);
+      console.error('[Camera] Error accessing camera:', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!capturedImage) {
@@ -66,15 +86,20 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
     } else {
       stopCamera();
     }
-    
-    return () => stopCamera();
+
+    return () => {
+      // Cleanup on unmount
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
   }, [facingMode, !!capturedImage]);
 
   const toggleCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
   };
 
-  // 3. Capture & Watermark
+  // 4. Capture & EXIF Injection
   const capturePhoto = async () => {
     if (!videoRef.current || !location) return;
     setIsCapturing(true);
@@ -82,30 +107,23 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Set canvas to match video dimensions
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     
     const ctx = canvas.getContext('2d');
-    
-    // Draw the video frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     
-    // We NO LONGER draw visual text. We will inject hidden EXIF metadata instead.
-    
-    // Get the base64 data from canvas
+    // Hidden EXIF metadata injection — NO visual text on the image
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
     
     try {
       const piexifModule = await import('piexifjs');
       const piexif = piexifModule.default || piexifModule;
       
-      // Prepare EXIF GPS tags
       const zeroth = {};
       const exif = {};
       const gps = {};
       
-      // Convert decimal lat/lng to EXIF rational format (degrees, minutes, seconds)
       const toRational = (number) => {
         const absolute = Math.abs(number);
         const d = Math.floor(absolute);
@@ -114,22 +132,16 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
         return [[d, 1], [m, 1], [s, 100]];
       };
 
-      // GPS tags from piexifjs constants
       gps[piexif.GPSIFD.GPSLatitudeRef] = parseFloat(location.lat) >= 0 ? 'N' : 'S';
       gps[piexif.GPSIFD.GPSLatitude] = toRational(parseFloat(location.lat));
       gps[piexif.GPSIFD.GPSLongitudeRef] = parseFloat(location.lng) >= 0 ? 'E' : 'W';
       gps[piexif.GPSIFD.GPSLongitude] = toRational(parseFloat(location.lng));
-      
-      // Add version tag (mandatory for some parsers)
       gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
       
       const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
       const exifStr = piexif.dump(exifObj);
-      
-      // Inject EXIF into the image data URL
       const newImgData = piexif.insert(exifStr, dataUrl);
       
-      // Convert DataURL to Blob/File
       const parts = newImgData.split(',');
       const byteString = atob(parts[1]);
       const mimeString = parts[0].split(':')[1].split(';')[0];
@@ -145,8 +157,7 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
       setCapturedImage(file);
       setIsCapturing(false);
     } catch (err) {
-      console.error('Failed to inject EXIF:', err);
-      // Fallback: save without EXIF if injection fails
+      console.error('[Camera] Failed to inject EXIF:', err);
       canvas.toBlob((blob) => {
         const file = new File([blob], `sevasetu_capture_${Date.now()}.jpg`, { type: 'image/jpeg' });
         setCapturedImage(file);
@@ -165,83 +176,198 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
     setCapturedImage(null);
   };
 
+  const showSwitchBtn = cameraCount >= 2 && !capturedImage;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/80 to-transparent">
-        <button onClick={onCancel} className="p-3 bg-white/10 rounded-full text-white backdrop-blur-md">
-          <X className="w-6 h-6" />
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 9999,
+      backgroundColor: '#000',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      {/* ── Top Bar: Back button (left) + Switch Camera (right, mobile only) ── */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        padding: '16px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        zIndex: 20,
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)',
+      }}>
+        {/* Close / Back — always visible, far from any capture controls */}
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '12px',
+            background: 'rgba(255,255,255,0.1)',
+            borderRadius: '50%',
+            color: '#fff',
+            border: 'none',
+            cursor: 'pointer',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ChevronLeft style={{ width: 24, height: 24 }} />
         </button>
-        
-        {!capturedImage && (
-          <button onClick={toggleCamera} className="p-3 bg-white/10 rounded-full text-white backdrop-blur-md">
-            <SwitchCamera className="w-6 h-6" />
+
+        {/* Switch Camera — only shown on devices with 2+ cameras, hidden on laptops */}
+        {showSwitchBtn && (
+          <button
+            onClick={toggleCamera}
+            style={{
+              padding: '12px',
+              background: 'rgba(255,255,255,0.1)',
+              borderRadius: '50%',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              backdropFilter: 'blur(12px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <SwitchCamera style={{ width: 24, height: 24 }} />
           </button>
         )}
       </div>
 
-      {/* Main View Area */}
-      <div className="flex-1 relative overflow-hidden flex items-center justify-center">
+      {/* ── Viewfinder ── */}
+      <div style={{
+        flex: 1,
+        position: 'relative',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
         {capturedImage ? (
           <img 
             src={capturedImage instanceof File ? URL.createObjectURL(capturedImage) : capturedImage} 
             alt="Captured" 
-            className="w-full h-full object-contain" 
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
           />
         ) : (
           <video 
             ref={videoRef} 
             autoPlay 
             playsInline 
-            className="w-full h-full object-cover"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         )}
         
-        {/* Hidden Canvas for drawing */}
-        <canvas ref={canvasRef} className="hidden" />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-        {/* GPS Overlay Preview (While capturing) */}
+        {/* GPS Lock Info — only shown while viewfinder is active */}
         {!capturedImage && (
-          <div className="absolute bottom-32 left-4 right-4 bg-black/60 backdrop-blur-md rounded-xl p-4 border border-white/10">
+          <div style={{
+            position: 'absolute',
+            bottom: '140px',
+            left: '16px',
+            right: '16px',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}>
             {location ? (
-              <div className="text-xs font-mono text-emerald-400">
-                <div className="font-bold mb-1">GPS LOCK ACQUIRED</div>
-                <div className="text-white">LAT: {location.lat}</div>
-                <div className="text-white">LNG: {location.lng}</div>
+              <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#34d399' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>● GPS LOCK ACQUIRED</div>
+                <div style={{ color: '#fff' }}>LAT: {location.lat}</div>
+                <div style={{ color: '#fff' }}>LNG: {location.lng}</div>
               </div>
             ) : locError ? (
-              <div className="text-xs font-mono text-rose-400">
+              <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#fb7185' }}>
                 {locError}. GPS required to capture.
               </div>
             ) : (
-              <div className="text-xs font-mono text-amber-400 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> ACQUIRING SATELLITE LOCK...
+              <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> ACQUIRING SATELLITE LOCK...
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Controls */}
-      <div className="h-32 bg-black flex items-center justify-center pb-8 z-10">
+      {/* ── Bottom Controls — fixed at bottom, well-separated from top nav ── */}
+      <div style={{
+        height: '140px',
+        backgroundColor: '#000',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingBottom: '24px',
+        zIndex: 20,
+      }}>
         {capturedImage ? (
-          <div className="flex gap-8">
-            <button onClick={retryCapture} className="px-6 py-3 rounded-full bg-slate-800 text-white font-bold uppercase tracking-wider text-sm border border-slate-700">
+          <div style={{ display: 'flex', gap: '32px' }}>
+            <button
+              onClick={retryCapture}
+              style={{
+                padding: '14px 28px',
+                borderRadius: '9999px',
+                background: '#1e293b',
+                color: '#fff',
+                fontWeight: 'bold',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                fontSize: '14px',
+                border: '1px solid #334155',
+                cursor: 'pointer',
+              }}
+            >
               Retake
             </button>
-            <button onClick={confirmCapture} className="px-6 py-3 rounded-full bg-emerald-500 text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2">
-              <Check className="w-5 h-5" /> Use Photo
+            <button
+              onClick={confirmCapture}
+              style={{
+                padding: '14px 28px',
+                borderRadius: '9999px',
+                background: '#10b981',
+                color: '#fff',
+                fontWeight: 'bold',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                fontSize: '14px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Check style={{ width: 20, height: 20 }} /> Use Photo
             </button>
           </div>
         ) : (
           <button 
             onClick={capturePhoto}
             disabled={!location || isCapturing}
-            className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all ${
-              location ? 'border-emerald-500 bg-emerald-500/20 active:bg-emerald-500 active:scale-95' : 'border-slate-600 bg-slate-800 opacity-50'
-            }`}
+            style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              border: `4px solid ${location ? '#10b981' : '#475569'}`,
+              background: location ? 'rgba(16,185,129,0.2)' : '#1e293b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: location ? 'pointer' : 'not-allowed',
+              opacity: location ? 1 : 0.5,
+              transition: 'all 0.2s',
+            }}
           >
-            <Camera className={`w-8 h-8 ${location ? 'text-emerald-400' : 'text-slate-500'}`} />
+            <Camera style={{ width: 32, height: 32, color: location ? '#34d399' : '#64748b' }} />
           </button>
         )}
       </div>

@@ -161,7 +161,13 @@ export const useFieldForm = () => {
         setSuccessMessage('Report submitted successfully with AI verification pending.');
       } catch (err) {
         console.error('Submission error:', err);
-        setError(err.response?.data?.message || 'Submission failed. Please check your connection.');
+        // Surface the detailed verification errors from backend
+        const backendErrors = err.response?.data?.errors;
+        if (backendErrors && backendErrors.length > 0) {
+          setError(backendErrors.join('\n'));
+        } else {
+          setError(err.response?.data?.message || 'Submission failed. Please check your connection.');
+        }
       } finally {
         setLoading(false);
       }

@@ -7,6 +7,7 @@ import {
   updateAvailability,
   updateMyLocation,
 } from '../services/volunteer';
+import { useAuth } from './useAuth';
 
 const toRadians = (deg) => (deg * Math.PI) / 180;
 
@@ -36,6 +37,9 @@ const getCurrentCoords = () =>
   });
 
 export const useVolunteerApp = () => {
+  const { currentUser } = useAuth();
+  const userId = currentUser?.id;
+
   // --- 1. All State ---
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState(null);
@@ -203,6 +207,46 @@ export const useVolunteerApp = () => {
     }, 3 * 60 * 1000);
     return () => clearInterval(interval);
   }, [availability, activeTasks.length, pushCurrentLocation]);
+
+  // --- 5. Browser Close Detection (Beacon "Go Offline" Signal) ---
+  useEffect(() => {
+    if (!userId) return;
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const beaconUrl = `${API_BASE}/volunteers/me/beacon-offline`;
+
+    const sendOfflineBeacon = () => {
+      // navigator.sendBeacon is the ONLY reliable way to send data during page unload
+      const blob = new Blob(
+        [JSON.stringify({ userId })],
+        { type: 'application/json' }
+      );
+      navigator.sendBeacon(beaconUrl, blob);
+      console.log('[BEACON] Sent offline signal for user:', userId);
+    };
+
+    // Fires when tab/window is being closed or navigated away
+    const handleBeforeUnload = () => {
+      if (availability) {
+        sendOfflineBeacon();
+      }
+    };
+
+    // Fires when user switches tabs or minimizes (backup for mobile browsers)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && availability) {
+        sendOfflineBeacon();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [userId, availability]);
 
   return {
     loading,

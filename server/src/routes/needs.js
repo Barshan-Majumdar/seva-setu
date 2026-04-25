@@ -42,40 +42,103 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 
     console.log('--- STARTING VERIFICATION PIPELINE ---');
     
-    // We removed GPS strict checking for reporters. They only need Context AI check.
-    isVerified = true; // Assume verified until AI visual check says otherwise
+    let geoTagPassed = false;
+    let aiPassed = false;
+    const errors = [];
 
-      // Factor B: Visual Match (AI CLIP)
-      try {
-        const form = new FormData();
-        form.append('file', req.file.buffer, { filename: 'upload.jpg' });
-        form.append('need_type', need_type); // Pass the category to AI for specific context checking
+    // ═══════════════════════════════════════════════════════════
+    // STEP 1: EXIF GEO-TAG VERIFICATION (Same as Task Completion)
+    // ═══════════════════════════════════════════════════════════
+    try {
+      const gps = await exifr.gps(req.file.buffer);
+      let photoLat = gps?.latitude;
+      let photoLng = gps?.longitude;
 
-        const aiResponse = await axios.post(
-          `${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/verify-image`,
-          form,
-          { headers: form.getHeaders() }
+      console.log(`[GEOTAG-REPORT] EXIF GPS: Lat=${photoLat}, Lng=${photoLng}`);
+      console.log(`[GEOTAG-REPORT] Reported GPS: Lat=${lat}, Lng=${lng}`);
+
+      const hasValidGps = typeof photoLat === 'number' && 
+                          typeof photoLng === 'number' &&
+                          (Math.abs(photoLat) > 0.0001 || Math.abs(photoLng) > 0.0001);
+
+      if (!hasValidGps) {
+        console.log(`[GEOTAG-REPORT] ❌ NO VALID GPS DATA IN IMAGE`);
+        errors.push('⚠️ GEO-TAG MISSING: This image does not contain GPS metadata. Use the Live Camera feature.');
+      } else {
+        // Proximity check: is the image GPS close to the reported coordinates?
+        const dist = Math.sqrt(
+          Math.pow(photoLat - Number(lat), 2) +
+          Math.pow(photoLng - Number(lng), 2)
         );
+        console.log(`[GEOTAG-REPORT] Distance from reported location: ${dist.toFixed(6)} (~${(dist * 111).toFixed(2)} km)`);
 
-        if (aiResponse.data.is_verified) {
-          console.log(`AI Match: PASSED (${aiResponse.data.top_match}) - Context Match: ${aiResponse.data.matches_specific_need}`);
-          verificationConfidence = aiResponse.data.confidence;
-          // Both must pass for full verification. If GPS failed, it's still unverified.
-          isVerified = isVerified && true; 
+        if (dist > 0.01) { // ~1.1km threshold
+          console.log(`[GEOTAG-REPORT] ❌ TOO FAR FROM REPORTED LOCATION`);
+          errors.push('⚠️ LOCATION MISMATCH: Photo GPS does not match your reported location.');
         } else {
-          console.log(`AI Match: FAILED (Expected: ${need_type}, Found: ${aiResponse.data.top_match})`);
-          isVerified = false;
+          console.log(`[GEOTAG-REPORT] ✅ GPS VERIFIED`);
+          geoTagPassed = true;
         }
-      } catch (aiErr) {
-        console.error('AI Service unreachable:', aiErr.message);
       }
-      
-      // Save file to disk
-      const fileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
-      const filePath = path.join(UPLOADS_DIR, fileName);
-      fs.writeFileSync(filePath, req.file.buffer);
-      imageUrl = `/uploads/${fileName}`;
-      console.log(`File saved to: ${filePath}`);
+    } catch (exifErr) {
+      console.warn('[GEOTAG-REPORT] EXIF read error:', exifErr.message);
+      errors.push('⚠️ GEO-TAG ERROR: Could not read metadata from this image.');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // STEP 2: AI CONTENT CHECK
+    // ═══════════════════════════════════════════════════════════
+    try {
+      if (req.file.size < 15000) {
+        errors.push('🔍 IMAGE ERROR: The photo appears blank or too small. Please capture a clear photo.');
+      }
+
+      const form = new FormData();
+      form.append('file', req.file.buffer, { filename: 'upload.jpg' });
+      form.append('need_type', need_type);
+
+      const aiResponse = await axios.post(
+        `${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/verify-image`,
+        form,
+        { headers: form.getHeaders(), timeout: 20000 }
+      );
+
+      if (aiResponse.data.is_verified) {
+        console.log(`[AI-REPORT] ✅ PASSED (${aiResponse.data.top_match}) Confidence: ${aiResponse.data.confidence}`);
+        verificationConfidence = aiResponse.data.confidence;
+        aiPassed = true;
+      } else {
+        console.log(`[AI-REPORT] ❌ FAILED (Expected: ${need_type}, Found: ${aiResponse.data.top_match})`);
+        errors.push(`🔍 AI MISMATCH: The image does not match "${need_type}". AI detected: "${aiResponse.data.top_match}".`);
+      }
+    } catch (aiErr) {
+      console.error('[AI-REPORT] AI Service unreachable:', aiErr.message);
+      // Don't block if AI is down, just mark unverified
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FINAL VERDICT
+    // ═══════════════════════════════════════════════════════════
+    isVerified = geoTagPassed && aiPassed;
+
+    if (errors.length > 0 && !isVerified) {
+      console.log(`[VERIFICATION] ❌ REJECTED with ${errors.length} error(s).`);
+      return res.status(400).json({
+        message: 'Verification Failed',
+        errors,
+        statusSummary: {
+          geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+          aiContent: aiPassed ? 'PASSED' : 'FAILED',
+        }
+      });
+    }
+
+    // Save file to disk
+    const fileName = `${Date.now()}-${req.file.originalname?.replace(/\s+/g, '_') || 'capture.jpg'}`;
+    const filePath = path.join(UPLOADS_DIR, fileName);
+    fs.writeFileSync(filePath, req.file.buffer);
+    imageUrl = `/uploads/${fileName}`;
+    console.log(`[REPORT] File saved: ${filePath}`);
 
 
     // --- 2. Urgency Scoring ---
