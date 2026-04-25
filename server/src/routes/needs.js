@@ -42,58 +42,8 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 
     console.log('--- STARTING VERIFICATION PIPELINE ---');
     
-    // Factor A: GPS Match (EXIF or OCR)
-    let gpsMatched = false;
-    try {
-      // First try inbuilt EXIF metadata
-      const exif = await exifr.gps(req.file.buffer);
-      if (exif && exif.latitude && exif.longitude) {
-        const dist = Math.sqrt(
-          Math.pow(exif.latitude - parseFloat(lat), 2) + 
-          Math.pow(exif.longitude - parseFloat(lng), 2)
-        );
-        if (dist < 0.005) {
-          console.log('GPS Match (EXIF): PASSED');
-          gpsMatched = true;
-        } else {
-          console.log('GPS Match (EXIF): FAILED (Distance too far)');
-        }
-      }
-    } catch (exifErr) {
-      console.warn('EXIF Extraction failed:', exifErr.message);
-    }
-
-    // If EXIF failed, fallback to OCR (reading text off the image)
-    if (!gpsMatched) {
-      console.log('Attempting OCR fallback for stamped GPS coordinates...');
-      try {
-        const Tesseract = require('tesseract.js');
-        const { data: { text } } = await Tesseract.recognize(req.file.buffer, 'eng');
-        
-        // Fuzzy match: check if the reported lat/lng (rounded to 2 decimal places) is in the text
-        const latFuzzy = parseFloat(lat).toFixed(2);
-        const lngFuzzy = parseFloat(lng).toFixed(2);
-        const latFuzzy1 = parseFloat(lat).toFixed(1); // Even looser match for bad OCR
-        const lngFuzzy1 = parseFloat(lng).toFixed(1);
-        
-        if ((text.includes(latFuzzy) || text.includes(latFuzzy1)) && 
-            (text.includes(lngFuzzy) || text.includes(lngFuzzy1))) {
-          console.log('GPS Match (OCR): PASSED');
-          gpsMatched = true;
-        } else {
-          console.log('GPS Match (OCR): FAILED (Coordinates not found in image text)');
-        }
-      } catch (ocrErr) {
-        console.warn('OCR processing failed:', ocrErr.message);
-      }
-    }
-
-    // Enforce mandatory GPS match
-    if (!gpsMatched) {
-      return res.status(400).json({ message: "Verification Failed: The photo's GPS data does not match the reported location. You must be on-site." });
-    }
-    
-    isVerified = true; // Passed GPS, now needs Factor B
+    // We removed GPS strict checking for reporters. They only need Context AI check.
+    isVerified = true; // Assume verified until AI visual check says otherwise
 
       // Factor B: Visual Match (AI CLIP)
       try {

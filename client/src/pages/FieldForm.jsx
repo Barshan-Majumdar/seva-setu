@@ -1,11 +1,14 @@
+import React, { useState } from 'react';
 import {
   MapPin, Send, Users, AlertTriangle,
-  CheckCircle2, Crosshair, Loader2, Wifi, WifiOff, Clock3
+  CheckCircle2, Crosshair, Loader2, Wifi, WifiOff, Clock3, Camera, X
 } from 'lucide-react';
 import { useFieldForm } from '../hooks/useFieldForm';
 import MainLayout from '../layouts/MainLayout';
+import CameraWatermark from '../components/CameraWatermark';
 
 const FieldForm = () => {
+  const [showCamera, setShowCamera] = useState(false);
   const {
     formData,
     loading,
@@ -179,34 +182,49 @@ const FieldForm = () => {
                   <p className="text-[10px] text-slate-500 mb-6 font-bold uppercase tracking-widest">Factor 1: AI Verification</p>
                 </div>
 
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => updateField('imageFile', e.target.files[0])}
-                    className="hidden"
-                    id="image-upload"
-                  />
-                  <label
-                    htmlFor="image-upload"
-                    className={`w-full flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-500 ${
-                      formData.imageFile 
-                        ? 'border-sky-500/50 bg-sky-500/10 text-sky-400' 
-                        : 'border-slate-700 hover:border-sky-500/30 hover:bg-slate-800/50 text-slate-500'
-                    }`}
-                  >
-                    <div className="w-12 h-12 rounded-full bg-slate-900/50 flex items-center justify-center border border-white/5">
-                      <Send className={`w-5 h-5 ${formData.imageFile ? 'rotate-[-45deg] text-sky-400' : ''} transition-transform duration-500`} />
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-sm tracking-tight">
-                        {formData.imageFile ? formData.imageFile.name : 'Upload Crisis Photo'}
+                <div className="relative flex flex-col gap-3">
+                  {formData.imageFile ? (
+                    <div className="w-full flex items-center justify-between p-4 rounded-2xl border border-sky-500/50 bg-sky-500/10 text-sky-400">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <CheckCircle2 className="w-5 h-5 shrink-0 text-sky-400" />
+                        <span className="font-bold text-sm truncate">{formData.imageFile.name}</span>
                       </div>
-                      <div className="text-[10px] opacity-60 mt-1 uppercase font-black tracking-widest">
-                        Required for verification
-                      </div>
+                      <button type="button" onClick={() => updateField('imageFile', null)} className="p-2 hover:bg-sky-500/20 rounded-full text-sky-300">
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                  </label>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowCamera(true)}
+                        className="w-full flex items-center justify-center gap-3 p-6 rounded-2xl border-2 border-dashed border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-all cursor-pointer"
+                      >
+                        <Camera className="w-6 h-6" />
+                        <div className="text-left">
+                          <div className="font-bold text-sm">Live GPS Camera</div>
+                          <div className="text-[10px] uppercase tracking-widest opacity-80">Highly Recommended</div>
+                        </div>
+                      </button>
+
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => updateField('imageFile', e.target.files[0])}
+                          className="hidden"
+                          id="image-upload"
+                        />
+                        <label
+                          htmlFor="image-upload"
+                          className="w-full flex items-center justify-center gap-3 p-4 rounded-xl border border-slate-700 hover:bg-slate-800/50 text-slate-400 transition-all cursor-pointer"
+                        >
+                          <Send className="w-4 h-4" />
+                          <span className="font-bold text-xs uppercase tracking-wider">Upload from Gallery</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -277,6 +295,16 @@ const FieldForm = () => {
           </form>
         </div>
       </div>
+      
+      {showCamera && (
+        <CameraWatermark 
+          onCapture={(file) => {
+            updateField('imageFile', file);
+            setShowCamera(false);
+          }} 
+          onCancel={() => setShowCamera(false)} 
+        />
+      )}
     </MainLayout>
   );
 };

@@ -15,8 +15,10 @@ import {
 import MainLayout from '../layouts/MainLayout';
 import { useVolunteerApp } from '../hooks/useVolunteerApp';
 import { volunteerStatusClass, volunteerStatusLabel } from '../utils/volunteer';
+import CameraWatermark from '../components/CameraWatermark';
 
 const VolunteerPage = () => {
+  const [activeCameraTask, setActiveCameraTask] = useState(null);
   const {
     loading,
     error,
@@ -301,23 +303,13 @@ const VolunteerPage = () => {
                         </div>
                       )}
 
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        ref={(el) => (fileInputRefs.current[task.task_id] = el)}
-                        onClick={(e) => { e.target.value = null; }} // Force onChange to fire even for same file
-                        onChange={(e) => handleFileChange(task.task_id, e.target.files?.[0])}
-                      />
-                      
                       {!selectedFiles[task.task_id] ? (
                         <button
                           type="button"
                           className="btn-primary"
                           onClick={(e) => {
                             e.preventDefault();
-                            fileInputRefs.current[task.task_id]?.click();
+                            setActiveCameraTask(task.task_id);
                           }}
                           disabled={busyTaskId === task.task_id}
                         >
@@ -383,6 +375,16 @@ const VolunteerPage = () => {
           <div className={`dashboard-toast ${toast.type === 'error' ? 'is-error' : ''}`}>{toast.message}</div>
         ) : null}
       </div>
+
+      {activeCameraTask && (
+        <CameraWatermark 
+          onCapture={(file) => {
+            handleFileChange(activeCameraTask, file);
+            setActiveCameraTask(null);
+          }} 
+          onCancel={() => setActiveCameraTask(null)} 
+        />
+      )}
     </MainLayout>
   );
 };

@@ -167,16 +167,43 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
         }
       }
 
+      // Method 3: OCR Fallback (reads coordinates printed on the image)
+      let ocrPassed = false;
+      if (typeof photoLat !== 'number') {
+        console.log('[GEOTAG] Attempting OCR fallback for stamped GPS coordinates...');
+        try {
+          const Tesseract = require('tesseract.js');
+          const { data: { text } } = await Tesseract.recognize(req.file.buffer, 'eng');
+          
+          const latFuzzy = parseFloat(lat).toFixed(2);
+          const lngFuzzy = parseFloat(lng).toFixed(2);
+          const latFuzzy1 = parseFloat(lat).toFixed(1);
+          const lngFuzzy1 = parseFloat(lng).toFixed(1);
+          
+          if ((text.includes(latFuzzy) || text.includes(latFuzzy1)) && 
+              (text.includes(lngFuzzy) || text.includes(lngFuzzy1))) {
+            console.log('[GEOTAG] Method 3 (OCR) PASSED.');
+            ocrPassed = true;
+          } else {
+            console.log('[GEOTAG] Method 3 (OCR) FAILED.');
+          }
+        } catch (ocrErr) {
+          console.warn('[GEOTAG] OCR processing failed:', ocrErr.message);
+        }
+      }
+
       // Final verdict on coordinates
       const hasValidGps = typeof photoLat === 'number' && 
                           typeof photoLng === 'number' &&
                           (Math.abs(photoLat) > 0.0001 || Math.abs(photoLng) > 0.0001);
 
-      if (!hasValidGps) {
+      if (ocrPassed) {
+        geoTagPassed = true;
+      } else if (!hasValidGps) {
         console.log(`[GEOTAG] ❌ VERDICT: NO VALID GPS DATA FOUND`);
-        errors.push('⚠️ GEO-TAG MISSING: This image does not contain any GPS/location data. You must use a camera or phone with Location Services enabled. Photos without geo-tags cannot be accepted.');
+        errors.push('⚠️ GEO-TAG MISSING: This image does not contain any valid GPS data or stamped coordinates. You must use the Live Camera feature.');
       } else {
-        // Proximity check
+        // Proximity check for EXIF
         const dist = Math.sqrt(
           Math.pow(photoLat - Number(lat), 2) +
           Math.pow(photoLng - Number(lng), 2)
@@ -200,10 +227,16 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     // STEP 2: AI CONTENT CHECK (ALWAYS runs, even if geo-tag failed)
     // ═══════════════════════════════════════════════════════════
     try {
+      // Basic check for empty/black files (less than 15KB is usually junk)
+      if (req.file.size < 15000) {
+        errors.push('🔍 IMAGE ERROR: The photo appears to be blank or too small. Please capture a clear photo of the disaster site.');
+      }
+
       const form = new FormData();
       form.append('file', req.file.buffer, { filename: req.file.originalname || 'proof.jpg' });
+      form.append('need_type', task.need.needType); // CRITICAL: Send the context to AI
 
-      console.log(`[AI-CHECK] Sending image to AI model for analysis...`);
+      console.log(`[AI-CHECK] Sending image to AI model for analysis (Type: ${task.need.needType})...`);
       const aiResponse = await axios.post(
         `${process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000'}/verify-image`,
         form,
