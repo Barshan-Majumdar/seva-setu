@@ -47,13 +47,7 @@ createRoot(document.getElementById('root')).render(
   </React.StrictMode>,
 )
 
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.error('Service worker registration failed:', err);
-    });
-  });
-} else if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     registrations.forEach((registration) => registration.unregister());
   });
