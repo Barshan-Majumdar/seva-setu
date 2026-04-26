@@ -4,17 +4,19 @@ import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
 import ProtectedRoute from './components/ProtectedRoute';
-import VolunteerPage from './pages/VolunteerPage';
 
-// Lazy load pages for performance
+// Lazy load all pages for performance and consistent bundle chunking
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const PostLoginRedirect = lazy(() => import('./pages/PostLoginRedirect'));
+const VolunteerPage = lazy(() => import('./pages/VolunteerPage'));
 const FieldForm = lazy(() => import('./pages/FieldForm'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const NeedsArchivePage = lazy(() => import('./pages/NeedsArchivePage'));
 const MyReportsPage = lazy(() => import('./pages/MyReportsPage'));
+const UserDashboardPage = lazy(() => import('./pages/UserDashboardPage'));
+const VolunteerApprovalsPage = lazy(() => import('./pages/VolunteerApprovalsPage'));
 
 const PageLoader = () => (
   <div className="page-loader">
@@ -50,6 +52,16 @@ function App() {
               }
             />
 
+            {/* User dashboard (default for new users) */}
+            <Route
+              path="/user-dashboard"
+              element={
+                <ProtectedRoute requiredRole="user">
+                  <UserDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Coordinator-only dashboard */}
             <Route
               path="/dashboard"
@@ -65,6 +77,16 @@ function App() {
               element={
                 <ProtectedRoute requiredRole="coordinator">
                   <NeedsArchivePage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Coordinator: Volunteer Approvals */}
+            <Route
+              path="/volunteer-approvals"
+              element={
+                <ProtectedRoute requiredRole="coordinator">
+                  <VolunteerApprovalsPage />
                 </ProtectedRoute>
               }
             />

@@ -33,6 +33,15 @@ module.exports = async (req, res, next) => {
     return res.status(401).json({ message: 'Invalid Clerk token payload' });
   }
 
+  // ── Step 1.5: Fast In-Memory Cache (Prevents DB pool timeouts from polling) ──
+  // Cache user context for 15 seconds to absorb high-frequency auto-polling
+  if (!global.authCache) global.authCache = new Map();
+  const cached = global.authCache.get(clerkUserId);
+  if (cached && cached.expires > Date.now()) {
+    req.user = cached.user;
+    return next();
+  }
+
   // ── Step 2: Optimized DB Lookup ─────────────────────────────────────
   try {
     let dbUser = await prisma.user.findUnique({
@@ -77,18 +86,30 @@ module.exports = async (req, res, next) => {
             where: { email },
           });
           
-          const assignedRole = isWhitelisted ? 'coordinator' : 'volunteer';
+          const assignedRole = isWhitelisted ? 'coordinator' : 'user';
 
-          dbUser = await prisma.user.create({
-            data: {
-              clerkId: clerkUserId,
-              name,
-              email,
-              passwordHash: '',
-              role: assignedRole,
-            },
-            select: { id: true, role: true, email: true, name: true },
-          });
+          try {
+            dbUser = await prisma.user.create({
+              data: {
+                clerkId: clerkUserId,
+                name,
+                email,
+                passwordHash: '',
+                role: assignedRole,
+              },
+              select: { id: true, role: true, email: true, name: true },
+            });
+          } catch (createErr) {
+            if (createErr.code === 'P2002') {
+              // Race condition: another request just created the user
+              dbUser = await prisma.user.findUnique({
+                where: { clerkId: clerkUserId },
+                select: { id: true, role: true, email: true, name: true, volunteer: { select: { updatedAt: true } } }
+              });
+            } else {
+              throw createErr;
+            }
+          }
 
           if (dbUser.role === 'volunteer') {
             await prisma.volunteer.upsert({
@@ -127,6 +148,13 @@ module.exports = async (req, res, next) => {
       clerkId: clerkUserId,
       isNewUser: !dbUser.volunteer // Simple heuristic or just pass true if it was newly created
     };
+
+    // Save to cache for 15 seconds
+    global.authCache.set(clerkUserId, {
+      user: req.user,
+      expires: Date.now() + 15000,
+    });
+
     next();
   } catch (err) {
     console.error('[auth] Middleware error:', err.message);

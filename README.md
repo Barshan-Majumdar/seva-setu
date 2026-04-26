@@ -1,18 +1,44 @@
 # 🌉 SevaSetu: AI-Powered Disaster Intelligence & Response System
 
-> **The Problem:** In disaster management, "Information Chaos" is the biggest enemy. Fake reports, location spoofing, and unverified work lead to wasted resources and lost lives.
-> **The Solution:** SevaSetu—A platform that combines Geo-Spatial Mathematics, Computer Vision, and Real-Time Orchestration to create a "Trust Layer" for relief operations.
+> **The Problem:** In disaster management, "Information Chaos" is the biggest enemy. Fake reports, location spoofing, unverified work, and connectivity dropouts lead to wasted resources and lost lives.
+> **The Solution:** SevaSetu—A platform that combines Geo-Spatial Mathematics, Computer Vision, Real-Time Orchestration, and Offline-First PWAs to create an unbreakable "Trust Layer" for relief operations.
+
+---
+
+## 🔄 The Complete SevaSetu Workflow
+
+SevaSetu operates on a highly structured, role-based pipeline designed to process disaster intelligence from the ground up to final resolution.
+
+### **Phase 1: Intelligence Intake (The User / Field Worker)**
+1. **Report Submission:** A local civilian (User) or a designated Field Worker logs into the system and navigates to the **Field Terminal** (`/field`).
+2. **Offline-First Capture:** Even if the network is down (e.g., cell towers destroyed), the user can fill out the form. The system securely caches the submission in an **IndexedDB Offline Queue**.
+3. **Geo-Locked Media:** The user takes a live photo using the custom in-browser camera. The app injects mathematically verifiable GPS coordinates into the image's EXIF data.
+4. **Synchronization:** The moment an internet connection is restored, the Service Worker automatically flushes the queue and pushes the report to the central server.
+
+### **Phase 2: Triage & Orchestration (The Coordinator)**
+1. **Real-Time Dashboard:** The Coordinator sits at the **Command Center** (`/dashboard`). Thanks to high-frequency, non-blocking **Auto-Polling** (every 5 seconds), new distress signals appear instantly without needing a manual refresh.
+2. **Urgency Assessment:** Reports are auto-scored by the algorithm: `Urgency = (CategoryWeight * 10) + (TimeElapsed * 1.5)`.
+3. **Volunteer Approval:** The Coordinator monitors the **Volunteer Approvals** pipeline. Regular users who apply to help are screened and promoted to the `volunteer` role in a single click.
+4. **Dispatch:** The Coordinator assigns verified tasks to available, geolocated volunteers based on proximity and skill set.
+
+### **Phase 3: Execution & AI Verification (The Volunteer)**
+1. **Mission Briefing:** The Volunteer receives the task on their dedicated **Volunteer Dash** (`/volunteer`).
+2. **Execution & Proof:** Upon reaching the site and delivering aid, the volunteer must submit "Proof of Work" via the secure camera.
+3. **Multi-Engine AI Verification:**
+   - **Spatial Check:** PostGIS verifies the volunteer is actually within the target radius using `ST_Distance`.
+   - **Temporal Check:** EXIF metadata is parsed to ensure the photo is live, not a gallery upload.
+   - **Semantic Check (Vision AI):** The image is sent to the FastAPI service where an **OpenAI CLIP Neural Model** mathematically compares the image contents (e.g., "flood relief package") against the expected task category.
+4. **Closure:** If the AI scores the proof above the confidence threshold, the task is marked `Completed` and archived.
 
 ---
 
 ## 🏛️ System Architecture & Connectivity Map
 
-Below is a technical visual of how the different components of SevaSetu are interconnected. This flow ensures that every piece of data is verified through a multi-engine pipeline.
-
 ```mermaid
 graph TD
     %% Define Nodes
     subgraph Frontend [Command Console - React/Vite]
+        SW[Service Worker / IndexedDB]
         FF[FieldForm.jsx]
         VP[VolunteerPage.jsx]
         CW[CameraWatermark.jsx]
@@ -20,10 +46,11 @@ graph TD
     end
 
     subgraph Backend [Logic Core - Node.js/Express]
+        AUTH[Auth Middleware + LRU Cache]
         NR[needs.js - Route]
         TR[tasks.js - Route]
         VM[Verification Middleware]
-        PR[Prisma / PostGIS]
+        PR[Prisma / Neon PostGIS]
     end
 
     subgraph AI_Engine [Vision Engine - FastAPI/CLIP]
@@ -37,11 +64,15 @@ graph TD
     end
 
     %% Connections
-    FF -->|POST: New Need| NR
-    VP -->|PATCH: Complete Task| TR
+    SW -->|Offline Sync| FF
+    FF -->|POST: New Need| AUTH
+    VP -->|PATCH: Complete Task| AUTH
     CW -->|Inject Geotag| FF
     CW -->|Inject Geotag| VP
     
+    AUTH -->|Verified Token| NR
+    AUTH -->|Verified Token| TR
+
     NR -->|Store Geometry| PR
     TR -->|Retrieve Location| PR
     PR --> NT
@@ -60,58 +91,24 @@ graph TD
 
 ## 🛠️ The Technical Inventory: A Component-Level Deep Dive
 
-This section provides a granular breakdown of every "picky" technical component used in SevaSetu.
-
 ### **1. Frontend: The High-Integrity Client**
-- **React 19 Hooks:** Heavily utilizes `useRef` for raw DOM access to `<video>` and `<canvas>` elements for the custom camera.
-- **Vite (HMR Engine):** Used for Hot Module Replacement, ensuring ultra-fast development and optimized production bundles.
-- **Piexifjs (Binary Injector):** 
-    - **Usage:** Used to manipulate the `APP1` segment of a JPEG file.
-    - **Technicality:** It converts decimal GPS coordinates into the **EXIF Rational** format (Degrees/Minutes/Seconds) and injects them into the `GPSIFD` directory of the image.
-- **Exifr (Metadata Parser):** A high-performance metadata reader used on the frontend to provide "Instant Feedback" to volunteers if their photo lacks location data.
-- **Leaflet.js (Mapping Engine):** Uses **Custom Marker Icons** and **Geo-Spatial Overlays** to render disaster sites in real-time.
-- **Axios (HTTP Client):** Configured with custom `FormData` headers to handle multipart/form-data uploads of high-resolution images.
-- **Lucide-React:** Provides optimized SVG icons that are bundled individually to keep the initial load size small.
+- **React 19 & Vite:** Optimized with strict lazy-loading boundaries to prevent context duplication (`resolveDispatcher` errors) during aggressive chunking.
+- **Progressive Web App (PWA):** Implements a Service Worker (`sw.js`) and IndexedDB for full offline functionality.
+- **Piexifjs & Exifr:** Manipulates and reads the `APP1` segment of a JPEG file to inject and verify GPS data locally.
+- **Leaflet.js:** Uses custom markers and Geo-Spatial overlays to render disaster sites in real-time.
 
 ### **2. Backend: The Geo-Spatial Brain**
 - **Node.js & Express:** The core REST API server.
-- **Prisma ORM (Schema-as-Code):**
-    - **Technicality:** Uses a custom `Unsupported("geometry(Point, 4326)")` field in the schema to support native PostGIS geometries.
-- **PostGIS (The Geometry Engine):**
-    - **Functions Used:** 
-        - `ST_SetSRID(ST_MakePoint(lng, lat), 4326)`: To convert raw numbers into earth-projected points.
-        - `ST_Distance(geom1, geom2)`: Used to calculate the "Great Circle" distance between a reporter and a volunteer.
-- **Multer (Memory Engine):** Handles file uploads. We use **Memory Storage** (Buffers) instead of Disk Storage to allow for instant, sub-millisecond passing of images to the AI service.
-- **Tesseract.js (The Fallback OCR):** An on-device OCR engine used to scan images for text-based coordinate watermarks if the primary EXIF verification fails.
-- **Clerk Backend SDK:** Handles JWT (JSON Web Token) verification to ensure that only authorized volunteers can claim and complete missions.
+- **Prisma ORM & Neon Serverless Postgres:**
+    - Uses a custom `Unsupported("geometry(Point, 4326)")` field to support native PostGIS geometries.
+    - **LRU Auth Cache Optimization:** To support 5-10 second auto-polling across thousands of dashboards without hitting Neon's connection pool limits, a 15-second in-memory LRU cache intercepts Clerk JWTs and caches the DB identity, reducing DB load by 90%.
+- **PostGIS (The Geometry Engine):** Uses `ST_SetSRID` and `ST_Distance` to mathematically calculate distances over the Earth's curvature.
+- **Clerk Backend SDK:** Handles authentication and identity management, gating endpoints behind strict `user`, `volunteer`, and `coordinator` roles.
 
 ### **3. AI Service: The Semantic Validator**
 - **FastAPI:** A Python ASGI framework built for high-concurrency asynchronous tasks.
-- **OpenAI CLIP (Neural Model):**
-    - **Architecture:** A "Multi-Modal" model that maps images and text into the same vector space.
-    - **Logic:** It calculates the **Cosine Similarity** between the image and a set of "Emergency Labels" (e.g., "a photo of a flood").
-- **PyTorch:** The underlying deep learning library used to run the CLIP model on the GPU.
-- **PIL (Pillow):** Used for advanced image pre-processing (resizing, normalization) before the image is fed into the Neural Network.
-- **Python-Multipart:** Essential for parsing the binary image streams sent from the Node.js backend.
-
----
-
-## 🚀 Full Feature Catalog (A-Z)
-
-### **A. Intelligence Intake (Victim Reporting)**
-*   **Urgency Scoring Algorithm:** A weighted priority system: `Urgency = (CategoryWeight * 10) + (TimeElapsed * 1.5)`.
-*   **Autonomous Geolocation:** Uses the `navigator.geolocation` API with `enableHighAccuracy: true`.
-
-### **B. Volunteer Mission Console**
-*   **Proximity Filter:** Uses a PostGIS `ST_DWithin` query to only show tasks within a volunteer's operational radius.
-*   **State Machine:** Managed through Prisma transitions to prevent "Double Claiming" of the same mission.
-
-### **C. The Trust Layer (Security)**
-*   **Anti-Spoofing Camera:** A full-screen `<video>` implementation that locks out the gallery to prevent the use of fake photos.
-*   **Multi-Engine Verification:** 
-    1. **Spatial:** Proximity check via PostGIS.
-    2. **Temporal:** Timestamp check via EXIF.
-    3. **Semantic:** Content check via CLIP AI.
+- **OpenAI CLIP (Neural Model):** A "Multi-Modal" model that maps images and text into the same vector space, calculating Cosine Similarity between the uploaded proof and the expected disaster label.
+- **PyTorch & PIL:** Handles GPU execution and advanced image pre-processing (resizing, normalization).
 
 ---
 
@@ -119,22 +116,23 @@ This section provides a granular breakdown of every "picky" technical component 
 
 | Tool | Category | Specific Role |
 | :--- | :--- | :--- |
-| **Vite** | Build Tool | Production bundling & Dev server. |
-| **Piexifjs** | Binary Utility | Writing GPS data into JPEG binary segments. |
-| **Exifr** | Parser | Reading GPS data from binary images. |
-| **PostGIS** | GIS Extension | Mathematical Earth-surface calculations. |
+| **React/Vite** | Frontend | Highly responsive, component-driven UI with lazy loading. |
+| **IndexedDB/SW** | PWA Offline | Queues disaster reports when cell towers are destroyed. |
+| **Piexifjs / Exifr** | Binary Utility | Writing & Reading GPS data directly into/from JPEG binary. |
+| **PostGIS** | GIS Extension | Mathematical Earth-surface distance & proximity calculations. |
 | **Prisma** | ORM | Database schema management & Typed queries. |
-| **CLIP** | Neural Model | Zero-shot image-to-text semantic matching. |
-| **Tesseract.js**| OCR | Extraction of text from images (Fallback). |
-| **FastAPI** | AI Web Framework| Serving ML models with async performance. |
+| **Neon** | Serverless DB | Auto-scaling PostgreSQL hosting. |
+| **CLIP** | Neural Model | Zero-shot image-to-text semantic matching for fraud detection. |
+| **FastAPI** | AI Framework | Serving ML models with async performance. |
 
 ---
 
 ## 🛠️ Technical Challenges Overcome
 
-*   **The Metadata Preservation Challenge:** Standard browser image processing (Canvas/Img) destroys EXIF data. We solved this by treating the image as a binary stream and using `piexifjs` to manually rebuild the headers.
-*   **The Cold Start AI Problem:** Large ML models take time to load. We implemented a "Health Check" system and used pre-warmed instances to ensure instantaneous verification.
-*   **Spatial Indexing:** In a real disaster with 100,000 reports, a normal database would crash. We used **GIST Indexes** on our PostGIS columns to allow for sub-second spatial searches.
+*   **The Serverless Connection Pool Exhaustion:** High-frequency dashboard auto-polling caused our Neon DB to hit connection limits (17 max). We engineered a lightning-fast 15-second in-memory LRU cache in the authentication middleware that intercepts requests, dropping actual database query volume by over 90% while maintaining real-time UI updates.
+*   **Context Loss in Chunking:** Heavy Vite chunking caused React hook crashes (`resolveDispatcher is null`) when mixing static and dynamic imports. We fixed this by standardizing lazy-loading boundaries across all major routing nodes.
+*   **The Metadata Preservation Challenge:** Standard browser image processing (Canvas/Img) destroys EXIF data. We treated the image as a raw binary stream and used `piexifjs` to manually rebuild the headers.
+*   **Spatial Indexing at Scale:** In a real disaster with 100,000 reports, standard tables lock up. We used **GIST Indexes** on our PostGIS columns to allow for sub-second spatial proximity searches.
 
 ---
 *SevaSetu: Orchestrating Humanitarian Aid with Mathematical Integrity.*

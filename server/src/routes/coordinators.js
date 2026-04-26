@@ -55,7 +55,20 @@ router.get('/stats', auth, async (req, res) => {
       else stats.others += c._count.id;
     });
 
-    res.json({ totalUsers: stats.others }); // We only return "others" as Total Users per request
+    // Total members = everyone except coordinators (users + volunteers + field_workers)
+    const totalMembers = stats.volunteers + stats.others;
+
+    // Count pending volunteer requests
+    const pendingRequests = await prisma.volunteerRequest.count({
+      where: { status: 'pending' },
+    });
+
+    res.json({
+      totalUsers: totalMembers,
+      activeVolunteers: stats.volunteers,
+      baseUsers: stats.others,
+      pendingVolunteerRequests: pendingRequests,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

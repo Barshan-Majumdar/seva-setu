@@ -36,9 +36,12 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   if (requiredRole) {
     const dbRole = localStorage.getItem('dbRole');
     if (dbRole && dbRole !== requiredRole) {
-      // Redirect to their correct workspace
+      // Redirect to their correct workspace based on actual role
       if (dbRole === 'coordinator') return <Navigate to="/dashboard" replace />;
-      return <Navigate to="/volunteer" replace />;
+      if (dbRole === 'volunteer') return <Navigate to="/volunteer" replace />;
+      if (dbRole === 'user') return <Navigate to="/user-dashboard" replace />;
+      // field_worker or unknown → user dashboard
+      return <Navigate to="/user-dashboard" replace />;
     }
   }
 

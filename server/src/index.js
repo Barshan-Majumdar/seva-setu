@@ -27,6 +27,7 @@ app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/volunteers', require('./routes/volunteers'));
 app.use('/api/coordinators', require('./routes/coordinators'));
 app.use('/api/whatsapp', require('./routes/whatsapp'));
+app.use('/api/volunteer-requests', require('./routes/volunteerRequests'));
 
 // ── Health Check ─────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {

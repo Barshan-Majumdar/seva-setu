@@ -9,6 +9,7 @@ import './index.css'
 import './styles/landing.css'
 import './styles/dashboard.css'
 import './styles/volunteer.css'
+import './styles/user-dashboard.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 

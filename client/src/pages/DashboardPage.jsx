@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Settings, Plus } from 'lucide-react';
+import { Settings, Plus, UserCheck } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import { useCoordinatorDashboard } from '../hooks/useCoordinatorDashboard';
 import DashboardSummaryCards from '../components/dashboard/DashboardSummaryCards';
@@ -37,6 +37,7 @@ const DashboardPage = () => {
     updatePipelineStatus,
     deleteNeed, // THIS IS THE FUNCTION
     toast,
+    pendingVolunteerRequests,
   } = useCoordinatorDashboard();
 
   console.log("DEBUG DASHBOARD: deleteNeed type is", typeof deleteNeed);
@@ -45,7 +46,7 @@ const DashboardPage = () => {
     <MainLayout>
       <div className="dashboard-shell container-lg">
         <section className="dashboard-hero" style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', gap: '0.75rem' }}>
+          <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <Link 
               to="/field"
               className="dashboard-dispatch-btn" 
@@ -53,6 +54,26 @@ const DashboardPage = () => {
             >
               <Plus size={14} />
               Report New Need
+            </Link>
+            <Link
+              to="/volunteer-approvals"
+              className="dashboard-dispatch-btn"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-surface-secondary)', position: 'relative' }}
+            >
+              <UserCheck size={14} />
+              Requests
+              {pendingVolunteerRequests > 0 && (
+                <span style={{
+                  position: 'absolute', top: '-6px', right: '-6px',
+                  background: '#fb7185', color: '#fff',
+                  fontSize: '0.6rem', fontWeight: 900,
+                  width: '18px', height: '18px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 2px 6px rgba(251, 113, 133, 0.4)',
+                }}>
+                  {pendingVolunteerRequests}
+                </span>
+              )}
             </Link>
             <button 
               onClick={() => setShowManager(true)}

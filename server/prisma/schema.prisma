@@ -15,6 +15,7 @@ datasource db {
 // ── Enums ─────────────────────────────────────────────────────────────
 
 enum UserRole {
+  user
   coordinator
   volunteer
   field_worker
@@ -47,6 +48,12 @@ enum TaskStatus {
   completed
 }
 
+enum VolunteerRequestStatus {
+  pending
+  approved
+  rejected
+}
+
 // ── Models ────────────────────────────────────────────────────────────
 
 model Organization {
@@ -68,14 +75,16 @@ model User {
   email        String   @unique
   phoneNumber  String?  @unique @map("phone_number")
   passwordHash String   @map("password_hash")
-  role         UserRole @default(volunteer)
+  role         UserRole @default(user)
   orgId        String?  @map("org_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at")
 
   organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
   volunteer    Volunteer?
-  reportedNeeds Need[]       @relation("ReportedNeeds")
-  assignedTasks Task[]       @relation("AssignedTasks")
+  reportedNeeds      Need[]              @relation("ReportedNeeds")
+  assignedTasks      Task[]              @relation("AssignedTasks")
+  volunteerRequests  VolunteerRequest[]  @relation("UserVolunteerRequests")
+  reviewedRequests   VolunteerRequest[]  @relation("ReviewedByCoordinator")
 
   @@map("users")
 }
@@ -157,4 +166,22 @@ model CoordinatorEmail {
   addedAt DateTime @default(now()) @map("added_at")
 
   @@map("coordinator_emails")
+}
+
+model VolunteerRequest {
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String                 @map("user_id") @db.Uuid
+  fullName        String                 @map("full_name")
+  contactDetails  String                 @map("contact_details")
+  proofOfWork     String                 @map("proof_of_work")
+  status          VolunteerRequestStatus @default(pending)
+  reviewedBy      String?                @map("reviewed_by") @db.Uuid
+  reviewNote      String?                @map("review_note")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @default(now()) @updatedAt @map("updated_at")
+
+  user      User  @relation("UserVolunteerRequests", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer  User? @relation("ReviewedByCoordinator", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@map("volunteer_requests")
 }

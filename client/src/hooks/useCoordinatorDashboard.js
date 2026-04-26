@@ -104,6 +104,8 @@ export const useCoordinatorDashboard = () => {
     return list;
   }, [filteredNeeds, sorting]);
 
+  const pendingVolunteerRequests = systemStats.pendingVolunteerRequests || 0;
+
   const summary = useMemo(() => {
     const openNeeds = needs.filter((n) => n.status === 'open').length;
     const activeVolunteers = volunteers.filter((v) => v.is_available).length;
@@ -198,5 +200,6 @@ export const useCoordinatorDashboard = () => {
     updatePipelineStatus,
     deleteNeed,
     toast,
+    pendingVolunteerRequests,
   };
 };

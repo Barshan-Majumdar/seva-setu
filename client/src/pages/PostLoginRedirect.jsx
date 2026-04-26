@@ -98,7 +98,9 @@ const PostLoginRedirect = () => {
 
   // ── Redirect to correct workspace ──────────────────────────
   if (dbRole === 'coordinator') return <Navigate to="/dashboard" replace />;
-  return <Navigate to="/volunteer" replace />;
+  if (dbRole === 'volunteer') return <Navigate to="/volunteer" replace />;
+  // 'user', 'field_worker', or any other role → user dashboard
+  return <Navigate to="/user-dashboard" replace />;
 };
 
 export default PostLoginRedirect;

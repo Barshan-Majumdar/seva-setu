@@ -126,37 +126,30 @@ router.get('/me', auth, async (req, res) => {
 
 /**
  * @route   POST /api/auth/set-role
- * @desc    Set user role (only allowed once, during first signup)
+ * @desc    Set user role (coordinator only, or during initial setup for non-volunteer roles)
  * @access  Private
+ * 
+ * SECURITY: 'volunteer' role can ONLY be granted through the volunteer application
+ * approval flow (/api/volunteer-requests/:id/approve). This prevents bypassing.
  */
 router.post('/set-role', auth, async (req, res) => {
   const { role } = req.body;
-  if (!['coordinator', 'volunteer', 'field_worker'].includes(role)) {
-    return res.status(400).json({ message: 'Invalid role' });
+  if (!['coordinator', 'field_worker'].includes(role)) {
+    return res.status(400).json({ message: 'Invalid role. Volunteer role requires application approval.' });
+  }
+
+  // Only coordinators can set roles
+  if (req.user.role !== 'coordinator') {
+    return res.status(403).json({ message: 'Only coordinators can assign roles.' });
   }
 
   try {
-    // Check if user already has a confirmed role (set via this endpoint before)
-    const existing = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { role: true },
-    });
-
     // Update role
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
       data: { role },
       select: { id: true, role: true, name: true, email: true },
     });
-
-    // Ensure volunteer record exists if switched to volunteer
-    if (role === 'volunteer') {
-      await prisma.volunteer.upsert({
-        where: { userId: updatedUser.id },
-        create: { userId: updatedUser.id, skills: [] },
-        update: {},
-      });
-    }
 
     console.log(`[auth] Role set for user ${updatedUser.id}: ${role}`);
     res.json(updatedUser);

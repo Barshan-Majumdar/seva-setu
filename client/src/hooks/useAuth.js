@@ -15,7 +15,7 @@ export const useAuth = () => {
           id: user.id,
           name: user.fullName || user.firstName || 'User',
           email: user.primaryEmailAddress?.emailAddress || '',
-          role: dbRole || 'volunteer',
+          role: dbRole || 'user',
         }
       : null,
     isAuthenticated: Boolean(isLoaded && isSignedIn),
