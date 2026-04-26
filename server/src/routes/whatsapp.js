@@ -110,11 +110,12 @@ router.post('/webhook', async (req, res) => {
         const autoTitle = state.description ? state.description.substring(0, 40) + '...' : 'Urgent WhatsApp Report';
 
         await prisma.$executeRaw`
-          INSERT INTO needs (title, description, ward, need_type, people_affected, urgency_score, location, is_disaster_zone)
+          INSERT INTO needs (title, description, ward, district, need_type, people_affected, urgency_score, location, is_disaster_zone)
           VALUES (
             ${'WA: ' + autoTitle}, 
             ${state.description || ''},
-            ${(state.ward ? state.ward + ', ' : '') + (state.district || '')},
+            ${state.ward || ''},
+            ${state.district || ''},
             ${state.needType || 'other'}::"NeedType", 
             ${state.peopleAffected || 1},
             ${priorityScore}, 
