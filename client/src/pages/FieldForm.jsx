@@ -597,7 +597,11 @@ const FieldForm = () => {
             <button
               type="button"
               onClick={() => {
-                const phone = TWILIO_WHATSAPP_NUMBER.replace(/\s/g, '');
+                if (!TWILIO_WHATSAPP_NUMBER || !TWILIO_SANDBOX_CODE) {
+                  console.error('WhatsApp details missing:', { TWILIO_WHATSAPP_NUMBER, TWILIO_SANDBOX_CODE });
+                  return;
+                }
+                const phone = TWILIO_WHATSAPP_NUMBER.replace(/[^0-9]/g, '');
                 const message = encodeURIComponent(TWILIO_SANDBOX_CODE);
                 window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
               }}
