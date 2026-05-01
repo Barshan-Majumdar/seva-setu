@@ -89,30 +89,39 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
     // STEP 2: AI CONTENT CHECK
     // ═══════════════════════════════════════════════════════════
     try {
-      if (req.file.size < 15000) {
-        errors.push('🔍 IMAGE ERROR: The photo appears blank or too small. Please capture a clear photo.');
-      }
-
       const form = new FormData();
-      form.append('file', req.file.buffer, { filename: 'upload.jpg' });
-      form.append('need_type', need_type);
+      form.append('file', req.file.buffer, { filename: req.file.originalname || 'upload.jpg' });
+      // Send as ISSUE_REGISTRATION so the AI knows this is an incident report
+      form.append('upload_type', 'ISSUE_REGISTRATION');
+
+      const headers = form.getHeaders();
+      try {
+        headers['Content-Length'] = form.getLengthSync();
+      } catch (e) { /* ignore */ }
 
       const aiResponse = await axios.post(
         `${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/verify-image`,
         form,
-        { headers: form.getHeaders(), timeout: 20000 }
+        { headers, timeout: 30000 }
       );
 
-      if (aiResponse.data.is_verified) {
-        console.log(`[AI-REPORT] ✅ PASSED (${aiResponse.data.top_match}) Confidence: ${aiResponse.data.confidence}`);
-        verificationConfidence = aiResponse.data.confidence;
+      const aiData = aiResponse.data;
+      const confidence = aiData.similarity || 0;
+
+      if (aiData.is_verified) {
+        console.log(`[AI-REPORT] ✅ PASSED (${aiData.top_match}) Confidence: ${(confidence * 100).toFixed(1)}%`);
+        verificationConfidence = confidence;
         aiPassed = true;
       } else {
-        console.log(`[AI-REPORT] ❌ FAILED (Expected: ${need_type}, Found: ${aiResponse.data.top_match})`);
-        errors.push(`🔍 AI MISMATCH: The image does not match "${need_type}". AI detected: "${aiResponse.data.top_match}".`);
+        const reason = aiData.reason || `AI detected: "${aiData.top_match}"`;
+        console.log(`[AI-REPORT] ❌ FAILED — ${reason}`);
+        errors.push(`🔍 AI MISMATCH: ${reason}`);
       }
     } catch (aiErr) {
-      console.error('[AI-REPORT] AI Service unreachable:', aiErr.message);
+      const errDetail = aiErr.response
+        ? `HTTP ${aiErr.response.status}: ${JSON.stringify(aiErr.response.data)}`
+        : aiErr.message;
+      console.error('[AI-REPORT] AI Service unreachable:', errDetail);
       // Don't block if AI is down, just mark unverified
     }
 

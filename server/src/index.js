@@ -36,9 +36,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// ── Request Logger ──────────────────────────────────────────────────
+// ── Request Logger (skip noisy polling routes) ─────────────────────
+const SILENT_ROUTES = ['/api/tasks/my', '/api/volunteers/me/stats', '/api/tasks/my-broadcasts', '/api/health'];
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+  const isSilent = req.method === 'GET' && SILENT_ROUTES.some(r => req.url.startsWith(r));
+  if (!isSilent) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  }
   next();
 });
 

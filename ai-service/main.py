@@ -4,9 +4,38 @@ import torch
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 import io
+import os
 from typing import Optional
 
-app = FastAPI()
+# ══════════════════════════════════════════════════════════════════════
+# ENVIRONMENT SETUP
+# ══════════════════════════════════════════════════════════════════════
+# Load HF_TOKEN from environment. When running locally, set it in your
+# shell or create ai-service/.env. We intentionally do NOT load the
+# server/.env to avoid importing PORT=5000 which hijacks our port.
+# ══════════════════════════════════════════════════════════════════════
+try:
+    from dotenv import load_dotenv
+    # 1. Load ai-service's own .env (if it exists)
+    local_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    load_dotenv(local_env, override=False)
+    
+    # 2. Fallback: read ONLY HF_TOKEN from the server's .env (not the whole file)
+    #    This avoids importing PORT=5000 which would hijack our port.
+    if not os.environ.get("HF_TOKEN"):
+        server_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'server', '.env')
+        if os.path.exists(server_env):
+            with open(server_env, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("HF_TOKEN="):
+                        os.environ["HF_TOKEN"] = line.split("=", 1)[1]
+                        print("[ENV] Loaded HF_TOKEN from server/.env")
+                        break
+except ImportError:
+    pass
+
+app = FastAPI(title="SevaSetu AI Verification Service")
 
 # Enable CORS
 app.add_middleware(
@@ -17,117 +46,215 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load Model
-MODEL_ID = "openai/clip-vit-base-patch32"
-print(f"Loading model {MODEL_ID}...")
-model = CLIPModel.from_pretrained(MODEL_ID)
-processor = CLIPProcessor.from_pretrained(MODEL_ID)
-print("Model loaded successfully.")
+# ══════════════════════════════════════════════════════════════════════
+# MODEL LOADING
+# ══════════════════════════════════════════════════════════════════════
+HF_TOKEN = os.environ.get("HF_TOKEN")
+MODEL_ID = "openai/clip-vit-large-patch14"
 
+print(f"[AI-SERVICE] Loading model: {MODEL_ID}")
+if HF_TOKEN:
+    print(f"[AI-SERVICE] HF_TOKEN: {'*' * 4}{HF_TOKEN[-4:]}")  # Show last 4 chars only
+else:
+    print("[AI-SERVICE] WARNING: No HF_TOKEN set. Using unauthenticated access (slower downloads).")
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"[AI-SERVICE] Device: {device}")
+
+# Load model — token=None is safe, it just uses unauthenticated access
+model = CLIPModel.from_pretrained(MODEL_ID, token=HF_TOKEN if HF_TOKEN else None).to(device)
+processor = CLIPProcessor.from_pretrained(MODEL_ID, token=HF_TOKEN if HF_TOKEN else None)
+print(f"[AI-SERVICE] ✅ Model loaded successfully on {device}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# LABEL DEFINITIONS
+# ══════════════════════════════════════════════════════════════════════
+ISSUE_LABELS = [
+    "a photo of an accident scene",
+    "structural damage or collapsed building",
+    "flooded street or natural disaster",
+    "person in physical distress or medical emergency",
+    "wildfire or urban smoke",
+]
+
+RELIEF_LABELS = [
+    "humanitarian food aid distribution",
+    "rescue workers extracting a person",
+    "medical professional treating a patient",
+    "repaired bridge or infrastructure",
+    "emergency vehicle with lights on",
+]
+
+NEGATIVE_LABELS = [
+    "a peaceful park",
+    "a clean city street",
+    "smiling people in an office",
+    "commercial advertisement",
+    "a random irrelevant photo",
+    "a blank white image",
+    "a selfie or portrait",
+]
+
+# Build the lookup map
+LABEL_MAP = {}
+for label in ISSUE_LABELS:
+    LABEL_MAP[label] = "ISSUE_REGISTRATION"
+for label in RELIEF_LABELS:
+    LABEL_MAP[label] = "PROOF_OF_RELIEF"
+for label in NEGATIVE_LABELS:
+    LABEL_MAP[label] = "INVALID"
+
+ALL_LABELS = list(LABEL_MAP.keys())
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HEALTH CHECK
+# ══════════════════════════════════════════════════════════════════════
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "model": MODEL_ID}
+    return {"status": "healthy", "model": MODEL_ID, "device": device}
 
+
+# ══════════════════════════════════════════════════════════════════════
+# IMAGE VERIFICATION ENDPOINT
+# ══════════════════════════════════════════════════════════════════════
 @app.post("/verify-image")
 async def verify_image(
     file: UploadFile = File(...),
-    need_type: Optional[str] = Form(None)
+    # Accept BOTH field names so it works from needs.js AND tasks.js
+    upload_type: Optional[str] = Form(None),
+    need_type: Optional[str] = Form(None),
 ):
+    """
+    Accepts an image and classifies it as ISSUE_REGISTRATION, PROOF_OF_RELIEF, or INVALID.
+    
+    - For issue registration: expects photos of disasters, damage, emergencies
+    - For proof of relief: expects photos of rescue, aid distribution, medical help
+    - Returns is_verified=True/False with the reason
+    """
+    # Merge the two possible field names into one
+    requested_type = upload_type or need_type
+
     try:
-        # Read image
+        # ── Read and validate image ──────────────────────────────
         image_data = await file.read()
-        image = Image.open(io.BytesIO(image_data))
         
-        # Base labels for general disaster detection + Anti-Fraud labels
-        labels = [
-            "a photo of a natural disaster",
-            "a photo of people needing help",
-            "a photo of a destroyed building",
-            "a normal photo with no disaster",
-            "a selfie or portrait",
-            "a random irrelevant photo",
-            "a blank white image",
-            "a photo of a computer screen",
-            "a low light photo"
-        ]
+        if len(image_data) < 100:
+            return {
+                "is_verified": False,
+                "reason": "The uploaded file is empty or too small to be a valid image.",
+                "detected_type": "INVALID",
+                "top_match": "empty file",
+                "similarity": 0.0,
+            }
 
-        # Add specific labels based on the reported need_type
-        if need_type == "medical":
-            labels.extend(["a photo of a medical emergency", "a photo of injured people", "a photo of an ambulance or hospital"])
-        elif need_type == "accidental":
-            labels.extend(["a photo of a vehicle accident", "a photo of a crash", "a photo of an accident scene"])
-        elif need_type == "food":
-            labels.extend(["a photo of people starving", "a photo of food distribution", "a photo of famine or lack of food"])
-        elif need_type == "shelter":
-            labels.extend(["a photo of homeless people", "a photo of a refugee camp", "a photo of ruined houses"])
-        elif need_type == "rescue":
-            labels.extend(["a photo of a rescue operation", "a photo of people trapped", "a photo of a flood rescue"])
+        try:
+            image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        except Exception:
+            return {
+                "is_verified": False,
+                "reason": "Could not open the file as an image. Please upload a valid JPG or PNG photo.",
+                "detected_type": "INVALID",
+                "top_match": "corrupted file",
+                "similarity": 0.0,
+            }
 
-        # Prepare inputs
+        # ── Run CLIP inference ───────────────────────────────────
         inputs = processor(
-            text=labels, 
-            images=image, 
-            return_tensors="pt", 
-            padding=True
-        )
+            text=ALL_LABELS,
+            images=image,
+            return_tensors="pt",
+            padding=True,
+        ).to(device)
 
-        # Inference
-        outputs = model(**inputs)
-        logits_per_image = outputs.logits_per_image
-        probs = logits_per_image.softmax(dim=1)
-        
-        # Get results
-        results = []
-        for i, label in enumerate(labels):
-            results.append({
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # Calculate cosine similarities
+        image_embeds = outputs.image_embeds
+        text_embeds = outputs.text_embeds
+        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+        cosine_similarities = torch.matmul(image_embeds, text_embeds.t())[0]
+
+        # Build sorted results
+        sim_results = []
+        for i, label in enumerate(ALL_LABELS):
+            sim_results.append({
                 "label": label,
-                "confidence": float(probs[0][i])
+                "category": LABEL_MAP[label],
+                "similarity": round(float(cosine_similarities[i]), 4),
             })
-            
-        # Sort by confidence
-        results = sorted(results, key=lambda x: x["confidence"], reverse=True)
-        top_result = results[0]
-        
-        # Stricter check: 
-        # 1. Must not be a "normal" or "irrelevant" photo
-        # 2. Must meet higher confidence threshold (0.45)
-        invalid_labels = [
-            "a normal photo with no disaster", 
-            "a selfie or portrait", 
-            "a random irrelevant photo",
-            "a blank white image",
-            "a photo of a computer screen"
-        ]
-        
-        # Verdict: Must be a disaster label AND have high confidence
-        is_valid_disaster = top_result["label"] not in invalid_labels and top_result["confidence"] > 0.40
+        sim_results.sort(key=lambda x: x["similarity"], reverse=True)
 
-        # Contextual validation: Does it match the mission type?
-        matches_need = False
-        if need_type and is_valid_disaster:
-            top_three_labels = [r["label"] for r in results[:3]]
-            if need_type == "medical" and any("medical" in l or "injured" in l or "ambulance" in l for l in top_three_labels): matches_need = True
-            elif need_type == "accidental" and any("accident" in l or "crash" in l for l in top_three_labels): matches_need = True
-            elif need_type == "food" and any("food" in l or "distribution" in l for l in top_three_labels): matches_need = True
-            elif need_type == "shelter" and any("homeless" in l or "camp" in l or "ruined" in l for l in top_three_labels): matches_need = True
-            elif need_type == "rescue" and any("rescue" in l or "trapped" in l for l in top_three_labels): matches_need = True
-            elif need_type == "other" or any("low light" in l for l in top_three_labels): matches_need = True
-            
-            # If the user is reporting a specific need, the AI MUST see evidence of that need
-            if not matches_need and need_type != "other":
-                is_valid_disaster = False
+        top = sim_results[0]
+        detected_category = top["category"]
 
+        print(f"[AI-SERVICE] Image analyzed → Top: \"{top['label']}\" ({top['similarity']:.3f}) | Category: {detected_category}")
+
+        # ── Decision Logic ───────────────────────────────────────
+
+        # 1. If the top match is INVALID or below threshold → reject
+        if detected_category == "INVALID" or top["similarity"] < 0.25:
+            print(f"[AI-SERVICE] ❌ REJECTED: Invalid or low confidence ({top['similarity']:.3f})")
+            return {
+                "is_verified": False,
+                "reason": f"The image does not appear to show a valid disaster or relief scenario. AI detected: \"{top['label']}\" (confidence: {top['similarity']:.1%})",
+                "detected_type": detected_category,
+                "top_match": top["label"],
+                "similarity": top["similarity"],
+                "all_results": sim_results[:5],
+            }
+
+        # 2. If a specific type was requested, check it matches
+        if requested_type:
+            # Map common need_type values to our categories
+            issue_keywords = ["flood", "fire", "medical", "shelter", "food", "water", "rescue", "earthquake", "storm"]
+            is_issue_type = any(kw in requested_type.lower() for kw in issue_keywords)
+            
+            # If the request is for proof of relief but we detected an issue (or vice versa)
+            if requested_type == "PROOF_OF_RELIEF" and detected_category != "PROOF_OF_RELIEF":
+                print(f"[AI-SERVICE] ❌ MISMATCH: Expected PROOF_OF_RELIEF, got {detected_category}")
+                return {
+                    "is_verified": False,
+                    "reason": f"This image shows a disaster/incident scene, but proof of relief work (rescue, aid, treatment) is required. AI detected: \"{top['label']}\"",
+                    "detected_type": detected_category,
+                    "top_match": top["label"],
+                    "similarity": top["similarity"],
+                    "all_results": sim_results[:5],
+                }
+            elif requested_type == "ISSUE_REGISTRATION" and detected_category != "ISSUE_REGISTRATION":
+                print(f"[AI-SERVICE] ❌ MISMATCH: Expected ISSUE_REGISTRATION, got {detected_category}")
+                return {
+                    "is_verified": False,
+                    "reason": f"This image does not show a disaster or emergency incident. AI detected: \"{top['label']}\"",
+                    "detected_type": detected_category,
+                    "top_match": top["label"],
+                    "similarity": top["similarity"],
+                    "all_results": sim_results[:5],
+                }
+
+        # 3. Image is valid! ✅
+        print(f"[AI-SERVICE] ✅ VERIFIED: {detected_category} — \"{top['label']}\" ({top['similarity']:.3f})")
         return {
-            "is_verified": is_valid_disaster,
-            "top_match": top_result["label"],
-            "confidence": top_result["confidence"],
-            "matches_specific_need": matches_need,
-            "all_results": results[:5]
+            "is_verified": True,
+            "detected_type": detected_category,
+            "top_match": top["label"],
+            "similarity": top["similarity"],
+            "all_results": sim_results[:5],
         }
 
     except Exception as e:
+        print(f"[AI-SERVICE] ❌ CRASH: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ══════════════════════════════════════════════════════════════════════
+# STARTUP
+# ══════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("AI_PORT", "8000"))
+    print(f"[AI-SERVICE] Starting on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)

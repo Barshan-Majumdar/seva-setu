@@ -5,3 +5,4 @@ torch
 torchvision
 pillow
 python-multipart
+python-dotenv
