@@ -21,10 +21,10 @@ const RealImpactSection = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '32px', flexWrap: 'wrap', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#e2e8f0', overflow: 'hidden' }}>
-                <img src="https://i.pravatar.cc/150?u=sanjeev" alt="Sanjeev Kumar Das" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src="/sanjib.jpg" alt="Sanjib Kumar Das" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '1.125rem', color: '#0f172a', fontWeight: '600' }}>Sanjeev Kumar Das</h4>
+                <h4 style={{ margin: 0, fontSize: '1.125rem', color: '#0f172a', fontWeight: '600' }}>Sanjib Kumar Das</h4>
                 <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>CEO, Bandhan NGO</p>
               </div>
             </div>
