@@ -385,9 +385,15 @@ const VolunteerPage = () => {
                                 padding: '4px 10px', borderRadius: '6px', fontSize: '10px',
                                 fontWeight: 'bold', fontFamily: 'monospace', textTransform: 'uppercase',
                                 letterSpacing: '0.08em',
-                                background: verificationErrors[task.task_id].summary.geoTag === 'PASSED' ? 'rgba(5,150,105,0.1)' : 'rgba(195,93,81,0.1)',
-                                color: verificationErrors[task.task_id].summary.geoTag === 'PASSED' ? '#059669' : '#c35d51',
-                                border: verificationErrors[task.task_id].summary.geoTag === 'PASSED' ? '1px solid rgba(5,150,105,0.25)' : '1px solid rgba(195,93,81,0.25)',
+                                background: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' ? 'rgba(5,150,105,0.1)'
+                                  : verificationErrors[task.task_id].summary.geoTag === 'PROXIMITY OK' ? 'rgba(217,119,6,0.1)'
+                                  : 'rgba(195,93,81,0.1)',
+                                color: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' ? '#059669'
+                                  : verificationErrors[task.task_id].summary.geoTag === 'PROXIMITY OK' ? '#d97706'
+                                  : '#c35d51',
+                                border: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' ? '1px solid rgba(5,150,105,0.25)'
+                                  : verificationErrors[task.task_id].summary.geoTag === 'PROXIMITY OK' ? '1px solid rgba(217,119,6,0.25)'
+                                  : '1px solid rgba(195,93,81,0.25)',
                               }}>
                                 GEO-TAG: {verificationErrors[task.task_id].summary.geoTag}
                               </span>
@@ -409,7 +415,11 @@ const VolunteerPage = () => {
                               <div key={i} className="volunteer-verify-error-item">{err}</div>
                             ))}
                           </div>
-                          <p className="volunteer-verify-hint">Retake the photo using the Live Camera at the incident location.</p>
+                          <p className="volunteer-verify-hint">
+                            {verificationErrors[task.task_id].summary?.aiContent === 'FAILED'
+                              ? 'Ensure the photo clearly shows relief work — such as rescue operations, aid distribution, or medical assistance at the site.'
+                              : 'Move closer to the incident location and try again with GPS enabled.'}
+                          </p>
                         </div>
                       )}
 

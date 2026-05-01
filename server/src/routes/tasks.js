@@ -132,6 +132,8 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     // STEP 1: GEO-TAG CHECK (MANDATORY — runs for EVERY image)
     // ═══════════════════════════════════════════════════════════
     let geoTagPassed = false;
+    let photoHasGps = false;
+    let proximitySource = null; // 'photo_exif' | 'browser_gps' | null
     try {
       console.log(`[GEOTAG] Scanning metadata for: ${req.file.originalname} (${req.file.size} bytes)`);
       console.log(`[GEOTAG] Target Incident Location: Lat=${lat}, Lng=${lng}`);
@@ -145,13 +147,16 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
         if (metadata && typeof metadata.latitude === 'number') {
           photoLat = metadata.latitude;
           photoLng = metadata.longitude;
-          console.log(`[GEOTAG] Metadata found: Lat=${photoLat}, Lng=${photoLng}`);
+          photoHasGps = true;
+          console.log(`[GEOTAG] Photo EXIF GPS found: Lat=${photoLat}, Lng=${photoLng}`);
+        } else {
+          console.log(`[GEOTAG] Photo has NO GPS metadata embedded`);
         }
       } catch (e) {
-        console.log(`[GEOTAG] Parse failed: ${e.message}`);
+        console.log(`[GEOTAG] EXIF parse failed: ${e.message}`);
       }
 
-      // STEP 1.1: Extract Browser-Side Verification Coords (The "Distance in the Map")
+      // Browser-Side Live GPS Coordinates
       const browserLat = req.body.browserLat ? Number(req.body.browserLat) : null;
       const browserLng = req.body.browserLng ? Number(req.body.browserLng) : null;
       
@@ -167,29 +172,36 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       };
 
-      // VERDICT LOGIC: We strictly use the Browser GPS (The "Distance in the Map")
-      // This is what the volunteer sees on their screen, so it must be the ground truth.
-      if (browserLat !== null && browserLng !== null) {
+      // PRIORITY 1: Use Photo EXIF GPS if available (most trustworthy)
+      if (photoHasGps) {
+        const photoDist = getDistance(photoLat, photoLng, Number(lat), Number(lng));
+        console.log(`[GEOTAG] Photo EXIF Distance: ${photoDist.toFixed(3)}km`);
+        if (photoDist <= 1.0) {
+          console.log(`[GEOTAG] ✅ GPS VERIFIED via Photo EXIF (< 1km)`);
+          geoTagPassed = true;
+          proximitySource = 'photo_exif';
+        } else {
+          console.log(`[GEOTAG] ❌ Photo GPS TOO FAR (${photoDist.toFixed(2)}km)`);
+          errors.push(`⚠️ LOCATION MISMATCH: Photo GPS shows you are ${photoDist.toFixed(2)}km away. You must be within 1km.`);
+        }
+      }
+      // PRIORITY 2: Fall back to Browser Live GPS
+      else if (browserLat !== null && browserLng !== null) {
         const browserDist = getDistance(browserLat, browserLng, Number(lat), Number(lng));
-        console.log(`[GEOTAG] Live Map Distance: ${browserDist.toFixed(3)}km`);
+        console.log(`[GEOTAG] Browser Live GPS Distance: ${browserDist.toFixed(3)}km`);
 
         if (browserDist <= 1.0) {
-          console.log(`[GEOTAG] ✅ VERDICT: GPS VERIFIED (Map Distance < 1km)`);
+          console.log(`[GEOTAG] ✅ PROXIMITY VERIFIED via Browser GPS (< 1km) — but photo has NO GPS tag`);
           geoTagPassed = true;
+          proximitySource = 'browser_gps';
         } else {
-          console.log(`[GEOTAG] ❌ VERDICT: TOO FAR (${browserDist.toFixed(2)}km)`);
-          errors.push(`⚠️ LOCATION MISMATCH: The map shows you are ${browserDist.toFixed(2)}km away. You must be within 1km to submit proof.`);
+          console.log(`[GEOTAG] ❌ Browser GPS TOO FAR (${browserDist.toFixed(2)}km)`);
+          errors.push(`⚠️ LOCATION MISMATCH: Your current location is ${browserDist.toFixed(2)}km away from the incident. You must be within 1km to submit proof.`);
         }
       } else {
-        // Fallback to Photo EXIF only if Browser GPS is somehow unavailable
-        console.log(`[GEOTAG] Warning: Browser GPS missing, falling back to Photo EXIF`);
-        if (typeof photoLat === 'number' && typeof photoLng === 'number') {
-          const photoDist = getDistance(photoLat, photoLng, Number(lat), Number(lng));
-          if (photoDist <= 1.0) geoTagPassed = true;
-          else errors.push(`⚠️ LOCATION MISMATCH: Photo shows you are ${photoDist.toFixed(2)}km away.`);
-        } else {
-          errors.push('⚠️ GEO-TAG MISSING: Could not verify your location from the map or photo.');
-        }
+        // No GPS source available at all
+        console.log(`[GEOTAG] ❌ No GPS available (neither photo EXIF nor browser)`);
+        errors.push('⚠️ GEO-TAG MISSING: Could not verify your location. Please enable GPS and try again.');
       }
     } catch (exifErr) {
       console.error(`[GEOTAG] ❌ FATAL ERROR:`, exifErr);
@@ -200,48 +212,42 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     // STEP 2: AI CONTENT CHECK (ALWAYS runs, even if geo-tag failed)
     // ═══════════════════════════════════════════════════════════
     try {
-      // Basic check for empty/black files (less than 15KB is usually junk)
-      if (req.file.size < 15000) {
-        errors.push('🔍 IMAGE ERROR: The photo appears to be blank or too small. Please capture a clear photo of the disaster site.');
-      }
-
       const form = new FormData();
       form.append('file', req.file.buffer, { filename: req.file.originalname || 'proof.jpg' });
-      form.append('need_type', task.need.needType); // CRITICAL: Send the context to AI
+      // Send as PROOF_OF_RELIEF so the AI knows this is a mission completion
+      form.append('upload_type', 'PROOF_OF_RELIEF');
 
-      console.log(`[AI-CHECK] Sending image to AI model for analysis (Type: ${task.need.needType})...`);
+      const headers = form.getHeaders();
+      try {
+        headers['Content-Length'] = form.getLengthSync();
+      } catch (e) { /* ignore */ }
+
+      console.log(`[AI-CHECK] Sending image to AI for analysis (Type: ${task.need.needType})...`);
       const aiResponse = await axios.post(
         `${process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000'}/verify-image`,
         form,
-        {
-          headers: form.getHeaders(),
-          timeout: 20000
-        }
+        { headers, timeout: 30000 }
       );
 
-      const topMatch = aiResponse.data.top_match.toLowerCase();
-      const confidence = aiResponse.data.confidence;
-      const needType = task.need.needType.toLowerCase();
+      const aiData = aiResponse.data;
+      const confidence = aiData.similarity || 0;
 
-      console.log(`[AI-CHECK] Result: "${topMatch}" (confidence: ${(confidence * 100).toFixed(1)}%) | Required: "${needType}"`);
+      console.log(`[AI-CHECK] Result: "${aiData.top_match}" (confidence: ${(confidence * 100).toFixed(1)}%) | Verified: ${aiData.is_verified}`);
 
-      const isGenuine = aiResponse.data.is_verified && (
-        topMatch.includes(needType) ||
-        topMatch.includes('help') ||
-        topMatch.includes('disaster') ||
-        topMatch.includes('emergency')
-      );
-
-      if (!isGenuine) {
-        const detected = topMatch.replace('a photo of ', '');
-        console.log(`[AI-CHECK] ❌ VERDICT: CONTENT DOES NOT MATCH`);
-        errors.push(`🔍 IMAGE MISMATCH: AI analysis detected "${detected}" in your photo, but this mission requires proof of "${needType}". Please upload a genuine photo of the work done.`);
-      } else {
+      if (aiData.is_verified) {
         isVerified = true;
         console.log(`[AI-CHECK] ✅ VERDICT: CONTENT VERIFIED`);
+      } else {
+        const reason = aiData.reason || `AI detected "${aiData.top_match}" which does not match relief work.`;
+        console.log(`[AI-CHECK] ❌ VERDICT: REJECTED — ${reason}`);
+        errors.push(`🔍 IMAGE REJECTED: ${reason}`);
       }
     } catch (aiErr) {
-      console.error(`[AI-CHECK] ❌ Service error:`, aiErr.message);
+      // Log the FULL error so we can debug
+      const errDetail = aiErr.response
+        ? `HTTP ${aiErr.response.status}: ${JSON.stringify(aiErr.response.data)}`
+        : aiErr.message;
+      console.error(`[AI-CHECK] ❌ Service error:`, errDetail);
       errors.push('🔍 AI SERVICE ERROR: The image verification service is temporarily unavailable. Please try again in a moment.');
     }
 
@@ -250,12 +256,23 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     // ═══════════════════════════════════════════════════════════
     if (errors.length > 0) {
       console.log(`[FINAL] Task ${req.params.id} REJECTED with ${errors.length} error(s):`, errors);
+
+      // Determine the correct geo-tag label for the frontend badge
+      let geoTagLabel = 'FAILED';
+      if (geoTagPassed && proximitySource === 'photo_exif') {
+        geoTagLabel = 'GPS VERIFIED';
+      } else if (geoTagPassed && proximitySource === 'browser_gps') {
+        geoTagLabel = 'PROXIMITY OK';
+      } else if (!photoHasGps && !geoTagPassed) {
+        geoTagLabel = 'NO GPS';
+      }
+
       return res.status(400).json({
         message: 'Verification Failed',
         errors: errors,
         details: errors.join(' | '),
         statusSummary: {
-          geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+          geoTag: geoTagLabel,
           aiContent: isVerified ? 'PASSED' : 'FAILED'
         }
       });
