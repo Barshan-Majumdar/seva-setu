@@ -165,11 +165,11 @@ async def verify_image(
             }
 
         # ── Run CLIP inference ───────────────────────────────────
-        inputs = processor(
+        inputs = processor(  # type: ignore[call-arg]
             text=ALL_LABELS,
             images=image,
-            return_tensors="pt",
-            padding=True,
+            return_tensors="pt",  # type: ignore[arg-type]
+            padding=True,  # type: ignore[arg-type]
         ).to(device)
 
         with torch.no_grad():

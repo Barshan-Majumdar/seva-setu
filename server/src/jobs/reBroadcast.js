@@ -1,4 +1,4 @@
-const prisma = require('../db');
+const prisma = require('../config/db');
 const { triggerBroadcast } = require('../services/matchingService');
 
 /**

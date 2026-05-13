@@ -6,7 +6,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const prisma = require('./db');
+const prisma = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;

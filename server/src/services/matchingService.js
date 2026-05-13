@@ -3,7 +3,7 @@
  * Compares volunteers against a need based on proximity, skills, and reliability.
  */
 
-const prisma = require('../db');
+const prisma = require('../config/db');
 
 /**
  * Find top 3 matching volunteers for a given need
