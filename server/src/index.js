@@ -11,6 +11,13 @@ const prisma = require('./config/db');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ── Rate Limiting & Proxy Setup ─────────────────────────────────────
+// Trust proxy is required for Render/Heroku to get the correct client IP
+app.set('trust proxy', 1);
+
+const rateLimiter = require('./middleware/rateLimiter');
+app.use(rateLimiter);
+
 // ── Routes ──────────────────────────────────────────────────────────
 const authRoutes = require('./routes/auth');
 const needsRoutes = require('./routes/needs');
