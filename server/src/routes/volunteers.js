@@ -1,15 +1,17 @@
 const express = require('express');
 const prisma = require('../config/db');
 const auth = require('../middleware/auth');
+const cache = require('../middleware/cache');
+const redisService = require('../services/redisService');
 
 const router = express.Router();
 
 /**
  * @route   GET /api/volunteers
- * @desc    List all volunteers
- * @access  Private (Coordinator)
+ * @desc    Get all available volunteers (Coordinator view)
+ * @access  Private (Coordinator only)
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, cache(30), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -43,6 +45,10 @@ router.patch('/me/availability', auth, async (req, res) => {
     await prisma.$executeRaw`
       UPDATE volunteers SET is_available = ${is_available}, updated_at = now() WHERE user_id = ${req.user.id}::uuid
     `;
+    
+    // Clear cache so coordinator sees the change immediately
+    redisService.clearCache('/api/volunteers').catch(() => {});
+    
     res.json({ message: 'Availability updated' });
   } catch (err) {
     console.error(err);
@@ -61,6 +67,10 @@ router.patch('/me/location', auth, async (req, res) => {
     await prisma.$executeRaw`
       UPDATE volunteers SET location = ST_SetSRID(ST_MakePoint(${lng}::float, ${lat}::float), 4326), updated_at = now() WHERE user_id = ${req.user.id}::uuid
     `;
+    
+    // We don't necessarily need to clear cache for EVERY location ping to save CU, 
+    // but for "Rescue" missions we could. For now, let's keep it database-efficient.
+    
     res.json({ message: 'Location updated' });
   } catch (err) {
     console.error(err);
@@ -121,9 +131,9 @@ router.get('/me/stats', auth, async (req, res) => {
       FROM volunteer_data vd
       LIMIT 1
     `;
-    res.json(stats[0] || { 
-      skills: [], isAvailable: true, tasksCompleted: 0, reportsResolved: 0, 
-      totalImpact: 0, completionRate: 0, totalDistanceCovered: 0 
+    res.json(stats[0] || {
+      skills: [], isAvailable: true, tasksCompleted: 0, reportsResolved: 0,
+      totalImpact: 0, completionRate: 0, totalDistanceCovered: 0
     });
   } catch (err) {
     console.error(err);
@@ -134,13 +144,11 @@ router.get('/me/stats', auth, async (req, res) => {
 /**
  * @route   POST /api/volunteers/me/beacon-offline
  * @desc    Emergency "Go Offline" signal via navigator.sendBeacon (fires on tab/browser close)
- *          sendBeacon sends Content-Type: text/plain, so we parse the body manually.
  */
 router.post('/me/beacon-offline', async (req, res) => {
   try {
-    // sendBeacon can send either JSON string or plain text
     let userId = null;
-    
+
     if (typeof req.body === 'string') {
       try {
         const parsed = JSON.parse(req.body);
@@ -150,11 +158,8 @@ router.post('/me/beacon-offline', async (req, res) => {
       userId = req.body.userId;
     }
 
-    if (!userId) {
-      return res.status(400).json({ message: 'Missing userId' });
-    }
+    if (!userId) return res.status(400).json({ message: 'Missing userId' });
 
-    // Resolve Clerk ID to DB UUID if necessary
     let dbUserId = userId;
     if (userId.startsWith('user_')) {
       const user = await prisma.user.findUnique({
@@ -167,6 +172,10 @@ router.post('/me/beacon-offline', async (req, res) => {
     await prisma.$executeRaw`
       UPDATE volunteers SET is_available = false, updated_at = now() WHERE user_id = ${dbUserId}::uuid
     `;
+    
+    // Clear cache immediately
+    redisService.clearCache('/api/volunteers').catch(() => {});
+    
     console.log(`[BEACON] Volunteer ${dbUserId} marked OFFLINE.`);
     res.json({ message: 'Marked offline' });
   } catch (err) {
@@ -177,8 +186,6 @@ router.post('/me/beacon-offline', async (req, res) => {
 
 /**
  * Heartbeat Staleness Sweeper
- * Every 5 minutes, mark any volunteer as unavailable if their last update was > 10 minutes ago.
- * This catches cases where sendBeacon fails (e.g., browser crash, network drop).
  */
 setInterval(async () => {
   try {
@@ -190,10 +197,11 @@ setInterval(async () => {
     `;
     if (result > 0) {
       console.log(`[HEARTBEAT] Marked ${result} stale volunteer(s) as OFFLINE.`);
+      redisService.clearCache('/api/volunteers').catch(() => {});
     }
   } catch (err) {
     console.error('[HEARTBEAT] Sweep error:', err.message);
   }
-}, 5 * 60 * 1000); // Every 5 minutes
+}, 30 * 60 * 1000); // 30 minutes
 
 module.exports = router;

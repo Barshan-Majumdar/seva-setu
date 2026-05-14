@@ -250,8 +250,24 @@ export const useVolunteerApp = () => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
+    
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    };
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    }, 20000); // 20s while active
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [loadData]);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../config/db');
 const auth = require('../middleware/auth');
+const cache = require('../middleware/cache');
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ const router = express.Router();
  * @desc    Get all whitelisted coordinator emails
  * @access  Private (Coordinator)
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, cache(60), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -30,7 +31,7 @@ router.get('/', auth, async (req, res) => {
  * @desc    Get system-wide stats (total users, etc)
  * @access  Private (Coordinator)
  */
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, cache(30), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }

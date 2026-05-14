@@ -11,7 +11,7 @@ const startReBroadcastJob = () => {
   setInterval(async () => {
     try {
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      
+
       // Find all needs that are:
       // 1. Still 'open'
       // 2. Created within the last 30 minutes
@@ -39,7 +39,7 @@ const startReBroadcastJob = () => {
     } catch (err) {
       console.error(`[CRON] Re-broadcast sweep failed:`, err);
     }
-  }, 5 * 60 * 1000); // 5 minutes
+  }, 30 * 60 * 1000); // 30 minutes
 };
 
 module.exports = { startReBroadcastJob };

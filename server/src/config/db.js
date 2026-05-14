@@ -4,19 +4,14 @@
  */
 const { PrismaClient } = require('@prisma/client');
 
+/**
+ * We DO NOT call prisma.$connect() here.
+ * Prisma will lazily connect upon the first query execution.
+ * This allows the Node.js process to start without waking the database,
+ * enabling Neon Autosuspend to work more effectively.
+ */
 const prisma = new PrismaClient({
   log: ['info', 'warn', 'error'],
 });
-
-// Immediate connection check on startup
-console.log('--- Initializing Database Connection ---');
-prisma.$connect()
-  .then(() => {
-    console.log('✅ SUCCESS: Connected to Database');
-  })
-  .catch((err) => {
-    console.error('❌ FATAL: Database connection failed!');
-    console.error('Error Details:', err.message);
-  });
 
 module.exports = prisma;

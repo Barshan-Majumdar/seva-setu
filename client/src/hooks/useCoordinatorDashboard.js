@@ -73,8 +73,24 @@ export const useCoordinatorDashboard = () => {
 
   useEffect(() => {
     loadDashboard(true);
-    const interval = setInterval(() => loadDashboard(false), 5000);
-    return () => clearInterval(interval);
+    
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadDashboard(false);
+      }
+    };
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadDashboard(false);
+      }
+    }, 20000); // 20s while active, 0s while hidden
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [loadDashboard]);
 
   const districts = useMemo(() => {

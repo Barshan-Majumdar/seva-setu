@@ -10,6 +10,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const imagekit = require('../config/imagekit');
 const { aiVerificationQueue } = require('../config/queue');
+const cache = require('../middleware/cache');
 
 const router = express.Router();
 
@@ -98,6 +99,12 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
     // Cleanup local file immediately
     try { fs.unlinkSync(req.file.path); } catch (e) {}
 
+const redisService = require('../services/redisService');
+
+    // --- SMART INVALIDATION ---
+    redisService.clearCache('/api/needs').catch(() => {});
+    // ──────────────────────────
+
     // Return 202 Accepted - Frontend will poll for status
     res.status(202).json({
       message: 'Incident reported and queued for AI verification.',
@@ -143,7 +150,7 @@ router.get('/:id/status', auth, async (req, res) => {
  * @desc    Get all needs with filters
  * @access  Private
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, cache(30), async (req, res) => {
   const { status, district, need_type, min_urgency } = req.query;
 
   try {
@@ -270,6 +277,11 @@ router.patch('/:id/status', auth, async (req, res) => {
         console.error('[BROADCAST] Manual trigger failed:', err.message);
       });
     }
+
+    // --- SMART INVALIDATION ---
+    const redisService = require('../services/redisService');
+    redisService.clearCache('/api/needs').catch(() => {});
+    // ──────────────────────────
 
     res.json({ message: 'Status updated' });
   } catch (err) {

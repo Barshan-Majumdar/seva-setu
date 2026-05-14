@@ -8,7 +8,6 @@ redis.on('error', (err) => {
 
 /**
  * Get bot session from Redis
- * @param {string} phoneNumber 
  */
 const getBotSession = async (phoneNumber) => {
   const data = await redis.get(`bot_session:${phoneNumber}`);
@@ -17,11 +16,8 @@ const getBotSession = async (phoneNumber) => {
 
 /**
  * Save bot session to Redis with 1-hour expiration
- * @param {string} phoneNumber 
- * @param {object} sessionData 
  */
 const saveBotSession = async (phoneNumber, sessionData) => {
-  // We set an expiry of 1 hour for bot sessions to keep Redis clean
   await redis.set(
     `bot_session:${phoneNumber}`, 
     JSON.stringify(sessionData), 
@@ -30,16 +26,35 @@ const saveBotSession = async (phoneNumber, sessionData) => {
   );
 };
 
-/**
- * Delete bot session
- * @param {string} phoneNumber 
- */
 const deleteBotSession = async (phoneNumber) => {
   await redis.del(`bot_session:${phoneNumber}`);
+};
+
+/**
+ * Global Cache Methods
+ */
+const getCache = async (key) => {
+  const data = await redis.get(`cache:${key}`);
+  return data ? JSON.parse(data) : null;
+};
+
+const setCache = async (key, value, ttlSeconds = 30) => {
+  await redis.set(`cache:${key}`, JSON.stringify(value), 'EX', ttlSeconds);
+};
+
+const clearCache = async (pattern) => {
+  const keys = await redis.keys(`cache:${pattern}*`);
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
 };
 
 module.exports = {
   getBotSession,
   saveBotSession,
-  deleteBotSession
+  deleteBotSession,
+  getCache,
+  setCache,
+  clearCache,
+  redis // Export raw client for special cases
 };

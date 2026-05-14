@@ -5,6 +5,9 @@ const { createClient } = require('redis');
 // Redis client setup
 const redisClient = createClient({
   url: process.env.REDIS_URL,
+  socket: {
+    connectTimeout: 10000, // Increase to 10s to prevent handshake timeouts
+  }
 });
 
 let isRedisConnected = false;
