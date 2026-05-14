@@ -167,14 +167,18 @@ export const useVolunteerApp = () => {
       // Poll for status until it's no longer 'verifying' or 'assigned/in_progress'
       const finalTask = await pollStatus(
         `/tasks/${task.task_id}/status`,
-        (data) => data.status === 'completed' || data.status === 'failed'
+        (data) => data.status === 'completed' || (data.verificationResult && data.verificationResult.verified === false)
       );
 
-      if (finalTask.status === 'failed') {
+      if (finalTask.status !== 'completed') {
         throw {
           response: {
             data: {
-              errors: finalTask.verificationResult?.errors || ['Verification failed.']
+              errors: finalTask.verificationResult?.errors || ['Verification failed.'],
+              statusSummary: {
+                geoTag: finalTask.verificationResult?.geoTag === 'PASSED' ? 'GPS VERIFIED' : 'FAILED',
+                aiContent: finalTask.verificationResult?.aiContent || 'FAILED'
+              }
             }
           }
         };

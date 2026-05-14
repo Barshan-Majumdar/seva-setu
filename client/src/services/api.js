@@ -50,7 +50,7 @@ api.interceptors.response.use(
   }
 );
 
-export const pollStatus = async (endpoint, condition, interval = 2000, maxAttempts = 30) => {
+export const pollStatus = async (endpoint, condition, interval = 1500, maxAttempts = 40) => {
   let attempts = 0;
   while (attempts < maxAttempts) {
     const { data } = await api.get(endpoint);

@@ -122,6 +122,8 @@ export const useFieldForm = () => {
     }
   }, []);
 
+  const [verificationResult, setVerificationResult] = useState(null);
+
   const resetForm = useCallback(() => {
     setFormData({
       title: '',
@@ -138,6 +140,7 @@ export const useFieldForm = () => {
     setSuccess(false);
     setError('');
     setSuccessMessage('');
+    setVerificationResult(null);
   }, []);
 
   const getLocation = useCallback(() => {
@@ -208,6 +211,7 @@ export const useFieldForm = () => {
       setLoading(true);
       setError('');
       setSuccessMessage('');
+      setVerificationResult(null);
 
       const form = new FormData();
       Object.keys(formData).forEach(key => {
@@ -243,10 +247,15 @@ export const useFieldForm = () => {
         );
 
         if (finalNeed.status === 'rejected') {
+          const res = finalNeed.verificationResult;
+          setVerificationResult({
+            geoTag: res?.geoTag === 'PASSED' ? 'GPS VERIFIED' : 'FAILED',
+            aiContent: res?.aiContent || 'FAILED'
+          });
           throw { 
             response: { 
               data: { 
-                errors: finalNeed.verificationResult?.errors || ['Verification failed.'] 
+                errors: res?.errors || ['Verification failed.'] 
               } 
             } 
           };
@@ -288,6 +297,7 @@ export const useFieldForm = () => {
     success,
     successMessage,
     error,
+    verificationResult,
     isOnline,
     queuedCount,
     syncingQueue,

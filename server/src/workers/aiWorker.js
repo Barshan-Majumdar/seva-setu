@@ -105,11 +105,12 @@ const aiWorker = new Worker('ai-verification', async (job) => {
           imageUrl: imageUrl,
           isVerified: finalVerified,
           urgencyScore: newScore,
-          verificationResult: {
-            verified: finalVerified,
-            errors,
-            geoTag: geoTagPassed ? 'PASSED' : 'FAILED'
-          }
+            verificationResult: {
+              verified: finalVerified,
+              errors,
+              geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+              aiContent: isVerified ? 'PASSED' : 'FAILED'
+            }
         }
       });
 
@@ -124,14 +125,15 @@ const aiWorker = new Worker('ai-verification', async (job) => {
         const task = await tx.task.update({
           where: { id },
           data: {
-            status: finalVerified ? 'completed' : 'failed',
+            status: finalVerified ? 'completed' : 'in_progress',
             completionImageUrl: imageUrl,
             completedAt: finalVerified ? new Date() : null,
             isCompletionVerified: finalVerified,
             verificationResult: {
               verified: finalVerified,
               errors,
-              geoTag: geoTagPassed ? 'PASSED' : 'FAILED'
+              geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+              aiContent: isVerified ? 'PASSED' : 'FAILED'
             }
           }
         });

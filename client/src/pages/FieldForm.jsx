@@ -18,7 +18,7 @@ const FieldForm = () => {
   const galleryInputRef = useRef(null);
   const {
     formData, loading, locLoading, success, successMessage,
-    error, isOnline, queuedCount, syncingQueue, urgencyPreview,
+    error, verificationResult, isOnline, queuedCount, syncingQueue, urgencyPreview,
     updateField, resetForm, getLocation, setManualLocation, submitForm,
   } = useFieldForm();
 
@@ -135,7 +135,32 @@ const FieldForm = () => {
                   </div>
                   <div>
                     <p style={{ fontSize: '0.7rem', fontWeight: 800, color: '#c35d51', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Verification Rejected</p>
-                    <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>{errorLines.length} issue(s) detected</p>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: 6, flexWrap: 'wrap' }}>
+                      {verificationResult?.geoTag && (
+                        <span style={{
+                          padding: '3px 8px', borderRadius: '4px', fontSize: '9px',
+                          fontWeight: 'bold', fontFamily: 'monospace', textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          background: verificationResult.geoTag === 'GPS VERIFIED' ? 'rgba(5,150,105,0.1)' : 'rgba(195,93,81,0.1)',
+                          color: verificationResult.geoTag === 'GPS VERIFIED' ? '#059669' : '#c35d51',
+                          border: `1px solid ${verificationResult.geoTag === 'GPS VERIFIED' ? 'rgba(5,150,105,0.2)' : 'rgba(195,93,81,0.2)'}`,
+                        }}>
+                          GEO: {verificationResult.geoTag}
+                        </span>
+                      )}
+                      {verificationResult?.aiContent && (
+                        <span style={{
+                          padding: '3px 8px', borderRadius: '4px', fontSize: '9px',
+                          fontWeight: 'bold', fontFamily: 'monospace', textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          background: verificationResult.aiContent === 'PASSED' ? 'rgba(5,150,105,0.1)' : 'rgba(195,93,81,0.1)',
+                          color: verificationResult.aiContent === 'PASSED' ? '#059669' : '#c35d51',
+                          border: `1px solid ${verificationResult.aiContent === 'PASSED' ? 'rgba(5,150,105,0.2)' : 'rgba(195,93,81,0.2)'}`,
+                        }}>
+                          AI: {verificationResult.aiContent}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
