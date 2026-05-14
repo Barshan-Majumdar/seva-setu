@@ -47,7 +47,8 @@ const rateLimiter = rateLimit({
 
   // Skip logic: VIP Bypass for cron jobs
   skip: (req, res) => {
-    const cronHeader = req.headers['sevasetu-cron'];
+    const headerName = (process.env.CRON_HEADER).toLowerCase();
+    const cronHeader = req.headers[headerName];
     if (cronHeader && cronHeader === process.env.CRON_SECRET) {
       console.log(`[RateLimiter] Skipping rate limit for internal cron job.`);
       return true;
