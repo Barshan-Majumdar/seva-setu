@@ -194,6 +194,6 @@ setInterval(async () => {
   } catch (err) {
     console.error('[HEARTBEAT] Sweep error:', err.message);
   }
-}, 15 * 60 * 1000); // Every 15 minutes
+}, 5 * 60 * 1000); // Every 5 minutes
 
 module.exports = router;
