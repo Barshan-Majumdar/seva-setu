@@ -97,12 +97,7 @@ export const useVolunteerApp = () => {
         async (pos) => {
           let { latitude, longitude, heading, accuracy } = pos.coords;
 
-          // Development Override: If accuracy is massive (IP location on PC), snap to Habra test zone.
-          if (import.meta.env.DEV && accuracy > 50000) {
-            latitude = 22.922; // Habra mock
-            longitude = 88.545; // Habra mock
-            accuracy = 10;
-          }
+
 
           const newCoords = { lat: latitude, lng: longitude, heading, accuracy };
 
@@ -276,14 +271,7 @@ export const useVolunteerApp = () => {
       async (pos) => {
         let { latitude, longitude, heading, accuracy } = pos.coords;
 
-        // Development Override: If accuracy is massive (IP location on PC),
-        // we'll "snap" the volunteer to the Habra testing zone (0.5km from task)
-        // so the UI distance calculation works nicely for demonstrations.
-        if (import.meta.env.DEV && accuracy > 50000) {
-          latitude = 22.922; // Habra mock
-          longitude = 88.545; // Habra mock
-          accuracy = 10; // Mock high accuracy
-        }
+
 
         const newCoords = { lat: latitude, lng: longitude, heading, accuracy };
 

@@ -111,47 +111,72 @@ Rigorous vetting system for volunteers requiring manual coordinator review and i
 
 ## 🏗️ System Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         CLIENT (React 19 + Vite)                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
-│  │ Landing  │  │  Field   │  │Volunteer │  │Dashboard │              │
-│  │  Page    │  │ Terminal │  │ Mission  │  │ War Room │              │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘              │
-│       │              │              │              │                 │
-│       └──────────────┴──────────────┴──────────────┘                 │
-│                              │                                       │
-│              ┌───────────────┤  Clerk Auth + Axios                   │
-│              │  IndexedDB    │  (Offline Queue)                      │
-└──────────────┴───────────────┴───────────────────────────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   BACKEND (Express)  │
-                    │   ┌──────────────┐   │
-                    │   │  Auth (Clerk │   │
-                    │   │  + JWT + LRU)│   │
-                    │   ├──────────────┤   │
-                    │   │  Routes:     │   │
-                    │   │  needs/tasks │   │
-                    │   │  volunteers  │   │
-                    │   │  chat/whatsapp│  │
-                    │   ├──────────────┤   │
-                    │   │  Services:   │   │
-                    │   │  Matching    │   │
-                    │   │  Scoring     │   │
-                    │   │  Broadcast   │   │
-                    │   ├──────────────┤   │
-                    │   │  BullMQ      │   │
-                    │   │  Workers     │   │
-                    │   └──────┬───────┘   │
-                    └──────────┼───────────┘
-                       ┌───────┼────────┐
-                       ▼       ▼        ▼
-              ┌─────────┐ ┌────────┐ ┌──────────────┐
-              │PostgreSQL│ │ Redis  │ │  AI Service │
-              │ + PostGIS│ │(Queue +│ │  (FastAPI)  │
-              │  (Neon)  │ │ Cache) │ │  CLIP ViT-L │
-              └─────────┘ └────────┘ └──────────────┘
+```mermaid
+flowchart TD
+    %% Isometric / 3D Styling using Shadows and Depth
+    classDef client fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc,rx:10px,ry:10px,shadow:true;
+    classDef backend fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc,rx:10px,ry:10px,shadow:true;
+    classDef db fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,shadow:true;
+    classDef ai fill:#0f172a,stroke:#a78bfa,stroke-width:2px,color:#f8fafc,rx:10px,ry:10px,shadow:true;
+    classDef thirdparty fill:#1e293b,stroke:#64748b,stroke-width:2px,stroke-dasharray: 5 5,color:#cbd5e1,rx:10px,ry:10px;
+
+    subgraph Client ["🖥️ Presentation Layer (React + PWA)"]
+        direction LR
+        L[Landing]:::client
+        F[Field App]:::client
+        V[Volunteer App]:::client
+        C[Command Center]:::client
+        
+        IDB[(Offline IndexedDB)]:::db
+        F -.->|Sync Queue| IDB
+        V -.->|Sync Queue| IDB
+    end
+
+    subgraph API ["⚙️ Application Layer (Node.js + Express)"]
+        direction TB
+        Auth[[🛡️ Clerk Auth Middleware]]:::backend
+        Routes[[🔗 Core API Routes]]:::backend
+        Services[[🛠️ Matching & Dispatch]]:::backend
+        Workers[[🔄 BullMQ Job Workers]]:::backend
+
+        Auth --> Routes
+        Routes --> Services
+        Services --> Workers
+    end
+
+    subgraph Data ["🗄️ Persistence Layer (3D Data Stores)"]
+        direction LR
+        PG[(🐘 PostgreSQL + PostGIS)]:::db
+        Redis[(⚡ Redis Cache & Queue)]:::db
+    end
+
+    subgraph AI ["🧠 Intelligence Layer (Python)"]
+        direction TB
+        FastAPI[[🚀 FastAPI Service]]:::ai
+        Model((🤖 CLIP ViT-L Model)):::ai
+        FastAPI --> Model
+    end
+
+    subgraph External ["🌐 External Providers"]
+        direction LR
+        WhatsApp>WhatsApp Bot]:::thirdparty
+        Gemini>Google Gemini]:::thirdparty
+        ImgKit>ImageKit CDN]:::thirdparty
+    end
+
+    %% Flow Connections
+    L & F & V & C ====>|REST / JWT| Auth
+    F -.->|WhatsApp Chat| WhatsApp
+    WhatsApp -.->|Webhook| Routes
+
+    Routes -.->|Store Images| ImgKit
+    Routes -.->|LLM Chat| Gemini
+    
+    Services ====>|Geospatial Queries| PG
+    Services ====>|Queue Jobs| Redis
+    Workers <====|Consume Jobs| Redis
+    
+    Workers ====>|Verify Photos| FastAPI
 ```
 
 <!-- ═══════════════════ WAVE DIVIDER ═══════════════════ -->
