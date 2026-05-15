@@ -221,25 +221,40 @@ router.get('/my', auth, cache(30), async (req, res) => {
   try {
     const tasks = await prisma.$queryRaw`
       SELECT
-        t.id as task_id,
-        t.status as task_status,
+        t.id                        AS task_id,
+        t.status                    AS task_status,
         t.assigned_at,
         t.completed_at,
+        t.check_in_lat,
+        t.check_in_lng,
+        t.is_completion_verified,
+        n.id                        AS need_id,
         n.title,
         n.need_type,
         n.urgency_score,
         n.ward,
         n.district,
-        ST_X(n.location::geometry) as lng,
-        ST_Y(n.location::geometry) as lat
+        n.contact_number,
+        ST_X(n.location::geometry)  AS lng,
+        ST_Y(n.location::geometry)  AS lat,
+        ST_X(v.location::geometry)  AS volunteer_lng,
+        ST_Y(v.location::geometry)  AS volunteer_lat,
+        CASE
+          WHEN v.location IS NOT NULL AND n.location IS NOT NULL
+          THEN ROUND(CAST(
+            ST_Distance(v.location::geography, n.location::geography) / 1000
+          AS numeric), 2)
+          ELSE NULL
+        END                         AS server_distance_km
       FROM tasks t
-      JOIN needs n ON t.need_id = n.id
+      JOIN needs n    ON t.need_id = n.id
+      JOIN volunteers v ON t.assigned_volunteer_id = v.user_id
       WHERE t.assigned_volunteer_id = ${req.user.id}::uuid
       ORDER BY t.assigned_at DESC
     `;
     res.json(tasks);
   } catch (err) {
-    console.error(err);
+    console.error('[tasks/my] Query error:', err.message);
     res.status(500).json({ message: 'Server error' });
   }
 });

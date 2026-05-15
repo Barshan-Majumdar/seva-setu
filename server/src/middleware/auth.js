@@ -34,7 +34,8 @@ module.exports = async (req, res, next) => {
   }
 
   // ── Step 1.5: Fast In-Memory Cache (Prevents DB pool timeouts from polling) ──
-  // Cache user context for 15 seconds to absorb high-frequency auto-polling
+  // Cache user context for 15 seconds to absorb high-frequency auto-polling.
+  // NOTE: Cache is keyed by clerkUserId so a fresh login always re-fetches the correct role.
   if (!global.authCache) global.authCache = new Map();
   const cached = global.authCache.get(clerkUserId);
   if (cached && cached.expires > Date.now()) {

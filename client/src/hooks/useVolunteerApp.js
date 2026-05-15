@@ -69,16 +69,14 @@ export const useVolunteerApp = () => {
       setBroadcasts(Array.isArray(broadcastsData) ? broadcastsData : []);
       
       // LOGIC: Only use server coords if GPS hasn't locked AND we have absolutely no state yet
+      // GUARD: volunteer_lat/lng may not exist in this query — validate they are real finite numbers
       if (!gpsLocked.current && !initialLoadDone.current && tasksData?.[0]) {
-        const task = tasksData[0];
-        if (task.volunteer_lat !== null && task.volunteer_lng !== null) {
+        const firstTask = tasksData[0];
+        const sLat = Number(firstTask.volunteer_lat);
+        const sLng = Number(firstTask.volunteer_lng);
+        if (isFinite(sLat) && isFinite(sLng)) {
           console.log('[GPS] Using server coordinates for initial placement');
-          setVolunteerCoords({
-            lat: Number(task.volunteer_lat),
-            lng: Number(task.volunteer_lng),
-            heading: null,
-            accuracy: 0,
-          });
+          setVolunteerCoords({ lat: sLat, lng: sLng, heading: null, accuracy: 0 });
         }
       }
       
@@ -97,13 +95,13 @@ export const useVolunteerApp = () => {
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          const { latitude, longitude, heading, accuracy } = pos.coords;
-          console.log(`[GPS-LOG] Raw coords: lat=${latitude}, lng=${longitude}, accuracy=${accuracy}m`);
+          let { latitude, longitude, heading, accuracy } = pos.coords;
 
-          // Filter out low-accuracy coordinates (prevents flickering from IP/cell tower jumps)
-          if (accuracy > 100) {
-            console.warn(`[GPS] Accuracy extremely low: ${accuracy}m. Waiting for better signal...`);
-            return resolve(null);
+          // Development Override: If accuracy is massive (IP location on PC), snap to Habra test zone.
+          if (import.meta.env.DEV && accuracy > 50000) {
+            latitude = 22.922; // Habra mock
+            longitude = 88.545; // Habra mock
+            accuracy = 10;
           }
 
           const newCoords = { lat: latitude, lng: longitude, heading, accuracy };
@@ -276,11 +274,16 @@ export const useVolunteerApp = () => {
     // Use watchPosition instead of polling to prevent flickering and use OS-level GPS stabilization
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
-        const { latitude, longitude, heading, accuracy } = pos.coords;
-        console.log(`[GPS-WATCH] Raw coords: lat=${latitude}, lng=${longitude}, accuracy=${accuracy}m`);
+        let { latitude, longitude, heading, accuracy } = pos.coords;
 
-        // Strict filter: Ignore coordinates with low accuracy to prevent map flickering
-        if (accuracy > 100) return;
+        // Development Override: If accuracy is massive (IP location on PC),
+        // we'll "snap" the volunteer to the Habra testing zone (0.5km from task)
+        // so the UI distance calculation works nicely for demonstrations.
+        if (import.meta.env.DEV && accuracy > 50000) {
+          latitude = 22.922; // Habra mock
+          longitude = 88.545; // Habra mock
+          accuracy = 10; // Mock high accuracy
+        }
 
         const newCoords = { lat: latitude, lng: longitude, heading, accuracy };
 

@@ -235,18 +235,34 @@ const VolunteerPage = () => {
                     <span className="task-meta-tag">{task.ward || 'Zone'}, {task.district || 'City'}</span>
                     <span className="task-meta-tag">Urgency: {Number(task.urgency_score || 0).toFixed(2)}</span>
                     
-                    {/* LOGIC: Prioritize real-time calculation if we have a GPS lock */}
-                    {volunteerCoords && task.lat != null && task.lng != null ? (
-                      <span className="task-meta-tag-distance">
-                        <Navigation className="w-3 h-3" />
-                        {haversineKm(volunteerCoords, { lat: Number(task.lat), lng: Number(task.lng) }).toFixed(2)} km away
-                      </span>
-                    ) : task.server_distance_km != null ? (
-                      <span className="task-meta-tag-distance">
-                        <Navigation className="w-3 h-3" />
-                        {Number(task.server_distance_km).toFixed(2)} km away
-                      </span>
-                    ) : null}
+                    {/* DISTANCE BADGE: only show if we have real numeric coords */}
+                    {(() => {
+                      const tLat = Number(task.lat);
+                      const tLng = Number(task.lng);
+                      const vLat = Number(volunteerCoords?.lat);
+                      const vLng = Number(volunteerCoords?.lng);
+                      const hasVolCoords = isFinite(vLat) && isFinite(vLng);
+                      const hasTaskCoords = isFinite(tLat) && isFinite(tLng);
+
+                      if (hasVolCoords && hasTaskCoords) {
+                        const dist = haversineKm({ lat: vLat, lng: vLng }, { lat: tLat, lng: tLng });
+                        return (
+                          <span className="task-meta-tag-distance">
+                            <Navigation className="w-3 h-3" />
+                            {dist.toFixed(2)} km away
+                          </span>
+                        );
+                      }
+                      if (task.server_distance_km != null && isFinite(Number(task.server_distance_km))) {
+                        return (
+                          <span className="task-meta-tag-distance">
+                            <Navigation className="w-3 h-3" />
+                            {Number(task.server_distance_km).toFixed(2)} km away
+                          </span>
+                        );
+                      }
+                      return null; // No GPS yet — show nothing rather than NaN
+                    })()}
                   </div>
                 )}
 
@@ -269,18 +285,18 @@ const VolunteerPage = () => {
                     ) : (
                       <div className="hidden">No contact info available</div>
                     )}
-                    {volunteerCoords && task.lat != null && task.lng != null && !isNaN(Number(task.lat)) ? (
-                      <VolunteerTaskMap 
-                        volunteerCoords={volunteerCoords} 
-                        taskCoords={{ lat: Number(task.lat), lng: Number(task.lng) }} 
-                      />
-                    ) : (
-                      <div className="volunteer-map-loading">
-                        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#2d6148' }} />
-                        <p style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>Initializing Route Navigation...</p>
-                        <p style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Waiting for GPS Coordinates</p>
-                      </div>
-                    )}
+                    {task.lat != null && task.lng != null && !isNaN(Number(task.lat)) && !isNaN(Number(task.lng)) ? (
+                        <VolunteerTaskMap
+                          volunteerCoords={volunteerCoords}
+                          taskCoords={{ lat: Number(task.lat), lng: Number(task.lng) }}
+                        />
+                      ) : (
+                        <div className="volunteer-map-loading">
+                          <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#2d6148' }} />
+                          <p style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>Location Data Unavailable</p>
+                          <p style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Coordinates missing from mission record</p>
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -385,17 +401,19 @@ const VolunteerPage = () => {
                                 padding: '4px 10px', borderRadius: '6px', fontSize: '10px',
                                 fontWeight: 'bold', fontFamily: 'monospace', textTransform: 'uppercase',
                                 letterSpacing: '0.08em',
-                                background: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' ? 'rgba(5,150,105,0.1)'
-                                  : verificationErrors[task.task_id].summary.geoTag === 'PROXIMITY OK' ? 'rgba(217,119,6,0.1)'
+                                background: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' 
+                                  ? (selectedFiles[task.task_id]?.hasGps ? 'rgba(5,150,105,0.1)' : 'rgba(217,119,6,0.1)')
                                   : 'rgba(195,93,81,0.1)',
-                                color: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' ? '#059669'
-                                  : verificationErrors[task.task_id].summary.geoTag === 'PROXIMITY OK' ? '#d97706'
+                                color: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' 
+                                  ? (selectedFiles[task.task_id]?.hasGps ? '#059669' : '#d97706')
                                   : '#c35d51',
-                                border: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' ? '1px solid rgba(5,150,105,0.25)'
-                                  : verificationErrors[task.task_id].summary.geoTag === 'PROXIMITY OK' ? '1px solid rgba(217,119,6,0.25)'
+                                border: verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' 
+                                  ? (selectedFiles[task.task_id]?.hasGps ? '1px solid rgba(5,150,105,0.25)' : '1px solid rgba(217,119,6,0.25)')
                                   : '1px solid rgba(195,93,81,0.25)',
                               }}>
-                                GEO-TAG: {verificationErrors[task.task_id].summary.geoTag}
+                                GEO-TAG: {verificationErrors[task.task_id].summary.geoTag === 'GPS VERIFIED' 
+                                  ? (selectedFiles[task.task_id]?.hasGps ? 'GPS VERIFIED' : 'NO PHOTO GPS (DEVICE PROXIMITY OK)') 
+                                  : 'FAILED'}
                               </span>
                               <span style={{
                                 padding: '4px 10px', borderRadius: '6px', fontSize: '10px',
@@ -412,7 +430,9 @@ const VolunteerPage = () => {
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {(verificationErrors[task.task_id].errors || []).map((err, i) => (
-                              <div key={i} className="volunteer-verify-error-item">{err}</div>
+                              <div key={i} className="volunteer-verify-error-item">
+                                {err.replace(/\s*\(?Confidence:\s*\d+(\.\d+)?%?\)?/i, '').trim()}
+                              </div>
                             ))}
                           </div>
                           <p className="volunteer-verify-hint">

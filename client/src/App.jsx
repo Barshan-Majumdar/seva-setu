@@ -1,14 +1,15 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
 import ProtectedRoute from './components/ProtectedRoute';
-
+import AuthTokenBridge from './components/AuthTokenBridge';
+import RoleSync from './components/RoleSync';
 import ChatWidget from './components/ChatWidget';
 import { useAuth } from './hooks/useAuth';
 
-// Lazy load all pages for performance and consistent bundle chunking
+// Lazy load all pages
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -21,25 +22,40 @@ const MyReportsPage = lazy(() => import('./pages/MyReportsPage'));
 const UserDashboardPage = lazy(() => import('./pages/UserDashboardPage'));
 const VolunteerApprovalsPage = lazy(() => import('./pages/VolunteerApprovalsPage'));
 
-const PageLoader = () => (
+const PageLoader = ({ text = 'Synchronizing' }) => (
   <div className="page-loader">
     <div className="page-loader-inner">
       <Logo size={64} className="pulse" />
       <div className="page-loader-status">
         <Loader2 className="icon-spin" style={{ width: 16, height: 16 }} />
-        <span className="page-loader-text">Synchronizing</span>
+        <span className="page-loader-text">{text}</span>
       </div>
     </div>
   </div>
 );
 
-function App() {
+/**
+ * MainContent — rendered INSIDE Router so all hooks have full context.
+ * This is the fix for "dispatcher is null" in React 19 + Clerk + react-router.
+ * Hooks (useAuth, useNavigate, etc.) must be called after providers are mounted.
+ */
+function MainContent() {
   const { isAuthenticated } = useAuth();
+  const [isReady, setIsReady] = useState(false);
+
+  const handleSyncReady = useCallback(() => {
+    setIsReady(true);
+  }, []);
 
   return (
-    <ErrorBoundary>
-      <Router>
-        <Suspense fallback={<PageLoader />}>
+    <>
+      <AuthTokenBridge />
+      <RoleSync onReady={handleSyncReady} />
+
+      {!isReady ? (
+        <PageLoader text="Verifying Identity" />
+      ) : (
+        <Suspense fallback={<PageLoader text="Loading Workspace" />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login/*" element={<LoginPage />} />
@@ -47,7 +63,6 @@ function App() {
             <Route path="/sign-in/*" element={<Navigate to="/login" replace />} />
             <Route path="/sign-up/*" element={<Navigate to="/register" replace />} />
 
-            {/* Post-login redirect — fetches DB role & routes to correct workspace */}
             <Route
               path="/post-login"
               element={
@@ -57,7 +72,6 @@ function App() {
               }
             />
 
-            {/* User dashboard (default for new users) */}
             <Route
               path="/user-dashboard"
               element={
@@ -67,7 +81,6 @@ function App() {
               }
             />
 
-            {/* Coordinator-only dashboard */}
             <Route
               path="/dashboard"
               element={
@@ -86,7 +99,6 @@ function App() {
               }
             />
 
-            {/* Coordinator: Volunteer Approvals */}
             <Route
               path="/volunteer-approvals"
               element={
@@ -96,7 +108,6 @@ function App() {
               }
             />
 
-            {/* Volunteer workspace */}
             <Route
               path="/volunteer"
               element={
@@ -128,6 +139,20 @@ function App() {
           </Routes>
           {isAuthenticated && <ChatWidget />}
         </Suspense>
+      )}
+    </>
+  );
+}
+
+/**
+ * App — minimal shell. Only providers and ErrorBoundary here.
+ * NO hooks called at this level.
+ */
+function App() {
+  return (
+    <ErrorBoundary>
+      <Router>
+        <MainContent />
       </Router>
     </ErrorBoundary>
   );

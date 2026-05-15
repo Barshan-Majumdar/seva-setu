@@ -12,7 +12,9 @@ const clerkClient = createClerkClient({
 
 const verifyClerkJwt = async (token) => {
   if (!secretKey) throw new Error('Missing CLERK_SECRET_KEY');
-  return verifyToken(token, { secretKey });
+  // clockSkewInMs: tolerate up to 30s of NTP drift between Clerk servers and our backend.
+  // The JWT "iat in the future" error happens when clocks are slightly out of sync — this is normal.
+  return verifyToken(token, { secretKey, clockSkewInMs: 30000 });
 };
 
 const getClerkUser = async (clerkUserId) => {
