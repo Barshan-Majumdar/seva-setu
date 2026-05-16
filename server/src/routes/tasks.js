@@ -302,6 +302,7 @@ router.get('/my-broadcasts', auth, cache(15), async (req, res) => {
         br.need_id,
         br.status AS broadcast_status,
         br.distance_km,
+        br.expires_at,
         n.title,
         n.need_type,
         n.urgency_score,
