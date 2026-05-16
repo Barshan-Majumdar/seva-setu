@@ -169,6 +169,12 @@ const triggerBroadcast = async (needId, radiusKm = 6) => {
   const successCount = created.filter(r => r.status === 'fulfilled' && r.value !== null).length;
   console.log(`[BROADCAST] 📡 Notified ${successCount} volunteers for need ${needId} (expires: ${expiresAt.toISOString()})`);
 
+  // Invalidate volunteer broadcast caches so next poll gets fresh data
+  try {
+    const redisService = require('./redisService');
+    await redisService.clearCache('/api/tasks/my-broadcasts');
+  } catch {}
+
   return { count: successCount, expiresAt };
 };
 
