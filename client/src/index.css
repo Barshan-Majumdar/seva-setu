@@ -749,22 +749,13 @@ button {
 
 .volunteer-broadcast-list {
   display: flex;
-  gap: 1.25rem;
-  overflow-x: auto;
-  padding: 0.5rem 0.5rem 1.5rem;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  scroll-snap-type: x mandatory;
-}
-
-.volunteer-broadcast-list::-webkit-scrollbar {
-  display: none;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem;
 }
 
 .volunteer-broadcast-list > article {
-  flex: 0 0 88%;
-  scroll-snap-align: center;
-  margin-bottom: 0 !important;
+  width: 100%;
 }
 
 @media (min-width: 768px) {
