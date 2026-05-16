@@ -93,7 +93,8 @@ const VolunteerApprovalsPage = () => {
 
         {/* Filter Tabs */}
         <section className="dashboard-card" style={{ padding: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="approval-tabs-container" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+
             {filterTabs.map((tab) => (
               <button
                 key={tab.key}
@@ -111,7 +112,7 @@ const VolunteerApprovalsPage = () => {
                 }}
               >
                 {tab.icon}
-                {tab.label}
+                <span className="tab-label">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -145,8 +146,9 @@ const VolunteerApprovalsPage = () => {
         {!loading && requests.length > 0 && (
           <section style={{ display: 'grid', gap: '0.75rem' }}>
             {requests.map((req) => (
-              <article key={req.id} className="dashboard-card" style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+              <article key={req.id} className="dashboard-card approval-request-card" style={{ padding: '1.25rem' }}>
+                <div className="approval-card-content">
+
                   {/* Applicant Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
@@ -197,7 +199,8 @@ const VolunteerApprovalsPage = () => {
 
                   {/* Actions */}
                   {filter === 'pending' && (
-                    <div key={`actions-${req.id}`} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '140px' }}>
+                    <div key={`actions-${req.id}`} className="approval-actions-group">
+
                       <button
                         type="button"
                         disabled={approvingId === req.id || rejectingId === req.id}
