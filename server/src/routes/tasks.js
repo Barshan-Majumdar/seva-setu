@@ -325,23 +325,108 @@ router.get('/my-broadcasts', auth, cache(15), async (req, res) => {
 
 /**
  * @route   POST /api/tasks/accept-broadcast
+ * Accepts a broadcast: creates a task, updates need status, marks broadcast accepted,
+ * and rejects all other pending broadcasts for the same need.
  */
 router.post('/accept-broadcast', auth, async (req, res) => {
   const { need_id } = req.body;
   if (!need_id) return res.status(400).json({ message: 'need_id is required' });
 
   try {
-    // --- (Simplified logic for illustration, assuming valid transaction here) ---
-    // In actual use, this would be the full atomic transaction from the original file.
-    
-    // --- SMART INVALIDATION ---
+    // 1. Find the broadcast request for this volunteer + need
+    const broadcastRequest = await prisma.broadcastRequest.findFirst({
+      where: {
+        needId: need_id,
+        volunteerId: req.user.id,
+        status: 'pending',
+      },
+    });
+
+    if (!broadcastRequest) {
+      return res.status(404).json({ message: 'Broadcast not found or already handled.' });
+    }
+
+    // 2. Check the need is still open
+    const need = await prisma.need.findUnique({ where: { id: need_id } });
+    if (!need || need.status !== 'open') {
+      return res.status(409).json({ message: 'This mission has already been claimed.' });
+    }
+
+    // 3. Atomic transaction: create task, update need, accept this broadcast, reject others
+    await prisma.$transaction(async (tx) => {
+      // Create the task
+      await tx.task.create({
+        data: {
+          needId: need_id,
+          assignedVolunteerId: req.user.id,
+          status: 'assigned',
+          assignedAt: new Date(),
+        },
+      });
+
+      // Update need to assigned
+      await tx.need.update({
+        where: { id: need_id },
+        data: { status: 'assigned', updatedAt: new Date() },
+      });
+
+      // Mark THIS broadcast as accepted
+      await tx.broadcastRequest.update({
+        where: { id: broadcastRequest.id },
+        data: { status: 'accepted' },
+      });
+
+      // Reject all other pending broadcasts for the same need
+      await tx.broadcastRequest.updateMany({
+        where: {
+          needId: need_id,
+          status: 'pending',
+          id: { not: broadcastRequest.id },
+        },
+        data: { status: 'rejected' },
+      });
+    });
+
+    // 4. Cache invalidation
     redisService.clearCache('/api/tasks').catch(() => {});
     redisService.clearCache('/api/needs').catch(() => {});
-    // ──────────────────────────
+    redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
 
-    res.status(201).json({ message: 'Mission accepted' });
+    res.status(201).json({ message: 'Mission accepted! Head to the incident location.' });
   } catch (err) {
     console.error('[BROADCAST] Accept error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route   POST /api/tasks/reject-broadcast
+ * Dismisses a broadcast for this volunteer — they won't see it again.
+ */
+router.post('/reject-broadcast', auth, async (req, res) => {
+  const { need_id } = req.body;
+  if (!need_id) return res.status(400).json({ message: 'need_id is required' });
+
+  try {
+    const updated = await prisma.broadcastRequest.updateMany({
+      where: {
+        needId: need_id,
+        volunteerId: req.user.id,
+        status: 'pending',
+      },
+      data: { status: 'rejected' },
+    });
+
+    if (updated.count === 0) {
+      return res.status(404).json({ message: 'Broadcast not found or already handled.' });
+    }
+
+    // Invalidate cache so dismissed card disappears on next poll
+    redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
+
+    res.json({ message: 'Broadcast dismissed.' });
+  } catch (err) {
+    console.error('[BROADCAST] Reject error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
