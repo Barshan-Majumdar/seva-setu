@@ -32,27 +32,36 @@ const NeedsArchivePage = () => {
 
   return (
     <MainLayout>
-      <div className="container-lg py-8">
-        <header className="mb-8 flex items-center justify-between">
-          <div>
-            <Link to="/dashboard" className="flex items-center gap-2 text-sm text-text-muted hover:text-text-primary transition-colors mb-4">
-              <ChevronLeft size={16} />
+      <div className="container-lg pt-12 pb-8">
+        <header className="mb-10 flex flex-col md:flex-row md:items-start justify-between gap-6">
+          <div className="flex-1">
+            <Link to="/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-text-muted hover:text-text-primary transition-all mb-8 group">
+              <ChevronLeft size={16} className="transform group-hover:-translate-x-1 transition-transform" />
               Back to Dashboard
             </Link>
-            <h1 className="text-3xl font-extrabold text-text-primary tracking-tight">Full Issues Archive</h1>
-            <p className="text-text-secondary mt-2">Comprehensive list of all reported community needs and their statuses.</p>
-          </div>
-          
-          <div className="flex items-center gap-4">
-             <div className="dashboard-pill dashboard-pill-open">
-               {sortedNeeds.length} Total Issues
-             </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <h1 className="text-3xl sm:text-4xl font-black text-text-primary tracking-tight">Full Issues Archive</h1>
+              <div className="flex items-center">
+                 <div className="dashboard-pill dashboard-pill-open shadow-sm">
+                   {sortedNeeds.length} TOTAL MISSIONS
+                 </div>
+              </div>
+            </div>
+            <p className="text-text-secondary mt-3 max-width-prose">
+              Comprehensive list of all reported community needs and their real-time operational status.
+            </p>
           </div>
         </header>
 
         <section className="dashboard-layout">
           <aside className="dashboard-sidebar">
-            <DashboardFilters filters={filters} setFilters={setFilters} districts={districts} />
+            <DashboardFilters 
+              filters={filters} 
+              setFilters={setFilters} 
+              districts={districts} 
+              sorting={sorting}
+              setSort={setSort}
+            />
           </aside>
 
           <main className="dashboard-main-stack">
