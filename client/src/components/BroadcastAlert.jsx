@@ -84,8 +84,9 @@ const BroadcastAlert = ({ broadcast, onAccept, onReject, isBusy }) => {
           <button
             onClick={handleAccept}
             disabled={isBusy === broadcast.need_id}
-            className="flex-[2.5] bg-accent-moss hover:bg-accent-moss-dark text-white shadow-xl shadow-accent-moss/20 flex justify-center items-center gap-2 py-3 rounded-xl text-sm font-black transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50"
+            className="flex-[2.5] btn-success flex justify-center items-center gap-2 py-3 rounded-xl text-sm transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50"
           >
+
             {loadingAction === 'accept' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Accept Mission
           </button>
