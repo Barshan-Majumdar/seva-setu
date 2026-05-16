@@ -127,8 +127,8 @@ export const useVolunteerApp = () => {
     setAvailability(next);
     syncingAvailabilityRef.current = true;
     try {
-      await updateAvailability(next);
       showToast(next ? 'Availability ON' : 'Availability OFF');
+      await updateAvailability(next);
     } catch (err) {
       setAvailability(!next);
       showToast('Update failed.', 'error');
@@ -141,8 +141,8 @@ export const useVolunteerApp = () => {
     try {
       setBusyTaskId(task.task_id);
       const coords = await pushCurrentLocation();
+      showToast('Checking in...');
       await checkInTaskById(task.task_id, coords);
-      showToast('Checked in.');
       await loadData();
     } catch (err) {
       showToast('Check-in failed.', 'error');
@@ -154,8 +154,8 @@ export const useVolunteerApp = () => {
   const completeTask = useCallback(async (task, imageFile) => {
     try {
       setBusyTaskId(task.task_id);
+      showToast('Uploading & Analyzing submission...', 'info');
       const response = await completeTaskById(task.task_id, imageFile, volunteerCoords);
-      showToast('Verifying your submission...', 'info');
 
       // Poll for status until it's no longer 'verifying' or 'assigned/in_progress'
       const finalTask = await pollStatus(
@@ -208,8 +208,10 @@ export const useVolunteerApp = () => {
   const acceptBroadcastTask = useCallback(async (needId) => {
     try {
       setBroadcastBusy(needId);
+      showToast('Accepting mission...');
       const result = await acceptBroadcast(needId);
-      showToast(result.message || 'Mission accepted!', 'success');
+      // Update toast if there's a specific message from server
+      if (result.message) showToast(result.message, 'success');
       // Optimistically remove the accepted broadcast and reload
       setBroadcasts(prev => prev.filter(b => b.need_id !== needId));
       await loadData();
@@ -224,10 +226,10 @@ export const useVolunteerApp = () => {
   const rejectBroadcastTask = useCallback(async (needId) => {
     try {
       setBroadcastBusy(needId);
+      showToast('Dismissing...');
       await rejectBroadcast(needId);
       // Optimistically remove from UI
       setBroadcasts(prev => prev.filter(b => b.need_id !== needId));
-      showToast('Broadcast dismissed.', 'success');
     } catch (err) {
       showToast('Failed to dismiss broadcast.', 'error');
     } finally {
@@ -351,5 +353,6 @@ export const useVolunteerApp = () => {
     broadcastBusy,
     acceptBroadcastTask,
     rejectBroadcastTask,
+    setToast,
   };
 };

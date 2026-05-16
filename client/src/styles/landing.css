@@ -310,10 +310,12 @@
 }
 
 .mockup-stat {
-  padding: 1.25rem 2rem;
+  padding: 1.25rem 1rem;
   border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: 0.5rem;
 }
 
@@ -324,6 +326,7 @@
 .stat-value {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   font-size: 1.5rem;
   font-weight: 800;

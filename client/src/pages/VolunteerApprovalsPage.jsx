@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle, XCircle, Loader2, UserCheck, Clock, FileText, Phone, User, Inbox } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import api from '../services/api';
+import Toast from '../components/Toast';
+import { AnimatePresence } from 'framer-motion';
 
 const VolunteerApprovalsPage = () => {
   const [requests, setRequests] = useState([]);
@@ -267,11 +269,15 @@ const VolunteerApprovalsPage = () => {
         )}
 
         {/* Toast */}
-        {toast && (
-          <div className={`dashboard-toast ${toast.type === 'error' ? 'is-error' : ''}`}>
-            {toast.message}
-          </div>
-        )}
+        <AnimatePresence>
+          {toast && (
+            <Toast
+              message={toast.message}
+              type={toast.type}
+              onClose={() => setToast(null)}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </MainLayout>
   );

@@ -1,10 +1,17 @@
-const DashboardToast = ({ toast }) => {
-  if (!toast) return null;
+import Toast from '../Toast';
+import { AnimatePresence } from 'framer-motion';
 
+const DashboardToast = ({ toast, onClose }) => {
   return (
-    <div className={`dashboard-toast ${toast.type === 'error' ? 'is-error' : ''}`}>
-      {toast.message}
-    </div>
+    <AnimatePresence>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={onClose}
+        />
+      )}
+    </AnimatePresence>
   );
 };
 

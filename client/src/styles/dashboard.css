@@ -464,30 +464,7 @@
   100% { opacity: 0; transform: translate(-50%, -20px) scale(0.95); }
 }
 
-.dashboard-toast {
-  position: fixed;
-  top: 1.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 99999;
-  border: 2px solid #059669;
-  background: #047857; /* Deep green */
-  color: #ffffff;
-  border-radius: 0.75rem;
-  padding: 0.85rem 1.5rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  text-align: center;
-  min-width: 300px;
-  animation: toastSlideInOut 5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.dashboard-toast.is-error {
-  border-color: #991b1b;
-  background: #991b1b; /* Deep red */
-  color: #ffffff;
-}
+/* Toasts are now handled by the premium Toast.jsx component */
 
 /* ── Leaflet Popup ──────────────────────────────────────────── */
 

@@ -13,6 +13,7 @@ import {
   X,
   Navigation,
   Upload,
+  Phone,
 } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import { useVolunteerApp, haversineKm } from '../hooks/useVolunteerApp';
@@ -20,6 +21,8 @@ import { volunteerStatusClass, volunteerStatusLabel } from '../utils/volunteer';
 import CameraWatermark from '../components/CameraWatermark';
 import VolunteerTaskMap from '../components/VolunteerTaskMap';
 import BroadcastAlert from '../components/BroadcastAlert';
+import Toast from '../components/Toast';
+import { AnimatePresence } from 'framer-motion';
 
 const VolunteerPage = () => {
   const [activeCameraTask, setActiveCameraTask] = useState(null);
@@ -41,6 +44,7 @@ const VolunteerPage = () => {
     broadcastBusy,
     acceptBroadcastTask,
     rejectBroadcastTask,
+    setToast,
   } = useVolunteerApp();
 
   const [selectedFiles, setSelectedFiles] = useState({}); // { taskId: { file, preview } }
@@ -125,16 +129,22 @@ const VolunteerPage = () => {
         </section>
 
         {broadcasts.length > 0 && (
-          <section className="volunteer-broadcasts">
-            {broadcasts.map(broadcast => (
-              <BroadcastAlert
-                key={broadcast.broadcast_id}
-                broadcast={broadcast}
-                onAccept={acceptBroadcastTask}
-                onReject={rejectBroadcastTask}
-                isBusy={broadcastBusy}
-              />
-            ))}
+          <section className="volunteer-broadcast-container">
+            <div className="volunteer-broadcast-header">
+              <Sparkles className="w-4 h-4 text-accent-rose animate-pulse" />
+              <span>Emergency Missions Available ({broadcasts.length})</span>
+            </div>
+            <div className="volunteer-broadcast-list">
+              {broadcasts.map(broadcast => (
+                <BroadcastAlert
+                  key={broadcast.broadcast_id}
+                  broadcast={broadcast}
+                  onAccept={acceptBroadcastTask}
+                  onReject={rejectBroadcastTask}
+                  isBusy={broadcastBusy}
+                />
+              ))}
+            </div>
           </section>
         )}
 
@@ -278,7 +288,9 @@ const VolunteerPage = () => {
                         <a
                           href={`tel:${(task.contact_number || task.contactNumber).replace(/\D/g, '')}`}
                           className="volunteer-call-btn"
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                         >
+                          <Phone className="w-3.5 h-3.5" />
                           Call
                         </a>
                       </div>
@@ -560,9 +572,15 @@ const VolunteerPage = () => {
           </section>
         ) : null}
 
-        {toast ? (
-          <div className={`dashboard-toast ${toast.type === 'error' ? 'is-error' : ''}`}>{toast.message}</div>
-        ) : null}
+        <AnimatePresence>
+          {toast && (
+            <Toast
+              message={toast.message}
+              type={toast.type}
+              onClose={() => setToast(null)}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       {activeCameraTask && (

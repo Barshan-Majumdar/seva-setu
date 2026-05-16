@@ -37,7 +37,7 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([
     {
       role: 'model',
-      text: "Hello. I am SevaBot, your SevaSetu assistant. I can help you track reports, answer questions, or guide you through our coordination platform. How may I assist you today?"
+      text: "Hello. I am SevaBot, your SevaSetu assistant. I can help you answer questions, provide regional updates, or guide you through our coordination platform. How may I assist you today?"
     }
   ]);
   const [input, setInput] = useState('');
@@ -88,12 +88,14 @@ export default function ChatWidget() {
       {/* Floating Trigger Button */}
       <button
         onClick={() => setIsOpen(o => !o)}
+        className="chat-trigger-btn"
         style={{
-          position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
-          width: '64px', height: '64px', borderRadius: '18px',
-          background: '#ffffff', border: '1px solid #e5e7eb',
+          position: 'fixed', bottom: '32px', right: '32px', zIndex: 9999,
+          width: '60px', height: '60px', borderRadius: '20px',
+          background: '#ffffff',
+          border: '1px solid #e5e7eb',
           cursor: 'pointer',
-          boxShadow: '0 12px 24px -8px rgba(0,0,0,0.15)',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.1)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
           padding: '0', overflow: 'hidden',
@@ -102,28 +104,45 @@ export default function ChatWidget() {
         title="SevaBot Assistant"
       >
         {isOpen ? (
-          <div style={{ color: '#64748b' }}><Icons.Close /></div>
+          <div style={{ color: '#0f172a' }}><Icons.Close /></div>
         ) : (
-          <img 
-            src={BOT_ICON} 
-            alt="SevaBot" 
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-          />
+          <div style={{ width: '100%', height: '100%', padding: '0' }}>
+            <img 
+              src={BOT_ICON} 
+              alt="SevaBot" 
+              style={{ 
+                width: '100%', height: '100%', objectFit: 'cover',
+                mixBlendMode: 'multiply'
+              }} 
+            />
+          </div>
+
         )}
       </button>
+
+      <style>{`
+        .chat-trigger-btn:hover {
+          transform: scale(1.05) ${isOpen ? 'rotate(90deg)' : ''} !important;
+          background: #ffffff !important;
+          box-shadow: 0 15px 45px rgba(0,0,0,0.15) !important;
+        }
+        .chat-trigger-btn:active {
+          transform: scale(0.95) ${isOpen ? 'rotate(90deg)' : ''} !important;
+        }
+      `}</style>
 
       {/* Chat Window */}
       {isOpen && (
         <div style={{
-          position: 'fixed', bottom: '160px', right: '24px', zIndex: 9998,
-          width: '400px', maxWidth: 'calc(100vw - 48px)',
-          height: '600px', maxHeight: 'calc(100vh - 140px)',
+          position: 'fixed', bottom: '110px', right: '32px', zIndex: 9998,
+          width: '400px', maxWidth: 'calc(100vw - 64px)',
+          height: '600px', maxHeight: 'calc(100vh - 160px)',
           background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(12px)',
+          backdropFilter: 'blur(16px)',
           borderRadius: '24px',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.1)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
           display: 'flex', flexDirection: 'column',
-          overflow: 'hidden', border: '1px solid rgba(229, 231, 235, 0.5)',
+          overflow: 'hidden', border: '1px solid rgba(229, 231, 235, 0.8)',
           animation: 'chat-appear 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
         }}>
           {/* Header */}
@@ -218,10 +237,10 @@ export default function ChatWidget() {
               padding: '0 24px 20px 24px' 
             }}>
               {[
-                'Track my report',
                 'Reporting process',
                 'Flood safety tips',
-                'Regional updates'
+                'Regional updates',
+                'How to volunteer'
               ].map(suggestion => (
                 <button
                   key={suggestion}
