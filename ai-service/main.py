@@ -129,6 +129,7 @@ async def verify_image(
     # Accept BOTH field names so it works from needs.js AND tasks.js
     upload_type: Optional[str] = Form(None),
     need_type: Optional[str] = Form(None),
+    issue_title: Optional[str] = Form(None),
 ):
     """
     Accepts an image and classifies it as ISSUE_REGISTRATION, PROOF_OF_RELIEF, or INVALID.
@@ -164,9 +165,24 @@ async def verify_image(
                 "similarity": 0.0,
             }
 
+        # ── Setup Dynamic Labels ─────────────────────────────────
+        dynamic_labels = ALL_LABELS.copy()
+        custom_label_map = LABEL_MAP.copy()
+        
+        if issue_title:
+            title_lower = issue_title.lower()
+            if requested_type == "ISSUE_REGISTRATION":
+                custom_issue = f"a photo showing the incident or disaster: {title_lower}"
+                dynamic_labels.append(custom_issue)
+                custom_label_map[custom_issue] = "ISSUE_REGISTRATION"
+            elif requested_type == "PROOF_OF_RELIEF":
+                custom_relief = f"a photo showing rescue operation or relief work for: {title_lower}"
+                dynamic_labels.append(custom_relief)
+                custom_label_map[custom_relief] = "PROOF_OF_RELIEF"
+
         # ── Run CLIP inference ───────────────────────────────────
         inputs = processor(  # type: ignore[call-arg]
-            text=ALL_LABELS,
+            text=dynamic_labels,
             images=image,
             return_tensors="pt",  # type: ignore[arg-type]
             padding=True,  # type: ignore[arg-type]
@@ -184,10 +200,10 @@ async def verify_image(
 
         # Build sorted results
         sim_results = []
-        for i, label in enumerate(ALL_LABELS):
+        for i, label in enumerate(dynamic_labels):
             sim_results.append({
                 "label": label,
-                "category": LABEL_MAP[label],
+                "category": custom_label_map[label],
                 "similarity": round(float(cosine_similarities[i]), 4),
             })
         sim_results.sort(key=lambda x: x["similarity"], reverse=True)

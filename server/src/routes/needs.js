@@ -80,25 +80,17 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       return createdNeed;
     });
 
-    // --- 3. Upload to ImageKit IMMEDIATELY (prevents ENOENT in worker) ---
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const uploadResponse = await imagekit.upload({
-      file: fileBuffer,
-      fileName: req.file.filename,
-      folder: '/sevasetu/needs'
-    });
-
-    // --- 4. Queue the AI Verification Job with the cloud URL ---
+    // --- 3. Queue the AI Verification Job with the local path ---
     await aiVerificationQueue.add('verify-incident', {
       type: 'incident',
       id: need.id,
-      imageUrl: uploadResponse.url,
+      localPath: req.file.path,
       fileName: req.file.filename,
-      metadata: { lat: Number(lat), lng: Number(lng) }
+      metadata: { 
+        lat: lat != null ? Number(lat) : null, 
+        lng: lng != null ? Number(lng) : null 
+      }
     });
-
-    // Cleanup local file immediately
-    try { fs.unlinkSync(req.file.path); } catch (e) {}
 
     // --- SMART INVALIDATION ---
     redisService.clearCache('/api/needs').catch(() => {});

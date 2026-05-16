@@ -8,23 +8,42 @@ const exifr = require('exifr');
 const fs = require('fs');
 const path = require('path');
 const { calculateScore } = require('../services/scoringService');
+const redisService = require('../services/redisService');
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 const aiWorker = new Worker('ai-verification', async (job) => {
-  const { type, id, imageUrl, fileName, metadata } = job.data;
-  console.log(`[Worker] Processing ${type} job for ID: ${id} from URL: ${imageUrl}`);
+  const { type, id, imageUrl, localPath, fileName, metadata } = job.data;
+  console.log(`[Worker] Processing ${type} job for ID: ${id}`);
 
   let errors = [];
   let isVerified = false;
-  let finalImageUrl = imageUrl; // Default to the one passed
+  let finalImageUrl = imageUrl || null; 
   let photoHasGps = false;
   let geoTagPassed = false;
 
   try {
-    // --- 0. Download image to Buffer (replaces local file dependency) ---
-    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-    const imageBuffer = Buffer.from(response.data);
+    // --- 0. Read image to Buffer (from local disk or URL) ---
+    let imageBuffer;
+    if (localPath && fs.existsSync(localPath)) {
+      imageBuffer = fs.readFileSync(localPath);
+    } else if (imageUrl) {
+      const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      imageBuffer = Buffer.from(response.data);
+    } else {
+      throw new Error('No image path or URL provided');
+    }
+
+    // 0.5. Fetch Issue Title for contextual AI analysis
+    let issueTitle = '';
+    let currentNeed = null;
+    if (type === 'incident') {
+      currentNeed = await prisma.need.findUnique({ where: { id } });
+      if (currentNeed) issueTitle = currentNeed.title || currentNeed.needType;
+    } else if (type === 'task') {
+      const task = await prisma.task.findUnique({ where: { id }, include: { need: true } });
+      if (task && task.need) issueTitle = task.need.title || task.need.needType;
+    }
 
     // 1. GPS Check (using buffer)
     if (metadata && metadata.lat && metadata.lng) {
@@ -49,43 +68,51 @@ const aiWorker = new Worker('ai-verification', async (job) => {
           const dist = getDistance(photoLat, photoLng, metadata.lat, metadata.lng);
           if (dist <= 1.0) geoTagPassed = true;
           else errors.push(`Location mismatch: Photo is ${dist.toFixed(2)}km away.`);
-        } else if (metadata.browserLat && metadata.browserLng) {
-          const dist = getDistance(metadata.browserLat, metadata.browserLng, metadata.lat, metadata.lng);
-          if (dist <= 1.0) geoTagPassed = true;
-          else errors.push(`Location mismatch: Device is ${dist.toFixed(2)}km away.`);
+        } else {
+          // Strict EXIF check requirement
+          errors.push('Image must be geotagged (contain EXIF GPS data).');
         }
       } catch (e) {
         console.error(`[Worker] GPS check failed: ${e.message}`);
+        errors.push('Failed to parse EXIF GPS data. Image must be geotagged.');
       }
+    } else {
+      errors.push('Missing location metadata for verification.');
     }
 
-    // 2. AI Content Check (using buffer)
-    try {
-      const form = new FormData();
-      form.append('file', imageBuffer, { filename: fileName });
-      form.append('upload_type', type === 'task' ? 'PROOF_OF_RELIEF' : 'ISSUE_REGISTRATION');
+    // 2. AI Content Check (using buffer, ONLY if EXIF GPS passed the distance check)
+    if (geoTagPassed) {
+      try {
+        const form = new FormData();
+        form.append('file', imageBuffer, { filename: fileName });
+        form.append('upload_type', type === 'task' ? 'PROOF_OF_RELIEF' : 'ISSUE_REGISTRATION');
+        if (issueTitle) {
+          form.append('issue_title', issueTitle);
+        }
 
-      const aiResponse = await axios.post(`${AI_SERVICE_URL}/verify-image`, form, {
-        headers: form.getHeaders(),
-        timeout: 30000
-      });
+        const aiResponse = await axios.post(`${AI_SERVICE_URL}/verify-image`, form, {
+          headers: form.getHeaders(),
+          timeout: 30000
+        });
 
-      if (aiResponse.data.is_verified) isVerified = true;
-      else errors.push(aiResponse.data.reason || 'AI verification failed.');
-    } catch (aiErr) {
-      console.error(`[Worker] AI Service error:`, aiErr.message);
-      errors.push('AI service temporarily unavailable.');
+        if (aiResponse.data.is_verified) isVerified = true;
+        else errors.push(aiResponse.data.reason || 'AI verification failed.');
+      } catch (aiErr) {
+        console.error(`[Worker] AI Service error:`, aiErr.message);
+        errors.push('AI service temporarily unavailable.');
+      }
+    } else {
+      isVerified = false;
     }
 
     // 3. Status Finalization
     const finalVerified = isVerified && errors.length === 0;
-    
-    // Note: imageUrl is already set from the initial upload in the route handler.
-    // If verification fails, we still keep the image for audit logs.
 
-    // 4. Update Database
+    // --- 3.1 IMMEDIATE Database Update (Instant UI Feedback) ---
     if (type === 'incident') {
-      const currentNeed = await prisma.need.findUnique({ where: { id } });
+      if (!currentNeed) {
+        currentNeed = await prisma.need.findUnique({ where: { id } });
+      }
       const newScore = calculateScore({
         need_type: currentNeed.needType,
         people_affected: currentNeed.peopleAffected,
@@ -95,25 +122,23 @@ const aiWorker = new Worker('ai-verification', async (job) => {
       await prisma.need.update({
         where: { id },
         data: {
-          status: finalVerified ? 'open' : 'rejected',
-          imageUrl: finalImageUrl,
           isVerified: finalVerified,
+          status: finalVerified ? 'open' : 'rejected',
           urgencyScore: newScore,
-            verificationResult: {
-              verified: finalVerified,
-              errors,
-              geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
-              aiContent: isVerified ? 'PASSED' : 'FAILED'
-            }
+          verificationResult: {
+            verified: finalVerified,
+            errors,
+            geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+            aiContent: isVerified ? 'PASSED' : 'FAILED'
+          }
         }
       });
+      redisService.clearCache('/api/needs').catch(() => {});
 
       if (finalVerified) {
         try {
           const { triggerBroadcast } = require('../services/matchingService');
           await triggerBroadcast(id, 2);
-          
-          const redisService = require('../services/redisService');
           await redisService.addToSet('needs_to_rebroadcast', id);
         } catch (e) { console.error('[Worker] Dispatch failed:', e.message); }
       }
@@ -123,7 +148,6 @@ const aiWorker = new Worker('ai-verification', async (job) => {
           where: { id },
           data: {
             status: finalVerified ? 'completed' : 'in_progress',
-            completionImageUrl: finalImageUrl,
             completedAt: finalVerified ? new Date() : null,
             isCompletionVerified: finalVerified,
             verificationResult: {
@@ -149,6 +173,48 @@ const aiWorker = new Worker('ai-verification', async (job) => {
           }
         }
       });
+      redisService.clearCache('/api/tasks').catch(() => {});
+      redisService.clearCache('/api/needs').catch(() => {});
+    }
+
+    // --- 3.5. Background ImageKit Upload & Secondary DB Update ---
+    if (localPath && fs.existsSync(localPath)) {
+      if (geoTagPassed) {
+        try {
+          const uploadResponse = await imagekit.upload({
+            file: imageBuffer,
+            fileName: fileName,
+            folder: type === 'incident' ? '/sevasetu/needs' : '/sevasetu/tasks'
+          });
+          finalImageUrl = uploadResponse.url;
+
+          // Secondary DB update just for the image URL
+          if (type === 'incident') {
+            await prisma.need.update({
+              where: { id },
+              data: { imageUrl: finalImageUrl }
+            });
+            redisService.clearCache('/api/needs').catch(() => {});
+          } else if (type === 'task') {
+            await prisma.task.update({
+              where: { id },
+              data: { completionImageUrl: finalImageUrl }
+            });
+            redisService.clearCache('/api/tasks').catch(() => {});
+          }
+        } catch (e) {
+          console.error('[Worker] ImageKit upload failed:', e);
+          errors.push('Image upload to cloud storage failed.');
+          finalImageUrl = null;
+        }
+      }
+      
+      // ALWAYS delete the local temp file to prevent disk leaks
+      try {
+        fs.unlinkSync(localPath);
+      } catch (e) {
+        console.error('[Worker] Failed to delete local file:', e.message);
+      }
     }
 
   } catch (err) {

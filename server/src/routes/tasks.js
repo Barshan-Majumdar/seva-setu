@@ -145,17 +145,10 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     `;
     const { lat, lng } = needLocation[0] || { lat: 0, lng: 0 };
 
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const uploadResponse = await imagekit.upload({
-      file: fileBuffer,
-      fileName: req.file.filename,
-      folder: '/sevasetu/tasks'
-    });
-
     await prisma.task.update({
       where: { id: task.id },
       data: {
-        verificationResult: null,
+        verificationResult: {},
         isCompletionVerified: false,
         status: 'in_progress'
       }
@@ -164,17 +157,15 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     await aiVerificationQueue.add('verify-task', {
       type: 'task',
       id: task.id,
-      imageUrl: uploadResponse.url,
+      localPath: req.file.path,
       fileName: req.file.filename,
       metadata: { 
-        lat: Number(lat), 
-        lng: Number(lng),
+        lat: lat != null ? Number(lat) : null, 
+        lng: lng != null ? Number(lng) : null,
         browserLat: req.body.browserLat ? Number(req.body.browserLat) : null,
         browserLng: req.body.browserLng ? Number(req.body.browserLng) : null
       }
     });
-
-    try { fs.unlinkSync(req.file.path); } catch (e) {}
 
     // Clear cache so coordinator knows it's being verified
     redisService.clearCache('/api/tasks').catch(() => {});
@@ -248,7 +239,7 @@ router.get('/my', auth, cache(60), async (req, res) => {
         END                         AS server_distance_km
       FROM tasks t
       JOIN needs n    ON t.need_id = n.id
-      JOIN volunteers v ON t.assigned_volunteer_id = v.user_id
+      LEFT JOIN volunteers v ON t.assigned_volunteer_id = v.user_id
       WHERE t.assigned_volunteer_id = ${req.user.id}::uuid
       ORDER BY t.assigned_at DESC
     `;
@@ -354,6 +345,16 @@ router.post('/accept-broadcast', auth, async (req, res) => {
 
     // 3. Atomic transaction: create task, update need, accept this broadcast, reject others
     await prisma.$transaction(async (tx) => {
+      // 3.1 Lock/Condition: Update need to assigned ONLY if it's still open
+      const updateResult = await tx.need.updateMany({
+        where: { id: need_id, status: 'open' },
+        data: { status: 'assigned', updatedAt: new Date() },
+      });
+
+      if (updateResult.count === 0) {
+        throw new Error('Mission already claimed by another volunteer.');
+      }
+
       // Create the task
       await tx.task.create({
         data: {
@@ -362,12 +363,6 @@ router.post('/accept-broadcast', auth, async (req, res) => {
           status: 'assigned',
           assignedAt: new Date(),
         },
-      });
-
-      // Update need to assigned
-      await tx.need.update({
-        where: { id: need_id },
-        data: { status: 'assigned', updatedAt: new Date() },
       });
 
       // Mark THIS broadcast as accepted
@@ -395,6 +390,9 @@ router.post('/accept-broadcast', auth, async (req, res) => {
 
     res.status(201).json({ message: 'Mission accepted! Head to the incident location.' });
   } catch (err) {
+    if (err.message.includes('already claimed')) {
+      return res.status(409).json({ message: err.message });
+    }
     console.error('[BROADCAST] Accept error:', err);
     res.status(500).json({ message: 'Server error' });
   }
