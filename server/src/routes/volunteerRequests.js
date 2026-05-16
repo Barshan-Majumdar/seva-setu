@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../config/db');
 const auth = require('../middleware/auth');
+const cache = require('../middleware/cache');
 
 const router = express.Router();
 
