@@ -11,7 +11,7 @@ const router = express.Router();
  * @desc    Get all available volunteers (Coordinator view)
  * @access  Private (Coordinator only)
  */
-router.get('/', auth, cache(30), async (req, res) => {
+router.get('/', auth, cache(60), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -26,6 +26,21 @@ router.get('/', auth, cache(30), async (req, res) => {
       FROM volunteers v
       JOIN users u ON v.user_id = u.id
     `;
+
+    // Merge live coordinates from Redis memory
+    const { redis } = redisService;
+    if (redis && redis.status === 'ready') {
+      for (const vol of volunteers) {
+        const livePos = await redis.get(`volunteer_location:${vol.id}`);
+        if (livePos) {
+          try {
+            const { lat, lng } = JSON.parse(livePos);
+            vol.lat = lat;
+            vol.lng = lng;
+          } catch(e){}
+        }
+      }
+    }
 
     res.json(volunteers);
   } catch (err) {
@@ -46,8 +61,16 @@ router.patch('/me/availability', auth, async (req, res) => {
       UPDATE volunteers SET is_available = ${is_available}, updated_at = now() WHERE user_id = ${req.user.id}::uuid
     `;
     
-    // Clear cache so coordinator sees the change immediately
+    // Clear cache so coordinator and volunteer see the change immediately
     redisService.clearCache('/api/volunteers').catch(() => {});
+    redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
+    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+
+    // Broadcast instant availability change via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('volunteer_availability_changed', { id: req.user.id, is_available });
+    }
     
     res.json({ message: 'Availability updated' });
   } catch (err) {
@@ -64,12 +87,30 @@ router.patch('/me/location', auth, async (req, res) => {
   const { lat, lng } = req.body;
 
   try {
-    await prisma.$executeRaw`
-      UPDATE volunteers SET location = ST_SetSRID(ST_MakePoint(${lng}::float, ${lat}::float), 4326), updated_at = now() WHERE user_id = ${req.user.id}::uuid
-    `;
+    const { redis } = redisService;
+    if (redis && redis.status === 'ready') {
+      // Store live coordinates in Redis with 30-minute expiration
+      await redis.set(`volunteer_location:${req.user.id}`, JSON.stringify({ lat, lng }), 'EX', 1800);
+      
+      // Throttle DB updates: Only write to Postgres once every 10 minutes per volunteer to let NeonDB sleep!
+      const lastDbWrite = await redis.get(`volunteer_db_write:${req.user.id}`);
+      if (!lastDbWrite) {
+        await prisma.$executeRaw`
+          UPDATE volunteers SET location = ST_SetSRID(ST_MakePoint(${lng}::float, ${lat}::float), 4326), updated_at = now() WHERE user_id = ${req.user.id}::uuid
+        `;
+        await redis.set(`volunteer_db_write:${req.user.id}`, 'true', 'EX', 600); // 10 minutes
+      }
+    } else {
+      // Fallback to direct DB write if Redis is down
+      await prisma.$executeRaw`
+        UPDATE volunteers SET location = ST_SetSRID(ST_MakePoint(${lng}::float, ${lat}::float), 4326), updated_at = now() WHERE user_id = ${req.user.id}::uuid
+      `;
+    }
     
-    // We don't necessarily need to clear cache for EVERY location ping to save CU, 
-    // but for "Rescue" missions we could. For now, let's keep it database-efficient.
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('volunteer_moved', { id: req.user.id, lat, lng });
+    }
     
     res.json({ message: 'Location updated' });
   } catch (err) {
@@ -82,7 +123,7 @@ router.patch('/me/location', auth, async (req, res) => {
  * @route   GET /api/volunteers/me/stats
  * @desc    Get current volunteer stats
  */
-router.get('/me/stats', auth, async (req, res) => {
+router.get('/me/stats', auth, cache(60), async (req, res) => {
   try {
     const stats = await prisma.$queryRaw`
       WITH volunteer_data AS (
@@ -175,6 +216,13 @@ router.post('/me/beacon-offline', async (req, res) => {
     
     // Clear cache immediately
     redisService.clearCache('/api/volunteers').catch(() => {});
+    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
+    
+    const io = req.app.get('io') || global.io;
+    if (io) {
+      io.emit('volunteer_availability_changed', { id: dbUserId, is_available: false });
+    }
     
     console.log(`[BEACON] Volunteer ${dbUserId} marked OFFLINE.`);
     res.json({ message: 'Marked offline' });
@@ -202,6 +250,6 @@ setInterval(async () => {
   } catch (err) {
     console.error('[HEARTBEAT] Sweep error:', err.message);
   }
-}, 30 * 60 * 1000); // 30 minutes
+}, 120 * 60 * 1000); // 120 minutes
 
 module.exports = router;

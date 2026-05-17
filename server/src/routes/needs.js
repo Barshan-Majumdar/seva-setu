@@ -9,8 +9,9 @@ const exifr = require('exifr');
 const axios = require('axios');
 const FormData = require('form-data');
 const imagekit = require('../config/imagekit');
-const { aiVerificationQueue } = require('../config/queue');
+const { aiVerificationQueue, connection } = require('../config/queue');
 const cache = require('../middleware/cache');
+const redisService = require('../services/redisService');
 
 const router = express.Router();
 
@@ -41,6 +42,13 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
   const { title, description, need_type, lat, lng, ward, district, people_affected, is_disaster_zone } = req.body;
   
   try {
+    if (connection.status !== 'ready') {
+      return res.status(503).json({ 
+        message: 'Background queue is unreachable. Please ensure your local Redis server is running.',
+        details: 'Redis connection failed (ECONNREFUSED 127.0.0.1:6379).'
+      });
+    }
+
     if (!req.file) {
       return res.status(400).json({ message: 'A live photo with GPS data is mandatory to verify your location.' });
     }
@@ -79,27 +87,17 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       return createdNeed;
     });
 
-    // --- 3. Upload to ImageKit IMMEDIATELY (prevents ENOENT in worker) ---
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const uploadResponse = await imagekit.upload({
-      file: fileBuffer,
-      fileName: req.file.filename,
-      folder: '/sevasetu/needs'
-    });
-
-    // --- 4. Queue the AI Verification Job with the cloud URL ---
+    // --- 3. Queue the AI Verification Job with the local path ---
     await aiVerificationQueue.add('verify-incident', {
       type: 'incident',
       id: need.id,
-      imageUrl: uploadResponse.url,
+      localPath: req.file.path,
       fileName: req.file.filename,
-      metadata: { lat: Number(lat), lng: Number(lng) }
+      metadata: { 
+        lat: lat != null ? Number(lat) : null, 
+        lng: lng != null ? Number(lng) : null 
+      }
     });
-
-    // Cleanup local file immediately
-    try { fs.unlinkSync(req.file.path); } catch (e) {}
-
-const redisService = require('../services/redisService');
 
     // --- SMART INVALIDATION ---
     redisService.clearCache('/api/needs').catch(() => {});
@@ -150,7 +148,7 @@ router.get('/:id/status', auth, async (req, res) => {
  * @desc    Get all needs with filters
  * @access  Private
  */
-router.get('/', auth, cache(30), async (req, res) => {
+router.get('/', auth, cache(60), async (req, res) => {
   const { status, district, need_type, min_urgency } = req.query;
 
   try {
@@ -203,7 +201,7 @@ router.get('/', auth, cache(30), async (req, res) => {
  * @route   GET /api/needs/heatmap
  * @desc    Get needs data for heatmap rendering
  */
-router.get('/heatmap', async (req, res) => {
+router.get('/heatmap', cache(120), async (req, res) => {
   try {
     const data = await prisma.$queryRaw`
       SELECT urgency_score,
@@ -273,14 +271,16 @@ router.patch('/:id/status', auth, async (req, res) => {
     // If the status is now 'open', trigger the broadcast (mass dispatch)
     if (status === 'open' || status === 'accepted') {
       const { triggerBroadcast } = require('../services/matchingService');
-      triggerBroadcast(req.params.id, 6).catch(err => {
+      triggerBroadcast(req.params.id, 2).catch(err => {
         console.error('[BROADCAST] Manual trigger failed:', err.message);
       });
     }
 
     // --- SMART INVALIDATION ---
-    const redisService = require('../services/redisService');
     redisService.clearCache('/api/needs').catch(() => {});
+    if (status === 'open' || status === 'accepted') {
+      redisService.addToSet('needs_to_rebroadcast', req.params.id).catch(() => {});
+    }
     // ──────────────────────────
 
     res.json({ message: 'Status updated' });
@@ -297,7 +297,7 @@ const { findMatches } = require('../services/matchingService');
  * @desc    Get top 3 matching volunteers for a need
  * @access  Private (Coordinator)
  */
-router.get('/:id/matches', auth, async (req, res) => {
+router.get('/:id/matches', auth, cache(60), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -342,6 +342,11 @@ router.delete('/:id', auth, async (req, res) => {
       data: { status: 'archived', updatedAt: new Date() },
       select: { id: true },
     });
+
+    // --- SMART INVALIDATION ---
+    redisService.clearCache('/api/needs').catch(() => {});
+    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    // ──────────────────────────
 
     res.json({ message: 'Need archived successfully' });
   } catch (err) {

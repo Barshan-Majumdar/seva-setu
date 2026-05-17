@@ -13,6 +13,7 @@ import {
 } from '../services/volunteer';
 import { pollStatus } from '../services/api';
 import { useAuth } from './useAuth';
+import { io } from 'socket.io-client';
 
 const toRadians = (deg) => (deg * Math.PI) / 180;
 
@@ -252,18 +253,27 @@ export const useVolunteerApp = () => {
       }
     };
 
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadData();
-      }
-    }, 20000); // 20s while active
+    // --- SOCKET.IO REAL-TIME MISSION SYNC ---
+    const socketUrl = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5000';
+    const socket = io(socketUrl, { query: { userId, role: 'volunteer' } });
+
+    const handleRealtimeRefresh = () => {
+      console.log('[SOCKET] Real-time task/broadcast change detected. Refreshing volunteer workspace silently...');
+      loadData();
+    };
+
+    socket.on('task_created', handleRealtimeRefresh);
+    socket.on('task_updated', handleRealtimeRefresh);
+    socket.on('broadcast_created', handleRealtimeRefresh);
+    socket.on('broadcast_accepted', handleRealtimeRefresh);
+    socket.on('broadcast_rejected', handleRealtimeRefresh);
 
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      clearInterval(interval);
+      socket.disconnect();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [loadData]);
+  }, [loadData, userId]);
 
   useEffect(() => {
     if (!availability && activeTasks.length === 0) return;
@@ -277,10 +287,10 @@ export const useVolunteerApp = () => {
 
         const newCoords = { lat: latitude, lng: longitude, heading, accuracy };
 
-        // JITTER FILTER: Ignore shifts smaller than 10 meters
+        // JITTER FILTER: Ignore shifts smaller than 50 meters (increased from 10m to save DB credits)
         if (lastUpdatePos.current) {
           const drift = haversineKm(newCoords, lastUpdatePos.current);
-          if (drift < 0.010) return;
+          if (drift < 0.050) return;
         }
 
         lastUpdatePos.current = newCoords;
@@ -303,12 +313,9 @@ export const useVolunteerApp = () => {
     const beaconUrl = `${API_BASE}/volunteers/me/beacon-offline`;
 
     const sendOfflineBeacon = () => {
-      // navigator.sendBeacon is the ONLY reliable way to send data during page unload
-      const blob = new Blob(
-        [JSON.stringify({ userId })],
-        { type: 'application/json' }
-      );
-      navigator.sendBeacon(beaconUrl, blob);
+      // navigator.sendBeacon with URLSearchParams bypasses CORS preflight (OPTIONS), guaranteeing 100% instant delivery on tab close
+      const data = new URLSearchParams({ userId });
+      navigator.sendBeacon(beaconUrl, data);
       console.log('[BEACON] Sent offline signal for user:', userId);
     };
 

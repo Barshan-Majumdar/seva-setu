@@ -1,45 +1,64 @@
 const prisma = require('../config/db');
 const { triggerBroadcast } = require('../services/matchingService');
+const redisService = require('../services/redisService');
 
 /**
- * Periodically sweep for open needs that are less than 30 minutes old
- * and have not yet been assigned. Triggers a new broadcast to alert
- * any volunteers who may have just come online or moved closer.
+ * Periodically sweep for open needs that require re-broadcasting.
+ * Uses Redis to check for work BEFORE hitting the database to save credits.
  */
 const startReBroadcastJob = () => {
-  // Run every 5 minutes (300,000 ms)
   setInterval(async () => {
     try {
+      // 1. Check Redis first (Zero DB cost)
+      const needsToProcess = await redisService.getSet('needs_to_rebroadcast');
+      
+      if (!needsToProcess || needsToProcess.length === 0) {
+        // No active needs to broadcast — let the DB sleep!
+        return;
+      }
+
+      console.log(`[CRON] Found ${needsToProcess.length} candidate(s) in Redis. Waking DB...`);
+
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
-      // Find all needs that are:
-      // 1. Still 'open'
-      // 2. Created within the last 30 minutes
+      // 2. Only now do we hit the DB to verify they are still 'open' and fresh
       const pendingNeeds = await prisma.need.findMany({
         where: {
+          id: { in: needsToProcess },
           status: 'open',
-          createdAt: {
-            gte: thirtyMinutesAgo
-          }
+          createdAt: { gte: thirtyMinutesAgo }
         },
-        select: { id: true, title: true }
+        select: { id: true, title: true, createdAt: true }
       });
 
       if (pendingNeeds.length > 0) {
-        console.log(`[CRON] Found ${pendingNeeds.length} open needs within the 30-min window. Re-broadcasting...`);
         for (const need of pendingNeeds) {
           try {
-            await triggerBroadcast(need.id, 6);
+            await triggerBroadcast(need.id, 2);
             console.log(`[CRON] Re-broadcast dispatched for need: ${need.title}`);
           } catch (dispatchErr) {
             console.error(`[CRON] Failed to re-broadcast need ${need.id}:`, dispatchErr.message);
           }
         }
       }
+
+      // 3. Cleanup Redis (Remove expired or already assigned needs)
+      for (const needId of needsToProcess) {
+        const stillActive = pendingNeeds.find(n => n.id === needId);
+        if (!stillActive) {
+          await redisService.removeFromSet('needs_to_rebroadcast', needId);
+        } else {
+          // If it's older than 30 mins, stop re-broadcasting it
+          if (stillActive.createdAt < thirtyMinutesAgo) {
+            await redisService.removeFromSet('needs_to_rebroadcast', needId);
+          }
+        }
+      }
+
     } catch (err) {
       console.error(`[CRON] Re-broadcast sweep failed:`, err);
     }
-  }, 30 * 60 * 1000); // 30 minutes
+  }, 10 * 60 * 1000); // 10 mins check
 };
 
 module.exports = { startReBroadcastJob };

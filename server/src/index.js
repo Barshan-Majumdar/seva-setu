@@ -5,10 +5,13 @@
 require('dotenv').config();
 
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cors = require('cors');
 const prisma = require('./config/db');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // ── Rate Limiting & Proxy Setup ─────────────────────────────────────
@@ -31,7 +34,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     // Allow any origin during this debugging phase, or if it's in our list
     if (!origin || allowedOrigins.some(o => origin.startsWith(o)) || true) {
@@ -43,7 +46,47 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+};
+
+app.use(cors(corsOptions));
+
+const io = new Server(server, { cors: corsOptions });
+app.set('io', io);
+global.io = io;
+
+io.on('connection', (socket) => {
+  const { userId, role } = socket.handshake.query;
+  console.log(`[SOCKET] Client connected: ${socket.id}, User: ${userId || 'anonymous'}, Role: ${role || 'none'}`);
+
+  socket.on('disconnect', async () => {
+    console.log(`[SOCKET] Client disconnected: ${socket.id}, User: ${userId || 'anonymous'}`);
+    if (role === 'volunteer' && userId) {
+      try {
+        let dbUserId = userId;
+        // If Clerk ID is passed, resolve to Postgres UUID
+        if (userId.startsWith('user_')) {
+          const user = await prisma.user.findUnique({
+            where: { clerkId: userId },
+            select: { id: true }
+          });
+          if (user) dbUserId = user.id;
+        }
+
+        // Mark volunteer offline instantly
+        await prisma.$executeRaw`
+          UPDATE volunteers SET is_available = false, updated_at = now() WHERE user_id = ${dbUserId}::uuid
+        `;
+        const redisService = require('./services/redisService');
+        redisService.clearCache('/api/volunteers').catch(() => {});
+        redisService.clearCache('/api/coordinators/stats').catch(() => {});
+        io.emit('volunteer_availability_changed', { id: dbUserId, is_available: false });
+        console.log(`[SOCKET-DISCONNECT] Volunteer ${dbUserId} instantly marked OFFLINE.`);
+      } catch (err) {
+        console.error('[SOCKET-DISCONNECT] Error marking offline:', err.message);
+      }
+    }
+  });
+});
 
 // ── Request Logger (skip noisy polling routes) ─────────────────────
 const SILENT_ROUTES = ['/api/tasks/my', '/api/volunteers/me/stats', '/api/tasks/my-broadcasts', '/api/health'];
@@ -56,20 +99,13 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.text());
 
 // ── Root Route for Deployment Testing ───────────────────────────────
-app.get('/', async (req, res) => {
-  let dbStatus = 'checking...';
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    dbStatus = 'connected';
-  } catch (err) {
-    dbStatus = 'failed: ' + err.message;
-  }
-
+app.get('/', (req, res) => {
   res.json({
     message: '🌉 SevaSetu API is live!',
-    db: dbStatus,
     env: process.env.NODE_ENV || 'production',
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
@@ -143,7 +179,7 @@ try {
 }
 
 // ── Start Server ─────────────────────────────────────────────────────
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🌉 SevaSetu server running on port ${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/api/health`);
 });

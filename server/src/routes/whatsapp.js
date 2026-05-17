@@ -122,7 +122,7 @@ router.post('/webhook', async (req, res) => {
         // --- AUTOMATED DISPATCH ---
         if (needId) {
           const { triggerBroadcast } = require('../services/matchingService');
-          triggerBroadcast(needId, 6).catch(err => console.error('[BROADCAST] WA Trigger failed:', err));
+          triggerBroadcast(needId, 2).catch(err => console.error('[BROADCAST] WA Trigger failed:', err));
         }
 
         await redisService.deleteBotSession(fromNumber);

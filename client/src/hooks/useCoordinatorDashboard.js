@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { fetchNeeds, fetchVolunteers, fetchTasks, fetchSystemStats } from '../services/dashboard';
 import api from '../services/api';
 
@@ -80,15 +81,40 @@ export const useCoordinatorDashboard = () => {
       }
     };
 
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadDashboard(false);
-      }
-    }, 20000); // 20s while active, 0s while hidden
+    // --- SOCKET.IO REAL-TIME MAP SYNC ---
+    const socketUrl = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5000';
+    const socket = io(socketUrl);
+
+    socket.on('volunteer_moved', ({ id, lat, lng }) => {
+      console.log(`[SOCKET] Volunteer ${id} moved to ${lat}, ${lng}`);
+      setVolunteers((prev) =>
+        prev.map((v) => (v.id === id ? { ...v, lat, lng } : v))
+      );
+    });
+
+    const handleRealtimeRefresh = () => {
+      console.log('[SOCKET] Real-time state change detected. Refreshing dashboard silently...');
+      loadDashboard(false);
+    };
+
+    socket.on('volunteer_availability_changed', ({ id, is_available }) => {
+      console.log(`[SOCKET] Volunteer ${id} availability changed to ${is_available}`);
+      setVolunteers((prev) =>
+        prev.map((v) => (v.id === id ? { ...v, is_available } : v))
+      );
+      handleRealtimeRefresh();
+    });
+
+    socket.on('need_created', handleRealtimeRefresh);
+    socket.on('need_updated', handleRealtimeRefresh);
+    socket.on('task_created', handleRealtimeRefresh);
+    socket.on('task_updated', handleRealtimeRefresh);
+    socket.on('volunteer_request_created', handleRealtimeRefresh);
+    socket.on('volunteer_request_updated', handleRealtimeRefresh);
 
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      clearInterval(interval);
+      socket.disconnect();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [loadDashboard]);
@@ -201,6 +227,7 @@ export const useCoordinatorDashboard = () => {
     setFilters,
     districts,
     sortedNeeds,
+    volunteers,
     selectedNeedId,
     setSelectedNeedId,
     sorting,

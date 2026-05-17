@@ -5,6 +5,7 @@ import MainLayout from '../layouts/MainLayout';
 import ReporterStatusList from '../components/ReporterStatusList';
 import VolunteerApplicationModal from '../components/VolunteerApplicationModal';
 import api from '../services/api';
+import { io } from 'socket.io-client';
 
 const UserDashboardPage = () => {
   const [showApplicationModal, setShowApplicationModal] = useState(false);
@@ -34,11 +35,24 @@ const UserDashboardPage = () => {
     }
   }, []);
 
-  // Initial load + auto-poll every 10 seconds
+  // Initial load + real-time Socket.io sync
   useEffect(() => {
     fetchApplicationStatus();
-    const interval = setInterval(fetchApplicationStatus, 10000);
-    return () => clearInterval(interval);
+
+    const socketUrl = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5000';
+    const socket = io(socketUrl);
+
+    const handleRealtimeRefresh = () => {
+      console.log('[SOCKET] Volunteer request state change detected. Refreshing application status silently...');
+      fetchApplicationStatus();
+    };
+
+    socket.on('volunteer_request_created', handleRealtimeRefresh);
+    socket.on('volunteer_request_updated', handleRealtimeRefresh);
+
+    return () => {
+      socket.disconnect();
+    };
   }, [fetchApplicationStatus]);
 
   const handleApplicationSubmitted = () => {

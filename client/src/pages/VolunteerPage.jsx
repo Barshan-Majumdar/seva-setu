@@ -222,7 +222,7 @@ const VolunteerPage = () => {
                 <div className="volunteer-task-header">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <p className="font-semibold text-text-primary">{task.title}</p>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'var(--color-surface-secondary)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'var(--color-surface-secondary)', padding: '0.1rem 0.4rem', borderRadius: '4px', whiteSpace: 'nowrap' }}>
                       • {formatAssignedTime(task.assigned_at)}
                     </span>
                   </div>

@@ -49,6 +49,21 @@ const clearCache = async (pattern) => {
   }
 };
 
+/**
+ * Set Operations (for background jobs)
+ */
+const addToSet = async (key, value) => {
+  await redis.sadd(key, value);
+};
+
+const removeFromSet = async (key, value) => {
+  await redis.srem(key, value);
+};
+
+const getSet = async (key) => {
+  return await redis.smembers(key);
+};
+
 module.exports = {
   getBotSession,
   saveBotSession,
@@ -56,5 +71,8 @@ module.exports = {
   getCache,
   setCache,
   clearCache,
+  addToSet,
+  removeFromSet,
+  getSet,
   redis // Export raw client for special cases
 };

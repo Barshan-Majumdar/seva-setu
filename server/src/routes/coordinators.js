@@ -31,7 +31,7 @@ router.get('/', auth, cache(60), async (req, res) => {
  * @desc    Get system-wide stats (total users, etc)
  * @access  Private (Coordinator)
  */
-router.get('/stats', auth, cache(30), async (req, res) => {
+router.get('/stats', auth, cache(60), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }

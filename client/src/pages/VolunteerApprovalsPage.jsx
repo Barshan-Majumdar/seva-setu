@@ -4,6 +4,7 @@ import MainLayout from '../layouts/MainLayout';
 import api from '../services/api';
 import Toast from '../components/Toast';
 import { AnimatePresence } from 'framer-motion';
+import { io } from 'socket.io-client';
 
 const VolunteerApprovalsPage = () => {
   const [requests, setRequests] = useState([]);
@@ -37,11 +38,24 @@ const VolunteerApprovalsPage = () => {
     }
   }, [filter]);
 
-  // Initial load + auto-poll every 10 seconds
+  // Initial load + real-time Socket.io sync
   useEffect(() => {
     loadRequests(true);
-    const interval = setInterval(() => loadRequests(false), 10000);
-    return () => clearInterval(interval);
+
+    const socketUrl = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5000';
+    const socket = io(socketUrl);
+
+    const handleRealtimeRefresh = () => {
+      console.log('[SOCKET] Volunteer request state change detected. Refreshing approvals list silently...');
+      loadRequests(false);
+    };
+
+    socket.on('volunteer_request_created', handleRealtimeRefresh);
+    socket.on('volunteer_request_updated', handleRealtimeRefresh);
+
+    return () => {
+      socket.disconnect();
+    };
   }, [loadRequests]);
 
   const handleApprove = async (requestId) => {

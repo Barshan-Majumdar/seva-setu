@@ -4,7 +4,7 @@ const path = require('path');
 const prisma = require('../config/db');
 const auth = require('../middleware/auth');
 const imagekit = require('../config/imagekit');
-const { aiVerificationQueue } = require('../config/queue');
+const { aiVerificationQueue, connection } = require('../config/queue');
 const cache = require('../middleware/cache');
 const redisService = require('../services/redisService');
 
@@ -92,6 +92,8 @@ router.patch('/:id/checkin', auth, async (req, res) => {
 
     // --- SMART INVALIDATION ---
     redisService.clearCache('/api/tasks').catch(() => {});
+    redisService.clearCache('/api/tasks/my').catch(() => {});
+    redisService.clearCache('/api/needs').catch(() => {});
     // ──────────────────────────
 
     res.json({ message: 'Checked in successfully' });
@@ -129,6 +131,13 @@ const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 }
  */
 router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => {
   try {
+    if (connection.status !== 'ready') {
+      return res.status(503).json({ 
+        message: 'Background queue is unreachable. Please ensure your local Redis server is running.',
+        details: 'Redis connection failed (ECONNREFUSED 127.0.0.1:6379).'
+      });
+    }
+
     const task = await prisma.task.findUnique({ 
       where: { id: req.params.id },
       include: { need: true }
@@ -145,17 +154,10 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     `;
     const { lat, lng } = needLocation[0] || { lat: 0, lng: 0 };
 
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const uploadResponse = await imagekit.upload({
-      file: fileBuffer,
-      fileName: req.file.filename,
-      folder: '/sevasetu/tasks'
-    });
-
     await prisma.task.update({
       where: { id: task.id },
       data: {
-        verificationResult: null,
+        verificationResult: {},
         isCompletionVerified: false,
         status: 'in_progress'
       }
@@ -164,20 +166,19 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     await aiVerificationQueue.add('verify-task', {
       type: 'task',
       id: task.id,
-      imageUrl: uploadResponse.url,
+      localPath: req.file.path,
       fileName: req.file.filename,
       metadata: { 
-        lat: Number(lat), 
-        lng: Number(lng),
+        lat: lat != null ? Number(lat) : null, 
+        lng: lng != null ? Number(lng) : null,
         browserLat: req.body.browserLat ? Number(req.body.browserLat) : null,
         browserLng: req.body.browserLng ? Number(req.body.browserLng) : null
       }
     });
 
-    try { fs.unlinkSync(req.file.path); } catch (e) {}
-
-    // Clear cache so coordinator knows it's being verified
+    // Clear cache so coordinator and volunteer know it's being verified
     redisService.clearCache('/api/tasks').catch(() => {});
+    redisService.clearCache('/api/tasks/my').catch(() => {});
 
     res.status(202).json({
       message: 'Task completion submitted and queued for verification.',
@@ -217,7 +218,7 @@ router.get('/:id/status', auth, async (req, res) => {
  * @route   GET /api/tasks/my
  * @desc    Get assigned tasks for the logged-in volunteer
  */
-router.get('/my', auth, cache(30), async (req, res) => {
+router.get('/my', auth, cache(60), async (req, res) => {
   try {
     const tasks = await prisma.$queryRaw`
       SELECT
@@ -248,7 +249,7 @@ router.get('/my', auth, cache(30), async (req, res) => {
         END                         AS server_distance_km
       FROM tasks t
       JOIN needs n    ON t.need_id = n.id
-      JOIN volunteers v ON t.assigned_volunteer_id = v.user_id
+      LEFT JOIN volunteers v ON t.assigned_volunteer_id = v.user_id
       WHERE t.assigned_volunteer_id = ${req.user.id}::uuid
       ORDER BY t.assigned_at DESC
     `;
@@ -263,7 +264,7 @@ router.get('/my', auth, cache(30), async (req, res) => {
  * @route   GET /api/tasks
  * @desc    Get all tasks for coordinator dashboard
  */
-router.get('/', auth, cache(30), async (req, res) => {
+router.get('/', auth, cache(60), async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -294,7 +295,7 @@ router.get('/', auth, cache(30), async (req, res) => {
 /**
  * @route   GET /api/tasks/my-broadcasts
  */
-router.get('/my-broadcasts', auth, cache(15), async (req, res) => {
+router.get('/my-broadcasts', auth, cache(60), async (req, res) => {
   try {
     const broadcasts = await prisma.$queryRaw`
       SELECT
@@ -302,6 +303,7 @@ router.get('/my-broadcasts', auth, cache(15), async (req, res) => {
         br.need_id,
         br.status AS broadcast_status,
         br.distance_km,
+        br.expires_at,
         n.title,
         n.need_type,
         n.urgency_score,
@@ -324,23 +326,118 @@ router.get('/my-broadcasts', auth, cache(15), async (req, res) => {
 
 /**
  * @route   POST /api/tasks/accept-broadcast
+ * Accepts a broadcast: creates a task, updates need status, marks broadcast accepted,
+ * and rejects all other pending broadcasts for the same need.
  */
 router.post('/accept-broadcast', auth, async (req, res) => {
   const { need_id } = req.body;
   if (!need_id) return res.status(400).json({ message: 'need_id is required' });
 
   try {
-    // --- (Simplified logic for illustration, assuming valid transaction here) ---
-    // In actual use, this would be the full atomic transaction from the original file.
-    
-    // --- SMART INVALIDATION ---
-    redisService.clearCache('/api/tasks').catch(() => {});
-    redisService.clearCache('/api/needs').catch(() => {});
-    // ──────────────────────────
+    // 1. Find the broadcast request for this volunteer + need
+    const broadcastRequest = await prisma.broadcastRequest.findFirst({
+      where: {
+        needId: need_id,
+        volunteerId: req.user.id,
+        status: 'pending',
+      },
+    });
 
-    res.status(201).json({ message: 'Mission accepted' });
+    if (!broadcastRequest) {
+      return res.status(404).json({ message: 'Broadcast not found or already handled.' });
+    }
+
+    // 2. Check the need is still open
+    const need = await prisma.need.findUnique({ where: { id: need_id } });
+    if (!need || need.status !== 'open') {
+      return res.status(409).json({ message: 'This mission has already been claimed.' });
+    }
+
+    // 3. Atomic transaction: create task, update need, accept this broadcast, reject others
+    await prisma.$transaction(async (tx) => {
+      // 3.1 Lock/Condition: Update need to assigned ONLY if it's still open
+      const updateResult = await tx.need.updateMany({
+        where: { id: need_id, status: 'open' },
+        data: { status: 'assigned', updatedAt: new Date() },
+      });
+
+      if (updateResult.count === 0) {
+        throw new Error('Mission already claimed by another volunteer.');
+      }
+
+      // Create the task
+      await tx.task.create({
+        data: {
+          needId: need_id,
+          assignedVolunteerId: req.user.id,
+          status: 'assigned',
+          assignedAt: new Date(),
+        },
+      });
+
+      // Mark THIS broadcast as accepted
+      await tx.broadcastRequest.update({
+        where: { id: broadcastRequest.id },
+        data: { status: 'accepted' },
+      });
+
+      // Reject all other pending broadcasts for the same need
+      await tx.broadcastRequest.updateMany({
+        where: {
+          needId: need_id,
+          status: 'pending',
+          id: { not: broadcastRequest.id },
+        },
+        data: { status: 'rejected' },
+      });
+    });
+
+    // 4. Cache invalidation
+    redisService.clearCache('/api/tasks').catch(() => {});
+    redisService.clearCache('/api/tasks/my').catch(() => {});
+    redisService.clearCache('/api/needs').catch(() => {});
+    redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
+    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    redisService.removeFromSet('needs_to_rebroadcast', need_id).catch(() => {});
+
+    res.status(201).json({ message: 'Mission accepted! Head to the incident location.' });
   } catch (err) {
+    if (err.message.includes('already claimed')) {
+      return res.status(409).json({ message: err.message });
+    }
     console.error('[BROADCAST] Accept error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route   POST /api/tasks/reject-broadcast
+ * Dismisses a broadcast for this volunteer — they won't see it again.
+ */
+router.post('/reject-broadcast', auth, async (req, res) => {
+  const { need_id } = req.body;
+  if (!need_id) return res.status(400).json({ message: 'need_id is required' });
+
+  try {
+    const updated = await prisma.broadcastRequest.updateMany({
+      where: {
+        needId: need_id,
+        volunteerId: req.user.id,
+        status: 'pending',
+      },
+      data: { status: 'rejected' },
+    });
+
+    if (updated.count === 0) {
+      return res.status(404).json({ message: 'Broadcast not found or already handled.' });
+    }
+
+    // Invalidate cache so dismissed card disappears on next poll
+    redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
+
+    res.json({ message: 'Broadcast dismissed.' });
+  } catch (err) {
+    console.error('[BROADCAST] Reject error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -348,7 +445,7 @@ router.post('/accept-broadcast', auth, async (req, res) => {
 /**
  * @route   GET /api/tasks/broadcast-status/:needId
  */
-router.get('/broadcast-status/:needId', auth, async (req, res) => {
+router.get('/broadcast-status/:needId', auth, cache(60), async (req, res) => {
   if (req.user.role !== 'coordinator') return res.status(403).json({ message: 'Access denied' });
 
   try {

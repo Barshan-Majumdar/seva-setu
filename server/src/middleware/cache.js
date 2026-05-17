@@ -11,9 +11,10 @@ const cacheMiddleware = (ttl = 30) => {
       return next();
     }
 
-    // Generate a unique cache key based on path, user role, and query params
+    // Generate a unique cache key based on path, user ID (if auth), and query params
     const queryStr = JSON.stringify(req.query);
-    const key = `${req.baseUrl}${req.path}:${req.user?.role || 'public'}:${queryStr}`;
+    const userId = req.user?.id || 'public';
+    const key = `${req.baseUrl}${req.path}:${userId}:${queryStr}`;
 
     try {
       const cachedData = await redisService.getCache(key);

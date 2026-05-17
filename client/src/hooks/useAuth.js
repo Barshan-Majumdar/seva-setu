@@ -20,12 +20,13 @@ export const useAuth = () => {
       : null,
     isAuthenticated: Boolean(isLoaded && isSignedIn),
     login: () => {},
-    logout: () => {
-      signOut();
+    logout: async () => {
       localStorage.removeItem('token');
       localStorage.removeItem('currentUser');
       localStorage.removeItem('dbRole');
       localStorage.removeItem('pendingRole');
+      await signOut();
+      window.location.href = '/';
     },
   };
 };

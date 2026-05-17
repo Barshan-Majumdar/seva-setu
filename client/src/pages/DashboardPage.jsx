@@ -22,6 +22,7 @@ const DashboardPage = () => {
     setFilters,
     districts,
     sortedNeeds,
+    volunteers,
     selectedNeedId,
     setSelectedNeedId,
     sorting,
@@ -126,6 +127,7 @@ const DashboardPage = () => {
               <div className="dashboard-main-stack">
                 <NeedsHeatmap
                   needs={sortedNeeds}
+                  volunteers={volunteers}
                   selectedNeedId={selectedNeedId}
                   setSelectedNeedId={setSelectedNeedId}
                   onDispatch={openDispatchModal}

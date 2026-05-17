@@ -50,7 +50,7 @@ const deriveCenter = (needs) => {
   return [latAvg, lngAvg];
 };
 
-const NeedsHeatmap = ({ needs, selectedNeedId, setSelectedNeedId, onDispatch }) => {
+const NeedsHeatmap = ({ needs, volunteers = [], selectedNeedId, setSelectedNeedId, onDispatch }) => {
   const center = useMemo(() => deriveCenter(needs), [needs]);
   const selectedNeed = useMemo(() => needs.find(n => n.id === selectedNeedId), [needs, selectedNeedId]);
 
@@ -64,6 +64,7 @@ const NeedsHeatmap = ({ needs, selectedNeedId, setSelectedNeedId, onDispatch }) 
           <span><i style={{ background: '#f59e0b' }} /> Shelter</span>
           <span><i style={{ background: '#8b5cf6' }} /> Education</span>
           <span><i style={{ background: '#64748b' }} /> Other</span>
+          <span><i style={{ background: '#3b82f6' }} /> Volunteer</span>
         </div>
       </div>
 
@@ -73,6 +74,37 @@ const NeedsHeatmap = ({ needs, selectedNeedId, setSelectedNeedId, onDispatch }) 
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
+        {volunteers.map((vol) => {
+          if (!vol.lat || !vol.lng) return null;
+          return (
+            <CircleMarker
+              key={vol.user_id}
+              center={[Number(vol.lat), Number(vol.lng)]}
+              radius={8}
+              pathOptions={{
+                color: '#fff',
+                fillColor: '#3b82f6',
+                fillOpacity: 0.9,
+                weight: 2,
+                className: 'volunteer-pulse-marker',
+              }}
+            >
+              <Popup>
+                <div className="space-y-1 min-w-40">
+                  <div className="flex items-center gap-2">
+                    <span style={{ background: '#3b82f6', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                      VOLUNTEER
+                    </span>
+                    <p className="font-semibold text-sm">{vol.name}</p>
+                  </div>
+                  <p className="text-xs text-slate-600">Phone: {vol.phone || 'N/A'}</p>
+                  <p className="text-xs text-slate-600">Status: {vol.is_available ? 'Available' : 'Busy'}</p>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
 
         {needs
           .filter((n) => n.status !== 'completed' && n.status !== 'archived')

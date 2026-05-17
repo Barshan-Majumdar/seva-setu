@@ -132,22 +132,25 @@ flowchart TD
         V -.->|Sync Queue| IDB
     end
 
-    subgraph API ["⚙️ Application Layer (Node.js + Express)"]
+    subgraph API ["⚙️ Application Layer (Node.js + Express + Socket.io)"]
         direction TB
         Auth[[🛡️ Clerk Auth Middleware]]:::backend
         Routes[[🔗 Core API Routes]]:::backend
+        Sockets[[🔌 Real-Time WebSocket Sync]]:::backend
         Services[[🛠️ Matching & Dispatch]]:::backend
         Workers[[🔄 BullMQ Job Workers]]:::backend
 
         Auth --> Routes
-        Routes --> Services
+        Routes --> Sockets
+        Sockets --> Services
         Services --> Workers
     end
 
-    subgraph Data ["🗄️ Persistence Layer (3D Data Stores)"]
+    subgraph Data ["🗄️ Persistence Layer (Zero-CU Architecture)"]
         direction LR
-        PG[(🐘 PostgreSQL + PostGIS)]:::db
-        Redis[(⚡ Redis Cache & Queue)]:::db
+        Redis[(⚡ Redis Cache & Queue<br><i>Memory-First Serving</i>)]:::db
+        PG[(🐘 NeonDB PostgreSQL<br><i>0 CU Autosuspend Mode</i>)]:::db
+        Redis -.->|Throttled Writes| PG
     end
 
     subgraph AI ["🧠 Intelligence Layer (Python)"]
@@ -166,12 +169,14 @@ flowchart TD
 
     %% Flow Connections
     L & F & V & C ====>|REST / JWT| Auth
+    V & C ====>|Socket.io / Beacon| Sockets
     F -.->|WhatsApp Chat| WhatsApp
     WhatsApp -.->|Webhook| Routes
 
     Routes -.->|Store Images| ImgKit
     Routes -.->|LLM Chat| Gemini
     
+    Routes ====>|High-Frequency Reads| Redis
     Services ====>|Geospatial Queries| PG
     Services ====>|Queue Jobs| Redis
     Workers <====|Consume Jobs| Redis
@@ -199,10 +204,11 @@ flowchart TD
 ### Backend
 | Technology | Purpose |
 |---|---|
-| **Node.js 20 + Express** | REST API server |
+| **Node.js 20 + Express** | REST API server with `express.urlencoded` & `express.text` beacon parsing |
 | **Prisma ORM** | Type-safe database client |
 | **PostgreSQL + PostGIS** | Geo-spatial queries (`ST_Distance`, `ST_DWithin`) |
-| **Redis + BullMQ** | Job queues & rate-limit caching |
+| **Redis + BullMQ** | In-memory API caching (`cache(60)`), write throttling, and background queues |
+| **Socket.io** | Real-time event-driven UI synchronization |
 | **Clerk Backend SDK** | Session token verification |
 | **Twilio** | WhatsApp bot integration |
 | **Google Gemini 2.5 Flash** | SevaBot AI chatbot engine |
@@ -456,8 +462,12 @@ Deploy the `server/` directory with:
 
 > See [`ai-service/huggingface_deployment.md`](ai-service/huggingface_deployment.md) for the full step-by-step guide.
 
-### Database → Neon
-Use [Neon](https://neon.tech) for serverless PostgreSQL with PostGIS extension enabled.
+### Database → Neon Serverless Postgres (Zero-CU Autosuspend)
+Use [Neon](https://neon.tech) for serverless PostgreSQL with the PostGIS extension enabled. 
+**SevaSetu is fully optimized for Neon's 0 CU Autosuspend feature:**
+- **Zero Background Polling:** All client-side `setInterval` polling loops have been eliminated and replaced with real-time Socket.io event-driven synchronization.
+- **Memory-First Serving:** High-frequency API reads are served entirely from Redis RAM (`cache(60)`), allowing NeonDB to sleep gracefully during idle hours and saving cloud compute costs.
+- **Throttled GPS Writes:** Live volunteer coordinates are buffered in Redis and throttled to Postgres writes only once every 10 minutes.
 
 <!-- ═══════════════════ WAVE DIVIDER ═══════════════════ -->
 <img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=14&height=1" width="100%" alt="divider" />

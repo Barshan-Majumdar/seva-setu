@@ -99,9 +99,10 @@
 
 .volunteer-task-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.7rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .volunteer-task-meta {
@@ -238,6 +239,22 @@
   flex-wrap: wrap;
 }
 
+.badge-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.22rem 0.6rem;
+  background: rgba(5, 150, 105, 0.08);
+  border: 1px solid rgba(5, 150, 105, 0.2);
+  border-radius: 9999px;
+  color: #059669;
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
 .volunteer-pill {
   display: inline-flex;
   align-items: center;
@@ -248,6 +265,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .volunteer-pill-assigned {

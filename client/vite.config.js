@@ -10,10 +10,27 @@ export default defineConfig({
     tailwindcss(),
   ],
   resolve: {
-    // Force a single React instance to prevent "dispatcher is null" / "Invalid hook call" errors
-    alias: {
-      'react': path.resolve('./node_modules/react'),
-      'react-dom': path.resolve('./node_modules/react-dom'),
-    }
-  }
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    entries: [
+      'src/main.jsx',
+      'src/pages/**/*.jsx',
+      'src/components/**/*.jsx'
+    ],
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@clerk/react',
+      '@clerk/themes',
+      'framer-motion',
+      'lucide-react',
+      'react-leaflet',
+      'leaflet',
+      'socket.io-client',
+      'axios',
+      'exifr'
+    ],
+  },
 })
