@@ -3,6 +3,7 @@ import { useAuth } from '@clerk/react';
 import { Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import Logo from '../components/Logo';
+import api from '../services/api';
 
 /**
  * PostLoginRedirect — the single smart entry point after any auth.
@@ -26,14 +27,9 @@ const PostLoginRedirect = () => {
         if (!token || cancelled) return;
 
         localStorage.setItem('token', token);
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
-        const res = await fetch(`${apiUrl}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) throw new Error('Failed to fetch user');
-        const data = await res.json();
+        const res = await api.get('/auth/me');
+        const data = res.data;
 
         localStorage.setItem('dbRole', data.role);
         localStorage.setItem(
@@ -46,16 +42,9 @@ const PostLoginRedirect = () => {
           if (data.role === 'volunteer') {
             navigator.geolocation.getCurrentPosition(
               async (pos) => {
-                await fetch(`${apiUrl}/volunteers/me/location`, {
-                  method: 'PATCH',
-                  headers: { 
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                  }),
+                await api.patch('/volunteers/me/location', {
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
                 }).catch(console.error);
               },
               console.error,
