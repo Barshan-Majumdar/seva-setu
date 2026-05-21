@@ -65,8 +65,9 @@ module.exports = async (req, res, next) => {
       const email = primaryEmailObj?.emailAddress;
 
       if (email) {
-        dbUser = await prisma.user.findUnique({
-          where: { email },
+        // Use findFirst with mode: 'insensitive' to ignore case differences from Google/Clerk
+        dbUser = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
           select: { id: true, role: true, email: true, name: true, volunteer: { select: { updatedAt: true } } }
         });
 
@@ -82,9 +83,9 @@ module.exports = async (req, res, next) => {
           console.log(`[auth] New user detected (${email}), creating in DB...`);
           const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || clerkUser.username || 'User';
 
-          // Check whitelist table
-          const isWhitelisted = await prisma.coordinatorEmail.findUnique({
-            where: { email },
+          // Check whitelist table (case-insensitive)
+          const isWhitelisted = await prisma.coordinatorEmail.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
           });
           
           const assignedRole = isWhitelisted ? 'coordinator' : 'user';
