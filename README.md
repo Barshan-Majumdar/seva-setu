@@ -203,6 +203,7 @@ flowchart TD
 <!-- ═══════════════════ WAVE DIVIDER ═══════════════════ -->
 <img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=14&height=1" width="100%" alt="divider" />
 
+
 ## 🧰 Tech Stack
 
 ### Frontend
