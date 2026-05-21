@@ -158,7 +158,7 @@ flowchart TD
     %% 4. Intelligence & External
     subgraph External ["🧠 AI & External Providers"]
         direction LR
-        FastAPI[[🚀 FastAPI (CLIP ViT-L)]]:::ai
+        FastAPI[["🚀 FastAPI (CLIP ViT-L)"]]:::ai
         WhatsApp>WhatsApp Bot]:::thirdparty
         Gemini>Google Gemini]:::thirdparty
     end
