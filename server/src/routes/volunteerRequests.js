@@ -173,13 +173,13 @@ router.patch('/:id/approve', auth, async (req, res) => {
       timeout: 20000,
     });
 
-    // 4. Invalidate the promoted user's cache so they immediately get the 'volunteer' role
+    // 4. Invalidate the promoted user's Redis auth cache so they immediately get the 'volunteer' role
     const promotedUser = await prisma.user.findUnique({
       where: { id: request.userId },
       select: { clerkId: true }
     });
-    if (promotedUser && promotedUser.clerkId && global.authCache) {
-      global.authCache.delete(promotedUser.clerkId);
+    if (promotedUser && promotedUser.clerkId) {
+      await redisService.clearCache(`auth_user:${promotedUser.clerkId}`);
     }
 
     // Invalidate caches

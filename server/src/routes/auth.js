@@ -148,11 +148,23 @@ router.post('/set-role', auth, async (req, res) => {
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
       data: { role },
-      select: { id: true, role: true, name: true, email: true },
+      select: { id: true, role: true, name: true, email: true, clerkId: true },
     });
 
     console.log(`[auth] Role set for user ${updatedUser.id}: ${role}`);
-    res.json(updatedUser);
+    
+    // Invalidate the auth cache so the new role takes effect instantly!
+    const redisService = require('../services/redisService');
+    if (updatedUser.clerkId) {
+      await redisService.clearCache(`auth_user:${updatedUser.clerkId}`);
+    }
+
+    res.json({
+      id: updatedUser.id,
+      role: updatedUser.role,
+      name: updatedUser.name,
+      email: updatedUser.email
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

@@ -1,6 +1,8 @@
 const prisma = require('../config/db');
 const { getClerkUser, verifyClerkJwt } = require('../services/clerkService');
 
+const redisService = require('../services/redisService');
+
 /**
  * Authentication Middleware
  * Validates Clerk session token from Authorization header.
@@ -33,14 +35,16 @@ module.exports = async (req, res, next) => {
     return res.status(401).json({ message: 'Invalid Clerk token payload' });
   }
 
-  // ── Step 1.5: Fast In-Memory Cache (Prevents DB pool timeouts from polling) ──
-  // Cache user context for 15 seconds to absorb high-frequency auto-polling.
-  // NOTE: Cache is keyed by clerkUserId so a fresh login always re-fetches the correct role.
-  if (!global.authCache) global.authCache = new Map();
-  const cached = global.authCache.get(clerkUserId);
-  if (cached && cached.expires > Date.now()) {
-    req.user = cached.user;
-    return next();
+  // ── Step 1.5: Redis Distributed Cache (Zero-CU Architecture) ──
+  // Cache user context for 1 hour to completely offload auth checks from NeonDB
+  try {
+    const cachedUser = await redisService.getCache(`auth_user:${clerkUserId}`);
+    if (cachedUser) {
+      req.user = cachedUser;
+      return next();
+    }
+  } catch (err) {
+    console.warn('[auth] Redis cache error:', err.message);
   }
 
   // ── Step 2: Optimized DB Lookup ─────────────────────────────────────
@@ -65,8 +69,9 @@ module.exports = async (req, res, next) => {
       const email = primaryEmailObj?.emailAddress;
 
       if (email) {
-        dbUser = await prisma.user.findUnique({
-          where: { email },
+        // Use findFirst with mode: 'insensitive' to ignore case differences from Google/Clerk
+        dbUser = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
           select: { id: true, role: true, email: true, name: true, volunteer: { select: { updatedAt: true } } }
         });
 
@@ -82,9 +87,9 @@ module.exports = async (req, res, next) => {
           console.log(`[auth] New user detected (${email}), creating in DB...`);
           const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || clerkUser.username || 'User';
 
-          // Check whitelist table
-          const isWhitelisted = await prisma.coordinatorEmail.findUnique({
-            where: { email },
+          // Check whitelist table (case-insensitive)
+          const isWhitelisted = await prisma.coordinatorEmail.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
           });
           
           const assignedRole = isWhitelisted ? 'coordinator' : 'user';
@@ -150,11 +155,12 @@ module.exports = async (req, res, next) => {
       isNewUser: !dbUser.volunteer // Simple heuristic or just pass true if it was newly created
     };
 
-    // Save to cache for 15 seconds
-    global.authCache.set(clerkUserId, {
-      user: req.user,
-      expires: Date.now() + 15000,
-    });
+    // Save to Redis Distributed Cache for 1 hour (3600 seconds)
+    try {
+      await redisService.setCache(`auth_user:${clerkUserId}`, req.user, 3600);
+    } catch (err) {
+      console.warn('[auth] Failed to cache user in Redis:', err.message);
+    }
 
     next();
   } catch (err) {

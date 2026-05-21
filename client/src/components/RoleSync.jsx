@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useAuth as useClerkAuth } from '@clerk/react';
 
+import api from '../services/api';
+
 /**
  * RoleSync — invisible component that runs once on mount.
  *
@@ -35,19 +37,14 @@ const RoleSync = ({ onReady }) => {
 
         localStorage.setItem('token', token);
 
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-        const res = await fetch(`${apiUrl}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          localStorage.setItem('dbRole', data.role);
-          localStorage.setItem(
-            'currentUser',
-            JSON.stringify({ id: data.id, name: data.name, email: data.email, role: data.role })
-          );
-        }
+        const res = await api.get('/auth/me');
+        const data = res.data;
+        
+        localStorage.setItem('dbRole', data.role);
+        localStorage.setItem(
+          'currentUser',
+          JSON.stringify({ id: data.id, name: data.name, email: data.email, role: data.role })
+        );
       } catch (err) {
         // Non-fatal — let the app continue even if sync fails
         console.warn('[RoleSync] Sync failed, continuing:', err.message);
