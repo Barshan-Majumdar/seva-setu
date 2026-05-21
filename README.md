@@ -118,85 +118,60 @@ Rigorous vetting system for volunteers requiring manual coordinator review and i
 
 ```mermaid
 flowchart TD
-    %% Isometric / 3D Styling using Shadows and Depth
+    %% Styling
     classDef client fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc,rx:10px,ry:10px,shadow:true;
     classDef backend fill:#0f172a,stroke:#34d399,stroke-width:2px,color:#f8fafc,rx:10px,ry:10px,shadow:true;
     classDef db fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,shadow:true;
     classDef ai fill:#0f172a,stroke:#a78bfa,stroke-width:2px,color:#f8fafc,rx:10px,ry:10px,shadow:true;
     classDef thirdparty fill:#1e293b,stroke:#64748b,stroke-width:2px,stroke-dasharray: 5 5,color:#cbd5e1,rx:10px,ry:10px;
 
+    %% 1. Client Layer
     subgraph Client ["🖥️ Presentation Layer (React + PWA)"]
         direction LR
-        L[Landing]:::client
-        F[Field App]:::client
-        V[Volunteer App]:::client
-        C[Command Center]:::client
-        
+        Apps[[React Apps<br><i>Command Center, Field, Volunteer</i>]]:::client
         IDB[(Offline IndexedDB)]:::db
-        F -.->|Sync Queue| IDB
-        V -.->|Sync Queue| IDB
-    end
-
-    subgraph Gateway ["🌐 Smart Routing Layer"]
-        direction TB
-        LB[[⚖️ Client-Side Load Balancer<br><i>Sticky Sessions & Auto-Failover</i>]]:::client
-    end
-
-    subgraph API ["⚙️ Application Layer (Node.js + Express + Socket.io)"]
-        direction TB
-        Server1[[🟢 Primary Server Instance]]:::backend
-        Server2[[🔵 Secondary Server Instance]]:::backend
+        LB[[⚖️ Client-Side Load Balancer<br><i>Sticky Sessions & Failover</i>]]:::client
         
-        Auth[[🛡️ Auth Middleware<br><i>Redis-backed JWT Cache</i>]]:::backend
-        Routes[[🔗 Core API Routes]]:::backend
-        Sockets[[🔌 Real-Time WebSocket Sync]]:::backend
-        Services[[🛠️ Matching & Dispatch]]:::backend
-        Workers[[🔄 BullMQ Job Workers]]:::backend
-
-        Server1 --> Auth
-        Server2 --> Auth
-        Auth --> Routes
-        Routes --> Sockets
-        Sockets --> Services
-        Services --> Workers
+        Apps -.->|Sync Queue| IDB
+        Apps ====>|Fetch Interceptor| LB
     end
 
+    %% 2. Application Layer
+    subgraph API ["⚙️ Application Layer (Node.js Cluster)"]
+        direction LR
+        Servers[[🟢 Multi-Server Pool]]:::backend
+        Auth[[🛡️ Zero-CU Auth Middleware]]:::backend
+        Routes[[🔗 REST API & WebSockets]]:::backend
+        Workers[[🔄 Background Job Workers]]:::backend
+
+        Servers --> Auth --> Routes -.->|Queues Tasks| Workers
+    end
+
+    %% 3. Persistence Layer
     subgraph Data ["🗄️ Persistence Layer (Zero-CU Architecture)"]
         direction LR
-        Redis[(⚡ Redis Cache & Queue<br><i>Memory-First Serving</i>)]:::db
-        PG[(🐘 NeonDB PostgreSQL<br><i>0 CU Autosuspend Mode</i>)]:::db
+        Redis[(⚡ Redis Memory<br><i>Caching & Queues</i>)]:::db
+        PG[(🐘 NeonDB PostgreSQL<br><i>Autosuspend Mode</i>)]:::db
         Redis -.->|Throttled Writes| PG
     end
 
-    subgraph AI ["🧠 Intelligence Layer (Python)"]
-        direction TB
-        FastAPI[[🚀 FastAPI Service]]:::ai
-        Model((🤖 CLIP ViT-L Model)):::ai
-        FastAPI --> Model
-    end
-
-    subgraph External ["🌐 External Providers"]
+    %% 4. Intelligence & External
+    subgraph External ["🧠 AI & External Providers"]
         direction LR
+        FastAPI[[🚀 FastAPI (CLIP ViT-L)]]:::ai
         WhatsApp>WhatsApp Bot]:::thirdparty
         Gemini>Google Gemini]:::thirdparty
-        ImgKit>ImageKit CDN]:::thirdparty
     end
 
-    %% Flow Connections
-    L & F & V & C ====>|Fetch Interceptor| LB
-    LB ====>|Sticky REST / JWT| Server1 & Server2
-    V & C ====>|Socket.io / Beacon| Sockets
-    F -.->|WhatsApp Chat| WhatsApp
-    WhatsApp -.->|Webhook| Routes
-
-    Routes -.->|Store Images| ImgKit
-    Routes -.->|LLM Chat| Gemini
+    %% Cross-Layer Connections
+    LB ====>|REST & Sockets| Servers
     
     Routes ====>|High-Frequency Reads| Redis
-    Services ====>|Geospatial Queries| PG
-    Services ====>|Queue Jobs| Redis
-    Workers <====|Consume Jobs| Redis
+    Routes ====>|Geospatial Queries| PG
+    Routes -.->|LLM Chat| Gemini
+    WhatsApp -.->|Webhook| Routes
     
+    Workers <====|Consumes Jobs| Redis
     Workers ====>|Verify Photos| FastAPI
 ```
 
