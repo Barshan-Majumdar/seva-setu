@@ -388,7 +388,8 @@ python main.py                 # Start on http://localhost:8000
 | Variable | Description | Example |
 |---|---|---|
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk frontend key | `pk_test_...` |
-| `VITE_API_BASE_URL` | Backend API URL | `http://localhost:5000/api` |
+| `VITE_API_BASE_URL` | Primary Backend API URL | `http://localhost:5000/api` |
+| `VITE_API_SECONDARY_BASE_URL` | Secondary Backend API URL (Load Balancing/Failover) | `http://localhost:5001/api` |
 | `VITE_TWILIO_WHATSAPP_NUMBER` | WhatsApp sandbox number | `+14155238886` |
 | `VITE_TWILIO_SANDBOX_CODE` | Sandbox join code | `join ...` |
 

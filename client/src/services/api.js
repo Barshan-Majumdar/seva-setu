@@ -34,9 +34,48 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+const API_SECONDARY_BASE_URL = import.meta.env.VITE_API_SECONDARY_BASE_URL || 'http://localhost:5001/api';
+
+const SERVERS = [API_BASE_URL, API_SECONDARY_BASE_URL];
+
+// Load assigned server from storage, or pick one randomly for proper 50/50 load balancing
+let currentBaseUrl = localStorage.getItem('assigned_server');
+
+if (!currentBaseUrl || !SERVERS.includes(currentBaseUrl)) {
+  // Flip a coin to distribute load evenly across both servers
+  currentBaseUrl = SERVERS[Math.floor(Math.random() * SERVERS.length)];
+  localStorage.setItem('assigned_server', currentBaseUrl);
+}
+
+// Set the initial base URL for this user's session
+api.defaults.baseURL = currentBaseUrl;
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Check if error is due to server unavailability (network error, timeout, or 5xx)
+    const isNetworkOrServerError = !error.response || (error.response && error.response.status >= 500);
+
+    if (isNetworkOrServerError && originalRequest && !originalRequest._retryCount) {
+      originalRequest._retryCount = 1;
+      
+      // Identify which server actually failed
+      const failedUrl = originalRequest.baseURL;
+      
+      // Pick the other server
+      const alternativeUrl = failedUrl === API_BASE_URL ? API_SECONDARY_BASE_URL : API_BASE_URL;
+      
+      // Update our state to the alternative server
+      currentBaseUrl = alternativeUrl;
+      api.defaults.baseURL = currentBaseUrl;
+      originalRequest.baseURL = currentBaseUrl;
+      localStorage.setItem('assigned_server', currentBaseUrl);
+      
+      return api(originalRequest);
+    }
+
     if (error?.response?.status === 401) {
       // Only clear stale credentials — do NOT force-navigate.
       // Navigation is handled by React components (ProtectedRoute)
