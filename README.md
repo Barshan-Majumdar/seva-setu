@@ -96,6 +96,11 @@ Every disaster report and task completion is cross-verified using a **dual-engin
 - **WhatsApp Reporting Bot** (Twilio-powered) — report distress without installing the app
 - **SevaBot** — role-aware AI chatbot powered by Gemini 2.5 Flash
 
+### ⚖️ High Availability & Load Balancing
+- **Client-Side Load Balancer** with sticky sessions dynamically splits traffic 50/50 across multiple backend nodes.
+- **Zero-CU Auth Cache** uses Redis to cache JWT verification for 1 hour, preventing NeonDB autosuspend wakeups for standard browsing.
+- **Auto-Failover** instantly detects 5xx or Network Errors and retries requests on a healthy secondary server without failing the user.
+
 ### 👥 Multi-Role Ecosystem
 | Role | Workspace | Capabilities |
 |---|---|---|
@@ -132,14 +137,24 @@ flowchart TD
         V -.->|Sync Queue| IDB
     end
 
+    subgraph Gateway ["🌐 Smart Routing Layer"]
+        direction TB
+        LB[[⚖️ Client-Side Load Balancer<br><i>Sticky Sessions & Auto-Failover</i>]]:::client
+    end
+
     subgraph API ["⚙️ Application Layer (Node.js + Express + Socket.io)"]
         direction TB
-        Auth[[🛡️ Clerk Auth Middleware]]:::backend
+        Server1[[🟢 Primary Server Instance]]:::backend
+        Server2[[🔵 Secondary Server Instance]]:::backend
+        
+        Auth[[🛡️ Auth Middleware<br><i>Redis-backed JWT Cache</i>]]:::backend
         Routes[[🔗 Core API Routes]]:::backend
         Sockets[[🔌 Real-Time WebSocket Sync]]:::backend
         Services[[🛠️ Matching & Dispatch]]:::backend
         Workers[[🔄 BullMQ Job Workers]]:::backend
 
+        Server1 --> Auth
+        Server2 --> Auth
         Auth --> Routes
         Routes --> Sockets
         Sockets --> Services
@@ -168,7 +183,8 @@ flowchart TD
     end
 
     %% Flow Connections
-    L & F & V & C ====>|REST / JWT| Auth
+    L & F & V & C ====>|Fetch Interceptor| LB
+    LB ====>|Sticky REST / JWT| Server1 & Server2
     V & C ====>|Socket.io / Beacon| Sockets
     F -.->|WhatsApp Chat| WhatsApp
     WhatsApp -.->|Webhook| Routes
