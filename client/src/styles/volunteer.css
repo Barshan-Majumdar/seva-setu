@@ -374,57 +374,14 @@
   }
 }
 
-/* ── Large desktop: two-column workspace layout ─────────────── */
+/* ── Large desktop: central vertical layout ─────────────── */
 @media (min-width: 1024px) {
   .volunteer-shell {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto;
-    align-items: start;
-    gap: 1.25rem;
-    max-width: 1400px;
-    margin: 0 auto;
+    grid-template-columns: minmax(0, 800px);
+    justify-content: center;
+    max-width: 100%;
+    margin-inline: auto;
     padding-inline: 2rem;
-  }
-
-  /* Hero spans full width */
-  .volunteer-hero {
-    grid-column: 1 / -1;
-  }
-
-  /* Broadcast spans full width when present */
-  .volunteer-broadcast-container {
-    grid-column: 1 / -1;
-    margin-bottom: 0;
-  }
-
-  /* Stats spans full width */
-  .volunteer-stats-grid {
-    grid-column: 1 / -1;
-  }
-
-  /* Availability card: left column */
-  .volunteer-availability {
-    grid-column: 1 / 2;
-  }
-
-  /* Task list: right column, spans down */
-  .volunteer-task-list {
-    grid-column: 2 / 3;
-    grid-row: 4 / span 3;
-  }
-
-  /* Loading/error/empty: right column */
-  .volunteer-loading,
-  .volunteer-error {
-    grid-column: 2 / 3;
-  }
-}
-
-/* ── Extra wide: even roomier layout ───────────────────────── */
-@media (min-width: 1280px) {
-  .volunteer-shell {
-    grid-template-columns: 380px 1fr;
-    gap: 1.5rem;
   }
 }
 

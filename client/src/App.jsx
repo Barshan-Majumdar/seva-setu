@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AuthTokenBridge from './components/AuthTokenBridge';
 import RoleSync from './components/RoleSync';
 import ChatWidget from './components/ChatWidget';
+import ServerMaintenanceAlert from './components/ServerMaintenanceAlert';
 import { useAuth } from './hooks/useAuth';
 
 // Lazy load all pages
@@ -49,6 +50,7 @@ function MainContent() {
 
   return (
     <>
+      <ServerMaintenanceAlert />
       <AuthTokenBridge />
       <RoleSync onReady={handleSyncReady} />
 

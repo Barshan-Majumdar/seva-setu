@@ -55,6 +55,8 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 h1,
@@ -83,20 +85,8 @@ button {
    ══════════════════════════════════════════════════════════════ */
 
 ::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.18);
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 0.3);
+  display: none;
+  width: 0;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -770,39 +760,11 @@ button {
 
 @media (min-width: 1024px) {
   .volunteer-shell {
-    grid-template-columns: 360px 1fr;
-    align-items: start;
-    gap: 1.25rem;
-    max-width: 1400px;
+    grid-template-columns: minmax(0, 800px);
+    justify-content: center;
+    max-width: 100%;
     margin-inline: auto;
     padding-inline: 2rem;
-  }
-
-  /* Full-width rows */
-  .volunteer-hero,
-  .volunteer-broadcast-container,
-  .volunteer-stats-grid {
-    grid-column: 1 / -1;
-  }
-
-  /* Left column: availability + controls */
-  .volunteer-availability {
-    grid-column: 1 / 2;
-  }
-
-  /* Right column: task list */
-  .volunteer-task-list,
-  .volunteer-loading,
-  .volunteer-error,
-  .volunteer-empty {
-    grid-column: 2 / 3;
-  }
-}
-
-@media (min-width: 1280px) {
-  .volunteer-shell {
-    grid-template-columns: 400px 1fr;
-    gap: 1.5rem;
   }
 }
 
