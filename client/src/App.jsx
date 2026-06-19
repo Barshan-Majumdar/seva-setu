@@ -50,7 +50,7 @@ function MainContent() {
 
   return (
     <>
-      <ServerMaintenanceAlert />
+      {/* <ServerMaintenanceAlert /> */}
       <AuthTokenBridge />
       <RoleSync onReady={handleSyncReady} />
 
