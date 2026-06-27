@@ -101,14 +101,18 @@ const UserDashboardPage = () => {
       <div className="user-dashboard-shell container-lg">
 
         {/* ── Hero ───────────────────────────────────────────── */}
-        <section className="user-dashboard-hero card">
-          <p className="landing-eyebrow">Community Dashboard</p>
-          <h1 className="user-dashboard-title">
-            Report incidents. Track progress. Make an impact.
-          </h1>
-          <p className="user-dashboard-subtitle">
-            You can report community needs and track their status. Want to do more? Apply to become a verified volunteer.
-          </p>
+        <section className="dashboard-hero-premium">
+          <div className="dashboard-hero-top">
+            <div className="dashboard-hero-text">
+              <p className="landing-eyebrow" style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.5rem' }}>Community Dashboard</p>
+              <h1 className="dashboard-title-premium">
+                Report incidents. Track progress. Make an impact.
+              </h1>
+              <p className="dashboard-subtitle-premium">
+                You can report community needs and track their status. Want to do more? Apply to become a verified volunteer.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* ── Quick Actions ──────────────────────────────────── */}
@@ -185,7 +189,7 @@ const UserDashboardPage = () => {
               {applicationStatus === 'approved' && (
                 <button
                   type="button"
-                  className="bg-accent-moss hover:bg-accent-moss-dark text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-accent-moss/20"
+                  className="dashboard-dispatch-btn-premium primary"
                   style={{ marginTop: '1rem' }}
                   onClick={() => {
                     localStorage.removeItem('dbRole');

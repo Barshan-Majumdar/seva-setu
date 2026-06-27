@@ -47,28 +47,27 @@ const DashboardPage = () => {
   return (
     <MainLayout>
       <div className="dashboard-shell container-lg">
-        <section className="dashboard-hero">
+        <section className="dashboard-hero-premium">
           <div className="dashboard-hero-top">
             <div className="dashboard-hero-text">
-              <p className="landing-eyebrow">Coordinator Command Center</p>
-              <h1 className="dashboard-title">Real-time aid orchestration from report to resolution.</h1>
-              <p className="dashboard-subtitle">
+              <p className="landing-eyebrow" style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.5rem' }}>Coordinator Command Center</p>
+              <h1 className="dashboard-title-premium">Real-time aid orchestration from report to resolution.</h1>
+              <p className="dashboard-subtitle-premium">
                 Filter needs, inspect urgency heatmap, dispatch ranked volunteers, and move work through the task pipeline.
               </p>
             </div>
             <div className="dashboard-hero-actions">
               <Link 
                 to="/field"
-                className="dashboard-dispatch-btn" 
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-surface-secondary)' }}
+                className="dashboard-dispatch-btn-premium primary" 
               >
                 <Plus size={14} />
                 Report New Need
               </Link>
               <Link
                 to="/volunteer-approvals"
-                className="dashboard-dispatch-btn"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-surface-secondary)', position: 'relative' }}
+                className="dashboard-dispatch-btn-premium"
+                style={{ position: 'relative' }}
               >
                 <UserCheck size={14} />
                 Requests
@@ -87,8 +86,7 @@ const DashboardPage = () => {
               </Link>
               <button 
                 onClick={() => setShowManager(true)}
-                className="dashboard-dispatch-btn" 
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-surface-secondary)' }}
+                className="dashboard-dispatch-btn-premium" 
               >
                 <Settings size={14} />
                 Manage Coordinators
@@ -113,7 +111,7 @@ const DashboardPage = () => {
           <>
             <DashboardSummaryCards summary={summary} />
 
-            <section className="dashboard-layout">
+            <section className="dashboard-layout" style={{ marginTop: '1.5rem', marginBottom: '2rem' }}>
               <aside className="dashboard-sidebar">
                 <DashboardFilters 
                   filters={filters} 

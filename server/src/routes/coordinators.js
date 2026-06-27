@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../config/db');
 const auth = require('../middleware/auth');
 const cache = require('../middleware/cache');
+const redisService = require('../services/redisService');
 
 const router = express.Router();
 
@@ -114,6 +115,11 @@ router.post('/', auth, async (req, res) => {
       data: { email: email.toLowerCase() },
     });
 
+    // --- SMART INVALIDATION ---
+    await redisService.clearCache('/api/coordinators').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    // ──────────────────────────
+
     res.status(201).json(newCoordinator);
   } catch (err) {
     console.error(err);
@@ -154,6 +160,11 @@ router.delete('/:id', auth, async (req, res) => {
       where: { email: record.email },
       data: { role: 'volunteer' },
     });
+
+    // --- SMART INVALIDATION ---
+    await redisService.clearCache('/api/coordinators').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    // ──────────────────────────
 
     res.json({ message: 'Coordinator removed' });
   } catch (err) {

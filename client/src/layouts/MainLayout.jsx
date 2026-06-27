@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -49,9 +49,10 @@ const LANDING_NAV = [
   { href: '#roles',     label: 'Roles' },
 ];
 
-const MainLayout = ({ children }) => {
+const MainLayout = ({ children, hideFooter = false }) => {
   const { isAuthenticated, currentUser, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
   const role = currentUser?.role;
   const authNavLinks = NAV_BY_ROLE[role] || [];
 
@@ -62,6 +63,117 @@ const MainLayout = ({ children }) => {
     logout();
   };
 
+  // ── Authenticated SaaS Layout ──────────────────────────────
+  if (isAuthenticated) {
+    return (
+      <div className="saas-layout-root">
+        {/* Desktop Sidebar */}
+        <aside className="saas-sidebar">
+          <div className="saas-sidebar-header">
+            <Link to={DASHBOARD_BY_ROLE[role] || '/'} className="nav-logo-link" style={{ gap: '0.75rem' }}>
+              <Logo size={28} />
+              <span className="nav-logo-text" style={{ fontSize: '1.2rem' }}>SevaSetu</span>
+            </Link>
+          </div>
+          
+          <nav className="saas-sidebar-nav">
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0 1rem', marginBottom: '0.5rem' }}>
+              Menu
+            </p>
+            {authNavLinks.map(({ to, label, Icon }) => {
+              const isActive = location.pathname === to;
+              return (
+                <Link key={to} to={to} className={`saas-nav-link ${isActive ? 'active' : ''}`} onClick={closeMenu}>
+                  <Icon size={18} />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="saas-sidebar-footer">
+            {role && (
+              <div style={{ marginBottom: '1rem' }}>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '0.06em', padding: '0.35rem 0.75rem',
+                  borderRadius: '6px', background: 'rgba(45, 97, 72, 0.08)',
+                  border: '1px solid rgba(45, 97, 72, 0.15)', color: '#2d6148',
+                  display: 'inline-block'
+                }}>
+                  {role.replace('_', ' ')}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              className="saas-nav-link danger"
+            >
+              <LogOut size={18} />
+              Sign Out
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <div className="saas-main-wrapper">
+          {/* Topbar (Mobile hamburger + User profile) */}
+          <header className="saas-topbar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button
+                className="saas-mobile-hamburger"
+                onClick={() => setMenuOpen(true)}
+              >
+                <Menu size={20} />
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <span className="saas-topbar-title">{DASHBOARD_LABEL_BY_ROLE[role] || 'Dashboard'}</span>
+              {/* Optional: Add user avatar or notification bell here */}
+            </div>
+          </header>
+
+          {/* Mobile slide-out menu */}
+          {menuOpen && (
+            <div className="saas-mobile-menu-overlay" onClick={closeMenu}>
+              <div className="saas-mobile-menu-content" onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <Link to={DASHBOARD_BY_ROLE[role] || '/'} className="nav-logo-link">
+                     <Logo size={24} />
+                     <span className="nav-logo-text">SevaSetu</span>
+                   </Link>
+                   <button onClick={closeMenu} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={24} color="#64748b" /></button>
+                </div>
+                <nav className="saas-sidebar-nav">
+                  {authNavLinks.map(({ to, label, Icon }) => {
+                    const isActive = location.pathname === to;
+                    return (
+                      <Link key={to} to={to} className={`saas-nav-link ${isActive ? 'active' : ''}`} onClick={closeMenu}>
+                        <Icon size={18} />
+                        {label}
+                      </Link>
+                    );
+                  })}
+                  <div style={{ margin: '1rem 0', height: 1, background: 'var(--color-border)' }} />
+                  <button onClick={handleLogout} className="saas-nav-link danger">
+                    <LogOut size={18} />
+                    Sign Out
+                  </button>
+                </nav>
+              </div>
+            </div>
+          )}
+
+          <main className="saas-main-content">
+            {children}
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Unauthenticated Landing Page Layout ──────────────────────
   return (
     <div className="layout-root">
 
@@ -72,7 +184,7 @@ const MainLayout = ({ children }) => {
           {/* Logo */}
           <div className="nav-left">
             <Link
-              to={isAuthenticated ? (DASHBOARD_BY_ROLE[role] || '/') : '/'}
+              to="/"
               className="nav-logo-link"
               onClick={closeMenu}
             >
@@ -82,55 +194,16 @@ const MainLayout = ({ children }) => {
 
             {/* Desktop nav links */}
             <div className="nav-links-desktop">
-              {!isAuthenticated
-                ? LANDING_NAV.map(({ href, label }) => (
-                    <a key={href} href={href} className="nav-link">{label}</a>
-                  ))
-                : authNavLinks.map(({ to, label }) => (
-                    <Link key={to} to={to} className="nav-link">{label}</Link>
-                  ))
-              }
+              {LANDING_NAV.map(({ href, label }) => (
+                <a key={href} href={href} className="nav-link">{label}</a>
+              ))}
             </div>
           </div>
 
           {/* Right side — desktop */}
           <div className="nav-actions">
-            {!isAuthenticated ? (
-              <>
-                <Link to="/login" className="nav-link">Sign in</Link>
-                <Link to="/register" className="btn-primary nav-cta">Join the Mission</Link>
-              </>
-            ) : (
-              <>
-                {role && (
-                  <span style={{
-                    fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '0.06em', padding: '0.25rem 0.65rem',
-                    borderRadius: 9999, background: 'rgba(45, 97, 72, 0.08)',
-                    border: '1px solid rgba(45, 97, 72, 0.18)', color: '#2d6148',
-                  }}>
-                    {role.replace('_', ' ')}
-                  </span>
-                )}
-
-                {DASHBOARD_BY_ROLE[role] && (
-                  <Link to={DASHBOARD_BY_ROLE[role]} className="btn-primary nav-cta">
-                    {DASHBOARD_LABEL_BY_ROLE[role]}
-                  </Link>
-                )}
-
-                <div className="nav-user-section">
-                  <button
-                    onClick={logout}
-                    className="nav-link"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                  >
-                    <LogOut size={14} />
-                    Logout
-                  </button>
-                </div>
-              </>
-            )}
+            <Link to="/login" className="nav-link">Sign in</Link>
+            <Link to="/register" className="btn-primary nav-cta">Join the Mission</Link>
 
             {/* Hamburger — mobile only */}
             <button
@@ -147,42 +220,12 @@ const MainLayout = ({ children }) => {
 
       {/* ── Mobile slide-down menu ─────────────────────────────── */}
       <div className={`nav-mobile-menu${menuOpen ? ' is-open' : ''}`} role="navigation">
-        {!isAuthenticated ? (
-          <>
-            {LANDING_NAV.map(({ href, label }) => (
-              <a key={href} href={href} className="nav-mobile-link" onClick={closeMenu}>{label}</a>
-            ))}
-            <div className="nav-mobile-divider" />
-            <Link to="/login" className="nav-mobile-link" onClick={closeMenu}>Sign in</Link>
-            <Link to="/register" className="nav-mobile-link nav-mobile-cta" onClick={closeMenu}>Join the Mission</Link>
-          </>
-        ) : (
-          <>
-            {role && (
-              <span className="nav-mobile-role-badge">{role.replace('_', ' ')}</span>
-            )}
-            {authNavLinks.map(({ to, label, Icon }) => (
-              <Link key={to} to={to} className="nav-mobile-link" onClick={closeMenu}>
-                <Icon size={16} />
-                {label}
-              </Link>
-            ))}
-            <div className="nav-mobile-divider" />
-            {DASHBOARD_BY_ROLE[role] && (
-              <Link to={DASHBOARD_BY_ROLE[role]} className="nav-mobile-link nav-mobile-cta" onClick={closeMenu}>
-                {DASHBOARD_LABEL_BY_ROLE[role]}
-              </Link>
-            )}
-            <button
-              onClick={handleLogout}
-              className="nav-mobile-link"
-              style={{ color: '#c35d51', fontWeight: 600, width: '100%', textAlign: 'left' }}
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
-          </>
-        )}
+        {LANDING_NAV.map(({ href, label }) => (
+          <a key={href} href={href} className="nav-mobile-link" onClick={closeMenu}>{label}</a>
+        ))}
+        <div className="nav-mobile-divider" />
+        <Link to="/login" className="nav-mobile-link" onClick={closeMenu}>Sign in</Link>
+        <Link to="/register" className="nav-mobile-link nav-mobile-cta" onClick={closeMenu}>Join the Mission</Link>
       </div>
 
       {/* Overlay — closes menu when tapping outside */}
@@ -203,7 +246,7 @@ const MainLayout = ({ children }) => {
       </main>
 
       {/* ── Footer ────────────────────────────────────────────── */}
-      {!isAuthenticated ? (
+      {!hideFooter && (
         <footer className="site-footer">
           <div className="container-lg">
             <div className="footer-grid">
@@ -245,15 +288,6 @@ const MainLayout = ({ children }) => {
                   <a href="#">Careers</a>
                 </nav>
               </div>
-
-              <div className="footer-col-newsletter">
-                <h4>Stay Updated</h4>
-                <p>Get updates on new features and impact stories.</p>
-                <div className="footer-newsletter-form">
-                  <input type="email" placeholder="Enter your email" />
-                  <button type="button"><Send size={16} /></button>
-                </div>
-              </div>
             </div>
 
             <div className="footer-bottom">
@@ -266,25 +300,6 @@ const MainLayout = ({ children }) => {
                 <a href="#">GitHub</a>
               </div>
             </div>
-          </div>
-        </footer>
-      ) : (
-        <footer style={{
-          borderTop: '1px solid rgba(15, 23, 29, 0.06)',
-          background: '#ffffff',
-          padding: '1rem 0',
-        }}>
-          <div className="container-lg" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            flexWrap: 'wrap', gap: '0.5rem',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Logo size={20} />
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>SevaSetu</span>
-            </div>
-            <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              © 2026 SevaSetu Open Initiative
-            </p>
           </div>
         </footer>
       )}

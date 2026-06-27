@@ -5,9 +5,9 @@ const RolesSection = () => {
   const [activeRole, setActiveRole] = useState('field');
 
   const roles = [
-    { id: 'field', label: 'Field Worker', icon: <Smartphone size={18} /> },
-    { id: 'coordinator', label: 'Coordinator', icon: <LayoutDashboard size={18} /> },
+    { id: 'field', label: 'User', icon: <Smartphone size={18} /> },
     { id: 'volunteer', label: 'Volunteer', icon: <UserCheck size={18} /> },
+    { id: 'coordinator', label: 'Coordinator', icon: <LayoutDashboard size={18} /> },
   ];
 
   return (
@@ -57,7 +57,6 @@ const RolesSection = () => {
                <div className="role-text">
                 <h3>Command with total visibility.</h3>
                 <p>Monitor high-urgency clusters on a real-time heatmap. Use our smart matching engine to dispatch the right volunteers to the right place in seconds.</p>
-                <button className="btn-primary mt-4">Open Command Center <LayoutDashboard size={18} /></button>
               </div>
               <div className="role-visual">
                 <div className="dashboard-preview-wrap">
@@ -76,7 +75,15 @@ const RolesSection = () => {
                   <h3>Actionable tasks. Verifiable impact.</h3>
                   <p>Receive assignments matched to your specific skill set and location. Use GPS-backed check-ins to provide NGOs with immediate proof of your progress and impact.</p>
                 </div>
-                
+                <div className="role-visual">
+                  <div className="phone-mockup-wrap">
+                    <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600" className="role-img-main" alt="Volunteer App" />
+                    <div className="floating-imgs">
+                      <img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&q=80&w=300" alt="Teamwork" />
+                      <img src="https://images.unsplash.com/photo-1509099836639-18ba1795216d?auto=format&fit=crop&q=80&w=300" alt="Helping" />
+                    </div>
+                  </div>
+                </div>
              </div>
           )}
         </div>

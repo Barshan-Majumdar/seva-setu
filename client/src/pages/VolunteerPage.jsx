@@ -114,18 +114,17 @@ const VolunteerPage = () => {
 
   return (
     <MainLayout>
-      <div className="container-lg volunteer-shell">
-        <section className="volunteer-hero card">
-          <p className="landing-eyebrow">Volunteer Workspace v2.1</p>
-          <h1 className="volunteer-title">Mobile mission console for field execution.</h1>
-          <div className="flex gap-4 mt-2 text-[10px] font-mono text-text-muted opacity-50">
-            {/* <span>LAT: {volunteerCoords?.lat?.toFixed(5) || 'N/A'}</span>
-            <span>LNG: {volunteerCoords?.lng?.toFixed(5) || 'N/A'}</span>
-            <span>ACC: {distanceCoveredKm.toFixed(2)}km</span> */}
+      <div className="volunteer-shell">
+        <section className="dashboard-hero-premium">
+          <div className="dashboard-hero-top">
+            <div className="dashboard-hero-text">
+              <p className="landing-eyebrow" style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.5rem' }}>Volunteer Workspace v2.1</p>
+              <h1 className="dashboard-title-premium">Mobile mission console for field execution.</h1>
+              <p className="dashboard-subtitle-premium">
+                Stay available, check in at incident sites, and close tasks with live status sync.
+              </p>
+            </div>
           </div>
-          <p className="volunteer-subtitle">
-            Stay available, check in at incident sites, and close tasks with live status sync.
-          </p>
         </section>
 
         {broadcasts.length > 0 && (
@@ -163,17 +162,17 @@ const VolunteerPage = () => {
           </article>
         </section>
 
-        <section className="card volunteer-availability">
-          <div>
-            <p className="volunteer-stat-label">Availability</p>
-            <p className="text-sm text-text-secondary mt-1">
-              {availability ? 'You are available for new assignments' : 'You are currently unavailable'}
-            </p>
+        <section className="card volunteer-availability" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p className="volunteer-stat-label" style={{ margin: 0 }}>Availability</p>
+            <button type="button" className="volunteer-toggle-btn" onClick={toggleAvailability}>
+              {availability ? <ToggleRight className="w-5 h-5 text-accent-green" /> : <ToggleLeft className="w-5 h-5" />}
+              {availability ? 'ON' : 'OFF'}
+            </button>
           </div>
-          <button type="button" className="volunteer-toggle-btn" onClick={toggleAvailability}>
-            {availability ? <ToggleRight className="w-5 h-5 text-accent-green" /> : <ToggleLeft className="w-5 h-5" />}
-            {availability ? 'ON' : 'OFF'}
-          </button>
+          <p className="text-sm text-text-secondary">
+            {availability ? 'You are available for new assignments' : 'You are currently unavailable'}
+          </p>
         </section>
 
         {loading ? (
@@ -316,7 +315,7 @@ const VolunteerPage = () => {
                   {task.task_status === 'assigned' ? (
                     <button
                       type="button"
-                      className="btn-primary"
+                      className="btn-success"
                       onClick={() => checkInTask(task)}
                       disabled={busyTaskId === task.task_id}
                     >
@@ -462,7 +461,7 @@ const VolunteerPage = () => {
                             {/* Option 1: Live Camera */}
                             <button
                               type="button"
-                              className="btn-primary w-full"
+                              className="btn-success w-full"
                               style={{ minHeight: '50px' }}
                               onClick={(e) => {
                                 e.preventDefault();
@@ -516,24 +515,8 @@ const VolunteerPage = () => {
                         ) : (
                           <button
                             type="button"
-                            style={{
-                              width: '100%',
-                              minHeight: '60px',
-                              backgroundColor: '#2d6148',
-                              color: 'white',
-                              borderRadius: '12px',
-                              fontWeight: '800',
-                              fontSize: '1rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '12px',
-                              boxShadow: '0 10px 25px rgba(45, 97, 72, 0.3)',
-                              border: '2px solid rgba(255, 255, 255, 0.2)',
-                              cursor: 'pointer',
-                              zIndex: 10,
-                              position: 'relative'
-                            }}
+                            className="btn-success"
+                            style={{ width: '100%', padding: '0.8rem', minHeight: '60px' }}
                             onClick={(e) => {
                               e.preventDefault();
                               onCompleteMission(task, selectedFiles[task.task_id].file);

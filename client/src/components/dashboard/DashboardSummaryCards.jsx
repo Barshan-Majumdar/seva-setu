@@ -49,7 +49,6 @@ const DashboardSummaryCards = ({ summary }) => {
         <article
           className="dashboard-summary-card"
           key={card.label}
-          style={{ borderColor: card.border }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
@@ -64,22 +63,18 @@ const DashboardSummaryCards = ({ summary }) => {
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }} />
               ) : (
-                <p className="dashboard-summary-value" style={{ color: card.color }}>
+                <p className="dashboard-summary-value">
                   {card.value ?? 0}
                 </p>
               )}
             </div>
             <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: card.bg,
-              border: `1px solid ${card.border}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              color: '#64748b'
             }}>
-              <card.icon size={20} style={{ color: card.color }} />
+              <card.icon size={20} strokeWidth={1.5} />
             </div>
           </div>
         </article>

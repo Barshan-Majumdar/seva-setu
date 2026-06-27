@@ -40,7 +40,7 @@ export const FEATURE_GROUPS = [
 
 export const ROLE_CARDS = [
   {
-    title: 'Field Workers',
+    title: 'Users',
     label: 'Report fast',
     description: 'Capture needs from affected communities with mobile-first forms, location, and offline safety.',
   },

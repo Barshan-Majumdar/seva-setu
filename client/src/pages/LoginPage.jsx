@@ -12,7 +12,7 @@ const LoginPage = () => {
   }
 
   return (
-    <MainLayout>
+    <MainLayout hideFooter={true}>
       <section className="auth-shell">
         <div className="auth-visual-side">
           <img src="/images/auth-side.png" alt="Mission coordination" />

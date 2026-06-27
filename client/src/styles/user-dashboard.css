@@ -3,38 +3,14 @@
    ══════════════════════════════════════════════════════════════ */
 
 .user-dashboard-shell {
-  padding-block: clamp(2rem, 2vw + 1.5rem, 3.5rem);
+  padding-bottom: 3.5rem;
   display: grid;
   gap: 1.25rem;
-  background: #f8fafc;
 }
 
-/* ── Hero ──────────────────────────────────────────────────── */
+/* .user-dashboard-hero is now styled globally in index.css as a premium hero */
 
-.user-dashboard-hero {
-  padding: clamp(1.5rem, 1.8vw + 0.8rem, 2.25rem);
-  background: linear-gradient(
-    135deg,
-    rgba(45, 97, 72, 0.06),
-    rgba(255, 255, 255, 0)
-  );
-  border-color: rgba(45, 97, 72, 0.1) !important;
-}
-
-.user-dashboard-title {
-  font-size: clamp(1.4rem, 2.2vw, 2.2rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: #0f171d;
-  font-weight: 800;
-}
-
-.user-dashboard-subtitle {
-  margin-top: 0.7rem;
-  color: #475569;
-  line-height: 1.6;
-  max-width: 65ch;
-}
+/* .user-dashboard-hero is now styled globally in index.css as a premium hero */
 
 /* ── Quick Actions Grid ─────────────────────────────────────── */
 
@@ -44,34 +20,36 @@
 }
 
 .user-dashboard-action-card {
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
   cursor: pointer;
   text-decoration: none;
   color: inherit;
-  position: relative;
-  overflow: hidden;
   background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 
 .user-dashboard-action-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-card-hover);
   border-color: rgba(45, 97, 72, 0.2) !important;
 }
 
 .user-dashboard-action-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  border: 1px solid;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  background: transparent !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
 }
 
 .user-dashboard-action-title {
@@ -103,12 +81,10 @@
 
 .user-dashboard-volunteer-section {
   padding: 1.5rem;
-  background: linear-gradient(
-    135deg,
-    rgba(45, 97, 72, 0.04),
-    rgba(255, 255, 255, 0)
-  );
-  border-color: rgba(45, 97, 72, 0.1) !important;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 
 .user-dashboard-volunteer-header {
@@ -119,11 +95,11 @@
 }
 
 .user-dashboard-volunteer-icon-wrap {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: rgba(45, 97, 72, 0.06);
-  border: 1px solid rgba(45, 97, 72, 0.15);
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
