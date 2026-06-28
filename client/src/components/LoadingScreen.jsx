@@ -28,14 +28,15 @@ const LoadingScreen = ({ onComplete }) => {
   // Framer Motion Configurations
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 0.6 } },
-    exit: { opacity: 0, scale: 1.05, filter: 'blur(10px)', transition: { duration: 0.6, ease: 'easeInOut' } }
+    visible: { opacity: 1, transition: { duration: 0.8, ease: "easeOut" } },
+    exit: { opacity: 0, scale: 1.05, filter: 'blur(12px)', transition: { duration: 0.8, ease: "easeInOut" } }
   };
 
   const fillVariants = {
-    hidden: { scaleX: 0, scaleY: 0 },
-    visibleH: { scaleX: 1, transition: { duration: 1.2, ease: "easeInOut" } },
-    visibleV: { scaleY: 1, transition: { duration: 1.2, ease: "easeInOut" } }
+    hiddenH: { width: "0%" },
+    visibleH: { width: "100%", transition: { duration: 1.8, ease: "easeInOut" } },
+    hiddenV: { height: "0%" },
+    visibleV: { height: "100%", transition: { duration: 1.8, ease: "easeInOut" } }
   };
 
   // Determine node states
@@ -59,7 +60,10 @@ const LoadingScreen = ({ onComplete }) => {
 
           <div className="ls-brand">
             <Logo size={32} className="ls-brand-logo" />
-            <span className="ls-brand-seva">Seva</span><span className="ls-brand-setu">Setu</span>
+            <div style={{ display: 'flex' }}>
+              <span className="ls-brand-seva">Seva</span>
+              <span className="ls-brand-setu">Setu</span>
+            </div>
           </div>
 
           <div className="ls-content">
@@ -68,7 +72,7 @@ const LoadingScreen = ({ onComplete }) => {
               {/* Node 1: User Need */}
               <div className={`ls-node-wrapper ${getNodeState(0)}`}>
                 <div className="ls-icon-transparent">
-                  {/* Keep animation running if stage >= 0 */}
+                  {/* Stage 0 immediately starts pulsing */}
                   <Search size={40} className={stage >= 0 ? "icon-pulse" : ""} />
                 </div>
                 <div className="ls-text">
@@ -82,17 +86,15 @@ const LoadingScreen = ({ onComplete }) => {
                 <motion.div 
                   className="ls-connector-fill"
                   variants={fillVariants}
-                  initial="hidden"
-                  animate={stage >= 1 ? (window.innerWidth > 768 ? "visibleH" : "visibleV") : "hidden"}
-                  style={{ originX: 0, originY: 0 }}
+                  initial={window.innerWidth > 768 ? "hiddenH" : "hiddenV"}
+                  animate={stage >= 0 ? (window.innerWidth > 768 ? "visibleH" : "visibleV") : (window.innerWidth > 768 ? "hiddenH" : "hiddenV")}
                 />
-                {stage === 0 && <div className="ls-connector-light" />}
               </div>
 
               {/* Node 2: Bridge */}
               <div className={`ls-node-wrapper ${getNodeState(1)}`}>
                 <div className="ls-icon-transparent">
-                  {/* Keep animation running if stage >= 1 */}
+                  {/* Starts spinning exactly when Connector 1 finishes (stage 1) */}
                   <LinkIcon size={40} className={stage >= 1 ? "icon-spin" : ""} />
                 </div>
                 <div className="ls-text">
@@ -106,17 +108,15 @@ const LoadingScreen = ({ onComplete }) => {
                 <motion.div 
                   className="ls-connector-fill"
                   variants={fillVariants}
-                  initial="hidden"
-                  animate={stage >= 2 ? (window.innerWidth > 768 ? "visibleH" : "visibleV") : "hidden"}
-                  style={{ originX: 0, originY: 0 }}
+                  initial={window.innerWidth > 768 ? "hiddenH" : "hiddenV"}
+                  animate={stage >= 1 ? (window.innerWidth > 768 ? "visibleH" : "visibleV") : (window.innerWidth > 768 ? "hiddenH" : "hiddenV")}
                 />
-                {stage === 1 && <div className="ls-connector-light" />}
               </div>
 
               {/* Node 3: Relief */}
               <div className={`ls-node-wrapper ${getNodeState(2)}`}>
                 <div className="ls-icon-transparent">
-                  {/* Keep animation running if stage >= 2 */}
+                  {/* Starts bouncing exactly when Connector 2 finishes (stage 2) */}
                   <HeartHandshake size={40} className={stage >= 2 ? "icon-bounce" : ""} />
                 </div>
                 <div className="ls-text">
