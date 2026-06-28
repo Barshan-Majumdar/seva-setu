@@ -1,5 +1,6 @@
-import { lazy, Suspense, useState, useCallback } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { ClerkProvider } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
@@ -8,7 +9,14 @@ import AuthTokenBridge from './components/AuthTokenBridge';
 import RoleSync from './components/RoleSync';
 import ChatWidget from './components/ChatWidget';
 import ServerMaintenanceAlert from './components/ServerMaintenanceAlert';
+import LoadingScreen from './components/LoadingScreen';
 import { useAuth } from './hooks/useAuth';
+
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+if (!PUBLISHABLE_KEY) {
+  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in your .env file');
+}
 
 // Lazy load all pages
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -34,6 +42,43 @@ const PageLoader = ({ text = 'Synchronizing' }) => (
     </div>
   </div>
 );
+
+/**
+ * ClerkProviderWithRouter — Wraps Clerk around our React Router.
+ * This fixes the blank/whitescreen issue on login because Clerk now 
+ * pushes navigation events directly into React Router instead of fighting it via window.history.
+ */
+function ClerkProviderWithRouter({ children }) {
+  const navigate = useNavigate();
+  return (
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
+      appearance={{
+        variables: {
+          colorPrimary: '#2d6148',
+          colorBackground: '#ffffff',
+          colorInputBackground: '#ffffff',
+          colorInputText: '#0f171d',
+          colorText: '#0f171d',
+          colorTextSecondary: '#475569',
+          colorTextOnPrimaryBackground: '#ffffff',
+          borderRadius: '0.75rem',
+          fontFamily: 'Inter, Manrope, sans-serif',
+        },
+        elements: {
+          cardBox: { boxShadow: '0 40px 100px rgba(0, 0, 0, 0.05)', border: '1px solid rgba(15, 23, 29, 0.08)' },
+          card: { background: '#ffffff', borderRadius: '24px' },
+          footer: { background: 'transparent' },
+          footerAction: { color: '#2d6148' },
+        }
+      }}
+    >
+      {children}
+    </ClerkProvider>
+  );
+}
 
 /**
  * MainContent — rendered INSIDE Router so all hooks have full context.
@@ -151,10 +196,22 @@ function MainContent() {
  * NO hooks called at this level.
  */
 function App() {
+  const [showIntro, setShowIntro] = useState(() => {
+    return !sessionStorage.getItem('introShown');
+  });
+
+  const handleIntroComplete = useCallback(() => {
+    sessionStorage.setItem('introShown', 'true');
+    setShowIntro(false);
+  }, []);
+
   return (
     <ErrorBoundary>
+      {showIntro && <LoadingScreen onComplete={handleIntroComplete} />}
       <Router>
-        <MainContent />
+        <ClerkProviderWithRouter>
+          <MainContent />
+        </ClerkProviderWithRouter>
       </Router>
     </ErrorBoundary>
   );
