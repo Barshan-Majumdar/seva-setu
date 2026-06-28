@@ -1,7 +1,7 @@
 /* ── Auth Page Revamp ───────────────────────────────────────── */
 
 .auth-shell {
-  min-height: calc(100vh - 80px);
+  min-height: 100vh;
   display: flex;
   background: #ffffff;
   width: 100%;
@@ -228,7 +228,7 @@
   }
   .auth-form-side {
     padding: 1.5rem 0.75rem;
-    min-height: calc(100vh - 60px);
+    min-height: 100vh;
   }
   .auth-card {
     padding: 2.5rem 1.25rem 1.5rem;

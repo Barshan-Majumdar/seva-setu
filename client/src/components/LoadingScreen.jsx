@@ -27,7 +27,7 @@ const LoadingScreen = ({ onComplete }) => {
 
   // Framer Motion Configurations
   const containerVariants = {
-    hidden: { opacity: 0 },
+    hidden: { opacity: 1 },
     visible: { opacity: 1, transition: { duration: 0.8, ease: "easeOut" } },
     exit: { opacity: 0, scale: 1.05, filter: 'blur(12px)', transition: { duration: 0.8, ease: "easeInOut" } }
   };

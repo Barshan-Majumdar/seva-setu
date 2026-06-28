@@ -49,7 +49,7 @@ const LANDING_NAV = [
   { href: '#roles',     label: 'Roles' },
 ];
 
-const MainLayout = ({ children, hideFooter = false }) => {
+const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
   const { isAuthenticated, currentUser, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
@@ -178,7 +178,8 @@ const MainLayout = ({ children, hideFooter = false }) => {
     <div className="layout-root">
 
       {/* ── Navbar ─────────────────────────────────────────────── */}
-      <header className="site-header">
+      {!hideHeader && (
+        <header className="site-header">
         <nav className="container-lg nav-bar">
 
           {/* Logo */}
@@ -216,20 +217,23 @@ const MainLayout = ({ children, hideFooter = false }) => {
             </button>
           </div>
         </nav>
-      </header>
+        </header>
+      )}
 
       {/* ── Mobile slide-down menu ─────────────────────────────── */}
-      <div className={`nav-mobile-menu${menuOpen ? ' is-open' : ''}`} role="navigation">
+      {!hideHeader && (
+        <div className={`nav-mobile-menu${menuOpen ? ' is-open' : ''}`} role="navigation">
         {LANDING_NAV.map(({ href, label }) => (
           <a key={href} href={href} className="nav-mobile-link" onClick={closeMenu}>{label}</a>
         ))}
         <div className="nav-mobile-divider" />
         <Link to="/login" className="nav-mobile-link" onClick={closeMenu}>Sign in</Link>
         <Link to="/register" className="nav-mobile-link nav-mobile-cta" onClick={closeMenu}>Join the Mission</Link>
-      </div>
+        </div>
+      )}
 
       {/* Overlay — closes menu when tapping outside */}
-      {menuOpen && (
+      {!hideHeader && menuOpen && (
         <div
           onClick={closeMenu}
           style={{
