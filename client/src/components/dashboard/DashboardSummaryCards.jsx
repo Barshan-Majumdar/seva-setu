@@ -1,9 +1,8 @@
 import { Users, UserCheck, AlertTriangle, CheckCircle } from 'lucide-react';
 
 /**
- * DashboardSummaryCards — Shows real-time coordinator stats
- * pulled from the API via useCoordinatorDashboard.
- * Colors are earthy/professional, NOT the landing page palette.
+ * DashboardSummaryCards — Premium coordinator stats cards
+ * with colored accent lines and icon background circles.
  */
 const DashboardSummaryCards = ({ summary }) => {
   const isLoading = !summary || Object.keys(summary).length === 0;
@@ -13,33 +12,29 @@ const DashboardSummaryCards = ({ summary }) => {
       label: 'Open Needs',
       value: summary?.openNeeds,
       icon: AlertTriangle,
-      color: '#c35d51',        // rust — urgent
-      bg: 'rgba(195, 93, 81, 0.06)',
-      border: 'rgba(195, 93, 81, 0.15)',
+      color: '#c35d51',
+      bg: 'rgba(195, 93, 81, 0.07)',
     },
     {
       label: 'Active Volunteers',
       value: summary?.activeVolunteers,
       icon: UserCheck,
-      color: '#2d6148',        // moss — action
-      bg: 'rgba(45, 97, 72, 0.06)',
-      border: 'rgba(45, 97, 72, 0.15)',
+      color: '#2d6148',
+      bg: 'rgba(45, 97, 72, 0.07)',
     },
     {
       label: 'Total Members',
       value: summary?.totalUsers,
       icon: Users,
-      color: '#475569',        // slate — neutral
+      color: '#475569',
       bg: 'rgba(71, 85, 105, 0.06)',
-      border: 'rgba(71, 85, 105, 0.12)',
     },
     {
       label: 'Completed Today',
       value: summary?.completedToday,
       icon: CheckCircle,
-      color: '#059669',        // green — positive
-      bg: 'rgba(5, 150, 105, 0.06)',
-      border: 'rgba(5, 150, 105, 0.15)',
+      color: '#059669',
+      bg: 'rgba(5, 150, 105, 0.07)',
     },
   ];
 
@@ -57,7 +52,7 @@ const DashboardSummaryCards = ({ summary }) => {
                 <div style={{
                   height: '2rem',
                   width: '4rem',
-                  background: 'rgba(15, 23, 29, 0.06)',
+                  background: 'rgba(0, 0, 0, 0.04)',
                   borderRadius: '8px',
                   marginTop: '0.5rem',
                   animation: 'pulse 1.5s ease-in-out infinite',
@@ -68,13 +63,14 @@ const DashboardSummaryCards = ({ summary }) => {
                 </p>
               )}
             </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#64748b'
-            }}>
-              <card.icon size={20} strokeWidth={1.5} />
+            <div
+              className="dashboard-summary-icon"
+              style={{
+                background: card.bg,
+                color: card.color,
+              }}
+            >
+              <card.icon size={20} strokeWidth={1.8} />
             </div>
           </div>
         </article>

@@ -100,8 +100,9 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
     });
 
     // --- SMART INVALIDATION ---
-    redisService.clearCache('/api/needs').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    // --- SMART INVALIDATION ---
+    await redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
     // ──────────────────────────
 
     // Notify coordinator dashboard instantly — show 'pending' card in real-time
@@ -155,7 +156,7 @@ router.get('/:id/status', auth, async (req, res) => {
  * @desc    Get all needs with filters
  * @access  Private
  */
-router.get('/', auth, cache(60), async (req, res) => {
+router.get('/', auth, async (req, res) => {
   const { status, district, need_type, min_urgency } = req.query;
 
   try {
@@ -278,17 +279,21 @@ router.patch('/:id/status', auth, async (req, res) => {
     // If the status is now 'open', trigger the broadcast (mass dispatch)
     if (status === 'open' || status === 'accepted') {
       const { triggerBroadcast } = require('../services/matchingService');
-      triggerBroadcast(req.params.id, 2).catch(err => {
+      triggerBroadcast(req.params.id).catch(err => {
         console.error('[BROADCAST] Manual trigger failed:', err.message);
       });
     }
 
     // --- SMART INVALIDATION ---
-    redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/needs').catch(() => {});
     if (status === 'open' || status === 'accepted') {
-      redisService.addToSet('needs_to_rebroadcast', req.params.id).catch(() => {});
+      await redisService.addToSet('needs_to_rebroadcast', req.params.id).catch(() => {});
     }
     // ──────────────────────────
+    
+    if (global.io) {
+      global.io.emit('need_updated', { id: req.params.id, status });
+    }
 
     res.json({ message: 'Status updated' });
   } catch (err) {
@@ -351,9 +356,14 @@ router.delete('/:id', auth, async (req, res) => {
     });
 
     // --- SMART INVALIDATION ---
-    redisService.clearCache('/api/needs').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    // --- SMART INVALIDATION ---
+    await redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
     // ──────────────────────────
+    
+    if (global.io) {
+      global.io.emit('need_updated', { id: req.params.id, status: 'archived' });
+    }
 
     res.json({ message: 'Need archived successfully' });
   } catch (err) {

@@ -11,7 +11,7 @@ const router = express.Router();
  * @desc    Get all whitelisted coordinator emails
  * @access  Private (Coordinator)
  */
-router.get('/', auth, cache(60), async (req, res) => {
+router.get('/', auth, async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -32,7 +32,7 @@ router.get('/', auth, cache(60), async (req, res) => {
  * @desc    Get system-wide stats (total users, etc)
  * @access  Private (Coordinator)
  */
-router.get('/stats', auth, cache(60), async (req, res) => {
+router.get('/stats', auth, async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -113,6 +113,12 @@ router.post('/', auth, async (req, res) => {
 
     const newCoordinator = await prisma.coordinatorEmail.create({
       data: { email: email.toLowerCase() },
+    });
+
+    // Update existing user if they are already in the DB
+    await prisma.user.updateMany({
+      where: { email: email.toLowerCase() },
+      data: { role: 'coordinator' }
     });
 
     // --- SMART INVALIDATION ---

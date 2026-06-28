@@ -11,7 +11,7 @@ const router = express.Router();
  * @desc    Get all available volunteers (Coordinator view)
  * @access  Private (Coordinator only)
  */
-router.get('/', auth, cache(60), async (req, res) => {
+router.get('/', auth, async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -62,14 +62,26 @@ router.patch('/me/availability', auth, async (req, res) => {
     `;
     
     // Clear cache so coordinator and volunteer see the change immediately
-    redisService.clearCache('/api/volunteers').catch(() => {});
-    redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.clearCache('/api/volunteers').catch(() => {});
+    await redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
     // Broadcast instant availability change via Socket.io
     const io = req.app.get('io');
     if (io) {
-      io.emit('volunteer_availability_changed', { id: req.user.id, is_available });
+      // Also fetch full volunteer details so frontend can optimistically render them if they are completely new
+      const volDetails = await prisma.$queryRaw`
+        SELECT
+          u.id, u.name, u.email,
+          v.skills, v.is_available, v.tasks_completed, v.completion_rate, v.updated_at,
+          ST_X(v.location::geometry) as lng,
+          ST_Y(v.location::geometry) as lat
+        FROM volunteers v
+        JOIN users u ON v.user_id = u.id
+        WHERE u.id = ${req.user.id}::uuid
+      `;
+      const payload = volDetails && volDetails.length > 0 ? volDetails[0] : { id: req.user.id, is_available };
+      io.emit('volunteer_availability_changed', payload);
     }
     
     res.json({ message: 'Availability updated' });
@@ -215,9 +227,9 @@ router.post('/me/beacon-offline', async (req, res) => {
     `;
     
     // Clear cache immediately
-    redisService.clearCache('/api/volunteers').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
-    redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
+    await redisService.clearCache('/api/volunteers').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
     
     const io = req.app.get('io') || global.io;
     if (io) {
@@ -245,7 +257,7 @@ setInterval(async () => {
     `;
     if (result > 0) {
       console.log(`[HEARTBEAT] Marked ${result} stale volunteer(s) as OFFLINE.`);
-      redisService.clearCache('/api/volunteers').catch(() => {});
+      await redisService.clearCache('/api/volunteers').catch(() => {});
     }
   } catch (err) {
     console.error('[HEARTBEAT] Sweep error:', err.message);

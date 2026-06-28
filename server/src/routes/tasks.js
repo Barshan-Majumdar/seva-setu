@@ -46,10 +46,10 @@ router.post('/', auth, async (req, res) => {
     });
 
     // --- SMART INVALIDATION ---
-    redisService.clearCache('/api/tasks').catch(() => {});
-    redisService.clearCache('/api/tasks/my').catch(() => {});
-    redisService.clearCache('/api/needs').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.clearCache('/api/tasks').catch(() => {});
+    await redisService.clearCache('/api/tasks/my').catch(() => {});
+    await redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
     // ──────────────────────────
 
     if (global.io) {
@@ -99,10 +99,15 @@ router.patch('/:id/checkin', auth, async (req, res) => {
     });
 
     // --- SMART INVALIDATION ---
-    redisService.clearCache('/api/tasks').catch(() => {});
-    redisService.clearCache('/api/tasks/my').catch(() => {});
-    redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/tasks').catch(() => {});
+    await redisService.clearCache('/api/tasks/my').catch(() => {});
+    await redisService.clearCache('/api/needs').catch(() => {});
     // ──────────────────────────
+
+    if (global.io) {
+      global.io.emit('task_updated', { id: req.params.id, status: 'in_progress' });
+      global.io.emit('need_updated', { id: task.needId, status: 'in_progress' });
+    }
 
     res.json({ message: 'Checked in successfully' });
   } catch (err) {
@@ -185,8 +190,8 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
     });
 
     // Clear cache so coordinator and volunteer know it's being verified
-    redisService.clearCache('/api/tasks').catch(() => {});
-    redisService.clearCache('/api/tasks/my').catch(() => {});
+    await redisService.clearCache('/api/tasks').catch(() => {});
+    await redisService.clearCache('/api/tasks/my').catch(() => {});
 
     res.status(202).json({
       message: 'Task completion submitted and queued for verification.',
@@ -226,7 +231,7 @@ router.get('/:id/status', auth, async (req, res) => {
  * @route   GET /api/tasks/my
  * @desc    Get assigned tasks for the logged-in volunteer
  */
-router.get('/my', auth, cache(60), async (req, res) => {
+router.get('/my', auth, async (req, res) => {
   try {
     const tasks = await prisma.$queryRaw`
       SELECT
@@ -272,7 +277,7 @@ router.get('/my', auth, cache(60), async (req, res) => {
  * @route   GET /api/tasks
  * @desc    Get all tasks for coordinator dashboard
  */
-router.get('/', auth, cache(60), async (req, res) => {
+router.get('/', auth, async (req, res) => {
   if (req.user.role !== 'coordinator') {
     return res.status(403).json({ message: 'Access denied' });
   }
@@ -303,7 +308,7 @@ router.get('/', auth, cache(60), async (req, res) => {
 /**
  * @route   GET /api/tasks/my-broadcasts
  */
-router.get('/my-broadcasts', auth, cache(60), async (req, res) => {
+router.get('/my-broadcasts', auth, async (req, res) => {
   try {
     const broadcasts = await prisma.$queryRaw`
       SELECT
@@ -401,12 +406,12 @@ router.post('/accept-broadcast', auth, async (req, res) => {
     });
 
     // 4. Cache invalidation
-    redisService.clearCache('/api/tasks').catch(() => {});
-    redisService.clearCache('/api/tasks/my').catch(() => {});
-    redisService.clearCache('/api/needs').catch(() => {});
-    redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
-    redisService.removeFromSet('needs_to_rebroadcast', need_id).catch(() => {});
+    await redisService.clearCache('/api/tasks').catch(() => {});
+    await redisService.clearCache('/api/tasks/my').catch(() => {});
+    await redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.removeFromSet('needs_to_rebroadcast', need_id).catch(() => {});
 
     if (global.io) {
       global.io.emit('task_created', { needId: need_id, volunteerId: req.user.id });
@@ -447,7 +452,7 @@ router.post('/reject-broadcast', auth, async (req, res) => {
     }
 
     // Invalidate cache so dismissed card disappears on next poll
-    redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
+    await redisService.clearCache('/api/tasks/my-broadcasts').catch(() => {});
 
     if (global.io) {
       global.io.emit('broadcast_rejected', { needId: need_id, volunteerId: req.user.id });

@@ -118,7 +118,7 @@ const UserDashboardPage = () => {
         {/* ── Quick Actions ──────────────────────────────────── */}
         <section className="user-dashboard-actions-grid">
           <Link to="/field" className="user-dashboard-action-card card">
-            <div className="user-dashboard-action-icon" style={{ background: 'rgba(45, 97, 72, 0.08)', borderColor: 'rgba(45, 97, 72, 0.15)' }}>
+            <div className="user-dashboard-action-icon" style={{ background: 'rgba(45, 97, 72, 0.06)', border: '1px solid rgba(45, 97, 72, 0.1)' }}>
               <Plus className="w-6 h-6" style={{ color: '#2d6148' }} />
             </div>
             <div>
@@ -129,7 +129,7 @@ const UserDashboardPage = () => {
           </Link>
 
           <Link to="/my-reports" className="user-dashboard-action-card card">
-            <div className="user-dashboard-action-icon" style={{ background: 'rgba(71, 85, 105, 0.06)', borderColor: 'rgba(71, 85, 105, 0.12)' }}>
+            <div className="user-dashboard-action-icon" style={{ background: 'rgba(71, 85, 105, 0.05)', border: '1px solid rgba(71, 85, 105, 0.1)' }}>
               <FileText className="w-6 h-6" style={{ color: '#475569' }} />
             </div>
             <div>

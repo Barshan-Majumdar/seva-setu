@@ -77,8 +77,8 @@ io.on('connection', (socket) => {
           UPDATE volunteers SET is_available = false, updated_at = now() WHERE user_id = ${dbUserId}::uuid
         `;
         const redisService = require('./services/redisService');
-        redisService.clearCache('/api/volunteers').catch(() => {});
-        redisService.clearCache('/api/coordinators/stats').catch(() => {});
+        await redisService.clearCache('/api/volunteers').catch(() => {});
+        await redisService.clearCache('/api/coordinators/stats').catch(() => {});
         io.emit('volunteer_availability_changed', { id: dbUserId, is_available: false });
         console.log(`[SOCKET-DISCONNECT] Volunteer ${dbUserId} instantly marked OFFLINE.`);
       } catch (err) {
@@ -101,6 +101,15 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
+
+// Disable browser caching for all API routes to prevent stale optimistic updates
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
 
 // ── Root Route for Deployment Testing ───────────────────────────────
 app.get('/', (req, res) => {

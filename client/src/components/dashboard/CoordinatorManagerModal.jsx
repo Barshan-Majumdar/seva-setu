@@ -73,11 +73,11 @@ const CoordinatorManagerModal = ({ onClose }) => {
       <div className="dashboard-modal" style={{ maxWidth: '600px', backgroundColor: 'var(--color-surface-card)', borderRadius: '1rem', border: '1px solid var(--color-border)' }} onClick={(e) => e.stopPropagation()}>
         <div className="dashboard-modal-header" style={{ paddingBottom: '1rem', borderBottom: '1px solid var(--color-border)', marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ padding: '0.5rem', background: 'color-mix(in oklab, var(--color-surface-card) 90%, var(--color-accent-sky) 10%)', borderRadius: '0.5rem', color: 'var(--color-accent-sky)' }}>
+            <div style={{ padding: '0.5rem', background: 'rgba(45, 97, 72, 0.06)', borderRadius: '10px', color: '#2d6148', border: '1px solid rgba(45, 97, 72, 0.12)' }}>
               <ShieldAlert size={20} />
             </div>
             <div>
-              <h2 className="dashboard-card-title" style={{ margin: 0 }}>Manage Coordinators</h2>
+              <h2 className="dashboard-card-title" style={{ margin: 0, fontSize: '1.05rem' }}>Manage Coordinators</h2>
               <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', margin: 0 }}>Add or remove coordinator access for users.</p>
             </div>
           </div>
@@ -107,7 +107,7 @@ const CoordinatorManagerModal = ({ onClose }) => {
             style={{ flex: 1, padding: '0.75rem', background: 'var(--color-surface-secondary)', border: '1px solid var(--color-border)', borderRadius: '0.5rem', color: 'var(--color-text-primary)' }}
             disabled={actionLoading}
           />
-          <button type="submit" className="btn-primary" disabled={actionLoading || !emailInput}>
+          <button type="submit" className="dashboard-dispatch-btn-premium primary" style={{ padding: '0.5rem 1rem' }} disabled={actionLoading || !emailInput}>
             {actionLoading ? <Loader2 size={16} className="icon-spin" /> : <Plus size={16} />}
             Add
           </button>

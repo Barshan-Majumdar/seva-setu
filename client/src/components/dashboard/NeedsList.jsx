@@ -43,7 +43,7 @@ const NeedsList = ({
   const sortable = [
     { key: 'district', label: 'District' },
     { key: 'ward', label: 'Ward' },
-    { key: 'need_type', label: 'Need Type' },
+    { key: 'need_type', label: 'Type' },
     { key: 'urgency_score', label: 'Urgency' },
     { key: 'people_affected', label: 'People' },
     { key: 'status', label: 'Status' },
@@ -127,7 +127,7 @@ const NeedsList = ({
                 <td>{need.ward || '-'}</td>
                 <td className="capitalize">{need.need_type}</td>
                 <td>
-                  <span className="font-bold">{Number(need.urgency_score || 0).toFixed(1)}</span>
+                  <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: Number(need.urgency_score || 0) > 7 ? '#c35d51' : '#0f172a' }}>{Number(need.urgency_score || 0).toFixed(1)}</span>
                 </td>
                 <td>{need.people_affected || 0}</td>
                 <td>
@@ -143,17 +143,19 @@ const NeedsList = ({
                 </td>
                 <td>{formatElapsed(need.created_at)}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="dashboard-dispatch-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDispatch(need);
-                    }}
-                    disabled={need.status !== 'open' && need.status !== 'pending'}
-                  >
-                    Dispatch
-                  </button>
+                  {(need.status === 'open' || need.status === 'pending') && (
+                    <button
+                      type="button"
+                      className="dashboard-dispatch-btn-premium primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDispatch(need);
+                      }}
+                      style={{ fontSize: '0.72rem', padding: '0.35rem 0.75rem' }}
+                    >
+                      Dispatch
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

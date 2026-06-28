@@ -140,8 +140,8 @@ const aiWorker = new Worker('ai-verification', async (job) => {
           }
         }
       });
-      redisService.clearCache('/api/needs').catch(() => {});
-      redisService.clearCache('/api/coordinators/stats').catch(() => {});
+      await redisService.clearCache('/api/needs').catch(() => {});
+      await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
       if (global.io) {
         global.io.emit('need_updated', { id, status: finalVerified ? 'open' : 'rejected' });
@@ -151,7 +151,7 @@ const aiWorker = new Worker('ai-verification', async (job) => {
       if (finalVerified) {
         try {
           const { triggerBroadcast } = require('../services/matchingService');
-          await triggerBroadcast(id, 2);
+          await triggerBroadcast(id);
           await redisService.addToSet('needs_to_rebroadcast', id);
         } catch (e) { console.error('[Worker] Dispatch failed:', e.message); }
       }
@@ -187,12 +187,12 @@ const aiWorker = new Worker('ai-verification', async (job) => {
           }
         }
       });
-      redisService.clearCache('/api/tasks').catch(() => {});
-      redisService.clearCache('/api/tasks/my').catch(() => {});
-      redisService.clearCache('/api/needs').catch(() => {});
-      redisService.clearCache('/api/volunteers').catch(() => {});
-      redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
-      redisService.clearCache('/api/coordinators/stats').catch(() => {});
+      await redisService.clearCache('/api/tasks').catch(() => {});
+      await redisService.clearCache('/api/tasks/my').catch(() => {});
+      await redisService.clearCache('/api/needs').catch(() => {});
+      await redisService.clearCache('/api/volunteers').catch(() => {});
+      await redisService.clearCache('/api/volunteers/me/stats').catch(() => {});
+      await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
       if (global.io && updatedTask) {
         global.io.emit('task_updated', { id, status: finalVerified ? 'completed' : 'in_progress' });
@@ -219,13 +219,13 @@ const aiWorker = new Worker('ai-verification', async (job) => {
               where: { id },
               data: { imageUrl: finalImageUrl }
             });
-            redisService.clearCache('/api/needs').catch(() => {});
+            await redisService.clearCache('/api/needs').catch(() => {});
           } else if (type === 'task') {
             await prisma.task.update({
               where: { id },
               data: { completionImageUrl: finalImageUrl }
             });
-            redisService.clearCache('/api/tasks').catch(() => {});
+            await redisService.clearCache('/api/tasks').catch(() => {});
           }
         } catch (e) {
           console.error('[Worker] ImageKit upload failed:', e);

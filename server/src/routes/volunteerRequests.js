@@ -46,9 +46,9 @@ router.post('/', auth, async (req, res) => {
     });
 
     // Invalidate caches
-    redisService.clearCache('/api/volunteer-requests').catch(() => {});
-    redisService.clearCache('/api/volunteer-requests/my-status').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.clearCache('/api/volunteer-requests').catch(() => {});
+    await redisService.clearCache('/api/volunteer-requests/my-status').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
     res.status(201).json(request);
   } catch (err) {
@@ -183,10 +183,10 @@ router.patch('/:id/approve', auth, async (req, res) => {
     }
 
     // Invalidate caches
-    redisService.clearCache('/api/volunteer-requests').catch(() => {});
-    redisService.clearCache('/api/volunteer-requests/my-status').catch(() => {});
-    redisService.clearCache('/api/volunteers').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.clearCache('/api/volunteer-requests').catch(() => {});
+    await redisService.clearCache('/api/volunteer-requests/my-status').catch(() => {});
+    await redisService.clearCache('/api/volunteers').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
     res.json({ message: 'Volunteer application approved. User promoted to volunteer.' });
   } catch (err) {
@@ -228,9 +228,9 @@ router.patch('/:id/reject', auth, async (req, res) => {
     });
 
     // Invalidate caches
-    redisService.clearCache('/api/volunteer-requests').catch(() => {});
-    redisService.clearCache('/api/volunteer-requests/my-status').catch(() => {});
-    redisService.clearCache('/api/coordinators/stats').catch(() => {});
+    await redisService.clearCache('/api/volunteer-requests').catch(() => {});
+    await redisService.clearCache('/api/volunteer-requests/my-status').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
     res.json({ message: 'Volunteer application rejected.' });
   } catch (err) {

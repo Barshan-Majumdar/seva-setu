@@ -1,22 +1,18 @@
 /* ══════════════════════════════════════════════════════════════
-   USER DASHBOARD STYLES — Light NGO Theme
+   USER DASHBOARD — Premium SaaS Redesign
    ══════════════════════════════════════════════════════════════ */
 
 .user-dashboard-shell {
-  padding-bottom: 3.5rem;
+  padding-bottom: 3rem;
   display: grid;
   gap: 1.25rem;
 }
-
-/* .user-dashboard-hero is now styled globally in index.css as a premium hero */
-
-/* .user-dashboard-hero is now styled globally in index.css as a premium hero */
 
 /* ── Quick Actions Grid ─────────────────────────────────────── */
 
 .user-dashboard-actions-grid {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.875rem;
 }
 
 .user-dashboard-action-card {
@@ -24,67 +20,99 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition: all 0.2s ease;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   text-decoration: none;
   color: inherit;
   background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.user-dashboard-action-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(45, 97, 72, 0.02) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 250ms;
+  pointer-events: none;
 }
 
 .user-dashboard-action-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
-  border-color: rgba(45, 97, 72, 0.2) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  border-color: rgba(45, 97, 72, 0.15);
+}
+
+.user-dashboard-action-card:hover::after {
+  opacity: 1;
 }
 
 .user-dashboard-action-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: transparent !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  transition: transform 250ms;
+}
+
+.user-dashboard-action-card:hover .user-dashboard-action-icon {
+  transform: scale(1.05);
 }
 
 .user-dashboard-action-title {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #0f171d;
+  color: #0f172a;
   margin-bottom: 0.2rem;
+  letter-spacing: -0.01em;
 }
 
 .user-dashboard-action-desc {
   font-size: 0.8rem;
-  color: #64748b;
+  color: #94a3b8;
   line-height: 1.5;
 }
 
 .user-dashboard-action-arrow {
-  color: #94a3b8;
+  color: #cbd5e1;
   flex-shrink: 0;
   margin-left: auto;
-  transition: transform 200ms, color 200ms;
+  transition: transform 250ms, color 250ms;
 }
 
 .user-dashboard-action-card:hover .user-dashboard-action-arrow {
-  transform: translateX(3px);
+  transform: translateX(4px);
   color: #2d6148;
 }
 
 /* ── Volunteer Section ────────────────────────────────────────  */
 
 .user-dashboard-volunteer-section {
-  padding: 1.5rem;
+  padding: 1.75rem;
   background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.user-dashboard-volunteer-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2d6148 0%, rgba(45, 97, 72, 0.2) 70%, transparent 100%);
 }
 
 .user-dashboard-volunteer-header {
@@ -97,9 +125,9 @@
 .user-dashboard-volunteer-icon-wrap {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: transparent;
+  border-radius: 12px;
+  border: 1px solid rgba(45, 97, 72, 0.1);
+  background: rgba(45, 97, 72, 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -109,38 +137,41 @@
 
 .user-dashboard-volunteer-title {
   font-size: 1.1rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
   margin-bottom: 0.3rem;
-  color: #0f171d;
+  color: #0f172a;
 }
 
 .user-dashboard-volunteer-desc {
   font-size: 0.85rem;
-  color: #475569;
+  color: #64748b;
   line-height: 1.6;
 }
 
 .user-dashboard-apply-btn {
   width: 100%;
   justify-content: center;
-  padding: 0.9rem 1.5rem;
+  padding: 0.85rem 1.5rem;
   background: #2d6148 !important;
   color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(45, 97, 72, 0.2);
-  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(45, 97, 72, 0.2);
+  font-size: 0.875rem;
+  border-radius: 10px;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .user-dashboard-apply-btn:hover {
-  background: #1e4231 !important;
-  box-shadow: 0 8px 24px rgba(45, 97, 72, 0.3) !important;
+  background: #245438 !important;
+  box-shadow: 0 6px 18px rgba(45, 97, 72, 0.25) !important;
+  transform: translateY(-1px);
 }
 
 /* ── Status Banner ──────────────────────────────────────────── */
 
 .user-dashboard-status-banner {
   padding: 1rem 1.25rem;
-  border-radius: 0.85rem;
+  border-radius: 12px;
   border: 1px solid;
 }
 
@@ -149,14 +180,14 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 0;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 0.85rem;
 }
 
 /* ── Reports Section ────────────────────────────────────────── */
 
 .user-dashboard-reports-section {
-  padding: 0 0.25rem;
+  padding: 0 0.125rem;
 }
 
 /* ── Responsive ─────────────────────────────────────────────── */

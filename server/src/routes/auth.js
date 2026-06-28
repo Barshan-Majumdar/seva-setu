@@ -20,6 +20,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
 
+    // 1.5 Check if email is in coordinator whitelist
+    const isCoordinator = await prisma.coordinatorEmail.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+    const finalRole = isCoordinator ? 'coordinator' : role;
+
     // 2. Hash password
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
@@ -31,14 +37,14 @@ router.post('/register', async (req, res) => {
           name,
           email,
           passwordHash: password_hash,
-          role,
+          role: finalRole,
           orgId: org_id || null,
         },
         select: { id: true, name: true, email: true, role: true },
       });
 
-      // If volunteer, create volunteer record
-      if (role === 'volunteer') {
+      // If volunteer (and not upgraded to coordinator), create volunteer record
+      if (finalRole === 'volunteer') {
         await tx.volunteer.create({
           data: {
             userId: user.id,
@@ -85,6 +91,20 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // 2.5 Check if they should be upgraded to coordinator
+    if (user.role !== 'coordinator') {
+      const isCoordinator = await prisma.coordinatorEmail.findUnique({
+        where: { email: email.toLowerCase() }
+      });
+      if (isCoordinator) {
+        user.role = 'coordinator';
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { role: 'coordinator' }
+        });
+      }
     }
 
     // 3. Generate JWT

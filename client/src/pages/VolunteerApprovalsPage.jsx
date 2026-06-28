@@ -97,12 +97,16 @@ const VolunteerApprovalsPage = () => {
       <div className="container-lg" style={{ paddingBlock: 'clamp(2rem, 2vw + 1.5rem, 3.5rem)', display: 'grid', gap: '1rem' }}>
 
         {/* Hero */}
-        <section className="dashboard-hero" style={{ position: 'relative' }}>
-          <p className="landing-eyebrow">Coordinator Panel</p>
-          <h1 className="dashboard-title">Volunteer Approvals</h1>
-          <p className="dashboard-subtitle">
-            Review applications from community members who want to join as verified volunteers.
-          </p>
+        <section className="dashboard-hero-premium">
+          <div className="dashboard-hero-top">
+            <div className="dashboard-hero-text">
+              <p style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.7rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Coordinator Panel</p>
+              <h1 className="dashboard-title-premium">Volunteer Approvals</h1>
+              <p className="dashboard-subtitle-premium">
+                Review applications from community members who want to join as verified volunteers.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* Filter Tabs */}
@@ -144,8 +148,8 @@ const VolunteerApprovalsPage = () => {
         {!loading && requests.length === 0 && (
           <section className="dashboard-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '3rem', textAlign: 'center' }}>
             <div style={{
-              width: '64px', height: '64px', borderRadius: '1rem',
-              background: 'rgba(56, 189, 248, 0.06)', border: '1px solid rgba(56, 189, 248, 0.12)',
+              width: '56px', height: '56px', borderRadius: '14px',
+              background: 'rgba(0, 0, 0, 0.03)', border: '1px solid rgba(0, 0, 0, 0.06)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <Inbox className="w-7 h-7" style={{ color: 'var(--color-text-muted)' }} />

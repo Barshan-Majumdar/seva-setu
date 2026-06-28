@@ -50,7 +50,7 @@ const DashboardPage = () => {
         <section className="dashboard-hero-premium">
           <div className="dashboard-hero-top">
             <div className="dashboard-hero-text">
-              <p className="landing-eyebrow" style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.5rem' }}>Coordinator Command Center</p>
+              <p style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.7rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Coordinator Command Center</p>
               <h1 className="dashboard-title-premium">Real-time aid orchestration from report to resolution.</h1>
               <p className="dashboard-subtitle-premium">
                 Filter needs, inspect urgency heatmap, dispatch ranked volunteers, and move work through the task pipeline.

@@ -96,8 +96,8 @@ const ReporterStatusList = () => {
   }
 
   return (
-    <div style={{ marginTop: '2rem' }}>
-      <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f171d', marginBottom: '1rem' }}>
+    <div style={{ marginTop: '1.5rem' }}>
+      <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', marginBottom: '1rem', letterSpacing: '-0.02em' }}>
         Submission History
       </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -110,14 +110,14 @@ const ReporterStatusList = () => {
             <div
               key={issue.id}
               className="card"
-              style={{ overflow: 'hidden', borderRadius: '0.85rem', transition: 'box-shadow 0.2s' }}
+              style={{ overflow: 'hidden', borderRadius: '12px', transition: 'all 250ms cubic-bezier(0.4, 0, 0.2, 1)', border: '1px solid rgba(0, 0, 0, 0.05)' }}
             >
               <div
                 style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: isRejected ? 'pointer' : 'default' }}
                 onClick={() => isRejected && toggleExpand(issue.id)}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f171d' }}>{issue.title}</span>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 650, color: '#0f172a' }}>{issue.title}</span>
                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                     {new Date(issue.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · {issue.district}
                   </span>

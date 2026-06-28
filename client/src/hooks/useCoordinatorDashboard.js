@@ -97,11 +97,16 @@ export const useCoordinatorDashboard = () => {
       loadDashboard(false);
     };
 
-    socket.on('volunteer_availability_changed', ({ id, is_available }) => {
-      console.log(`[SOCKET] Volunteer ${id} availability changed to ${is_available}`);
-      setVolunteers((prev) =>
-        prev.map((v) => (v.id === id ? { ...v, is_available } : v))
-      );
+    socket.on('volunteer_availability_changed', (payload) => {
+      console.log(`[SOCKET] Volunteer ${payload.id} availability changed to ${payload.is_available}`);
+      setVolunteers((prev) => {
+        const exists = prev.find((v) => v.id === payload.id);
+        if (exists) {
+          return prev.map((v) => (v.id === payload.id ? { ...v, ...payload } : v));
+        } else {
+          return [...prev, payload];
+        }
+      });
       handleRealtimeRefresh();
     });
 

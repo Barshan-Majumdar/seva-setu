@@ -50,7 +50,7 @@ const VolunteerApplicationModal = ({ onClose, onSubmitted }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <div style={{
               width: '40px', height: '40px', borderRadius: '12px',
-              background: 'rgba(52, 211, 153, 0.1)', border: '1px solid rgba(52, 211, 153, 0.2)',
+              background: 'rgba(45, 97, 72, 0.06)', border: '1px solid rgba(45, 97, 72, 0.12)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <UserCheck className="w-5 h-5" style={{ color: '#2d6148' }} />
@@ -141,9 +141,9 @@ const VolunteerApplicationModal = ({ onClose, onSubmitted }) => {
           {/* Error */}
           {error && (
             <div style={{
-              padding: '0.75rem 1rem', borderRadius: '0.75rem',
-              background: 'rgba(251, 113, 133, 0.08)', border: '1px solid rgba(251, 113, 133, 0.25)',
-              color: '#fb7185', fontSize: '0.85rem', fontWeight: 600,
+              padding: '0.75rem 1rem', borderRadius: '10px',
+              background: 'rgba(195, 93, 81, 0.06)', border: '1px solid rgba(195, 93, 81, 0.15)',
+              color: '#c35d51', fontSize: '0.85rem', fontWeight: 600,
             }}>
               {error}
             </div>
@@ -161,13 +161,13 @@ const VolunteerApplicationModal = ({ onClose, onSubmitted }) => {
                 color: '#ffffff',
                 borderRadius: '12px',
                 border: 'none',
-                fontWeight: '800',
-                fontSize: '0.9rem',
+                fontWeight: '700',
+                fontSize: '0.875rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '10px',
-                boxShadow: '0 8px 20px rgba(45, 97, 72, 0.25)',
+                boxShadow: '0 4px 12px rgba(45, 97, 72, 0.2)',
                 cursor: submitting ? 'not-allowed' : 'pointer',
                 opacity: submitting ? 0.7 : 1,
                 textTransform: 'uppercase',
