@@ -3,7 +3,7 @@ import {
   MapPin, Send, Users, AlertTriangle,
   CheckCircle2, Crosshair, Loader2, Clock3, Camera, X,
   Navigation, ShieldCheck, Heart, Utensils, Home, Anchor, Package, Upload,
-  MessageCircle, Copy, Check, ExternalLink
+  MessageCircle, Copy, Check, ExternalLink, Phone
 } from 'lucide-react';
 import { useFieldForm } from '../hooks/useFieldForm';
 import MainLayout from '../layouts/MainLayout';
@@ -700,6 +700,165 @@ const FieldForm = () => {
               ⚠️ This uses the Twilio Sandbox. You must first send the join code above to activate the WhatsApp connection.
             </p>
           </div>
+
+          {/* ── Emergency Numbers Section ─────────────────────────── */}
+          <div style={{
+            marginTop: '2rem',
+            background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.04), rgba(239, 68, 68, 0.02))',
+            border: '1.5px solid rgba(220, 38, 38, 0.18)',
+            borderRadius: '1rem',
+            padding: '1.75rem 1.5rem',
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            {/* Decorative accent bar */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
+              background: 'linear-gradient(90deg, #dc2626, #ef4444, #f97316)',
+            }} />
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '10px',
+                background: 'rgba(220, 38, 38, 0.1)',
+                border: '1px solid rgba(220, 38, 38, 0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Phone style={{ width: '20px', height: '20px', color: '#dc2626' }} />
+              </div>
+              <div>
+                <h3 style={{
+                  fontSize: '1rem', fontWeight: 800, color: '#0f171d',
+                  letterSpacing: '-0.01em', margin: 0,
+                }}>Emergency Helplines</h3>
+                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0, lineHeight: 1.4 }}>
+                  If SevaSetu takes time to respond, please contact these services immediately
+                </p>
+              </div>
+            </div>
+
+            {/* National Numbers */}
+            <p style={{
+              fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8',
+              textTransform: 'uppercase', letterSpacing: '0.14em',
+              margin: '1.25rem 0 0.6rem',
+            }}>🇮🇳 National (India)</p>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {[
+                { label: 'National Emergency',  number: '112',  desc: 'Police · Fire · Ambulance' },
+                { label: 'Police',              number: '100',  desc: 'Law enforcement' },
+                { label: 'Fire Service',        number: '101',  desc: 'Fire & rescue' },
+                { label: 'Ambulance',           number: '102',  desc: 'Medical emergencies' },
+                { label: 'Disaster Helpline',   number: '108',  desc: 'NDMA / natural disasters' },
+                { label: 'Women Helpline',      number: '1091', desc: 'Distress & safety' },
+                { label: 'Child Helpline',      number: '1098', desc: 'Children in crisis' },
+                { label: 'PM Relief (PMCARES)', number: '1800-11-3090', desc: 'National relief fund' },
+              ].map(({ label, number, desc }) => (
+                <a
+                  key={number}
+                  href={`tel:${number.replace(/[^0-9]/g,'')}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '0.55rem 0.85rem',
+                    background: '#ffffff',
+                    border: '1px solid rgba(15, 23, 29, 0.08)',
+                    borderRadius: '0.65rem',
+                    textDecoration: 'none',
+                    transition: 'all 0.18s ease',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(220, 38, 38, 0.04)';
+                    e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.25)';
+                    e.currentTarget.style.transform = 'translateX(3px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#ffffff';
+                    e.currentTarget.style.borderColor = 'rgba(15, 23, 29, 0.08)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f171d', display: 'block' }}>{label}</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{desc}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{
+                      fontSize: '0.95rem', fontWeight: 800, color: '#dc2626',
+                      fontFamily: "'Inter', system-ui, monospace", letterSpacing: '0.02em',
+                    }}>{number}</span>
+                    <Phone style={{ width: '13px', height: '13px', color: '#dc2626', opacity: 0.7 }} />
+                  </div>
+                </a>
+              ))}
+            </div>
+
+            {/* West Bengal Numbers */}
+            <p style={{
+              fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8',
+              textTransform: 'uppercase', letterSpacing: '0.14em',
+              margin: '1.4rem 0 0.6rem',
+            }}>📍 West Bengal — State Helplines</p>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {[
+                { label: 'WB State Emergency',      number: '1070',       desc: 'State Disaster Management' },
+                { label: 'WB Disaster Ops Centre',  number: '033-2214-3526', desc: 'WBDMD control room' },
+                { label: 'Kolkata Police Control',  number: '100',        desc: 'Kolkata Police room' },
+                { label: 'Kolkata Fire Service',    number: '101',        desc: 'Kolkata Fire Brigade' },
+                { label: 'SSKM Hospital',           number: '033-2244-3221', desc: 'Major govt hospital · Kolkata' },
+                { label: 'WB Flood Relief Control', number: '033-2337-0544', desc: 'During flood / cyclone events' },
+                { label: 'WB CM Relief Fund',       number: '1800-345-2600', desc: 'Relief & rehabilitation' },
+                { label: 'Sundarbans Disaster Help', number: '03218-255302', desc: 'South 24 Parganas / delta region' },
+              ].map(({ label, number, desc }) => (
+                <a
+                  key={label}
+                  href={`tel:${number.replace(/[^0-9]/g,'')}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '0.55rem 0.85rem',
+                    background: '#ffffff',
+                    border: '1px solid rgba(15, 23, 29, 0.08)',
+                    borderRadius: '0.65rem',
+                    textDecoration: 'none',
+                    transition: 'all 0.18s ease',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(234, 88, 12, 0.04)';
+                    e.currentTarget.style.borderColor = 'rgba(234, 88, 12, 0.25)';
+                    e.currentTarget.style.transform = 'translateX(3px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#ffffff';
+                    e.currentTarget.style.borderColor = 'rgba(15, 23, 29, 0.08)';
+                    e.currentTarget.style.transform = 'translateX(0)';
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f171d', display: 'block' }}>{label}</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{desc}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{
+                      fontSize: '0.88rem', fontWeight: 800, color: '#ea580c',
+                      fontFamily: "'Inter', system-ui, monospace", letterSpacing: '0.02em',
+                    }}>{number}</span>
+                    <Phone style={{ width: '13px', height: '13px', color: '#ea580c', opacity: 0.7 }} />
+                  </div>
+                </a>
+              ))}
+            </div>
+
+            {/* Tap-to-call note */}
+            <p style={{
+              fontSize: '0.67rem', color: '#94a3b8', marginTop: '1rem',
+              lineHeight: 1.5, textAlign: 'center', fontStyle: 'italic',
+            }}>
+              📲 Tap any number above to call directly from your device.
+            </p>
+          </div>
+
         </div>
       </div>
 
