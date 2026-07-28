@@ -474,14 +474,14 @@ const VolunteerPage = () => {
                             </button>
 
                             {/* Divider */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.15rem 0' }}>
+                            {/* <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '0.15rem 0' }}>
                               <div style={{ flex: 1, height: 1, background: 'rgba(15, 23, 29, 0.08)' }} />
                               <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em' }}>or</span>
                               <div style={{ flex: 1, height: 1, background: 'rgba(15, 23, 29, 0.08)' }} />
-                            </div>
+                            </div> */}
 
                             {/* Option 2: Gallery Upload */}
-                            <input
+                            {/* <input
                               ref={el => { galleryInputRefs.current[task.task_id] = el; }}
                               type="file"
                               accept="image/*"
@@ -510,7 +510,7 @@ const VolunteerPage = () => {
                             >
                               <Upload style={{ width: 16, height: 16 }} />
                               Upload from Gallery
-                            </button>
+                            </button> */}
                           </div>
                         ) : (
                           <button

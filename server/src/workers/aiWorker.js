@@ -83,11 +83,12 @@ const aiWorker = new Worker('ai-verification', async (job) => {
     // 2. AI Content Check (using buffer, ONLY if EXIF GPS passed the distance check)
     if (geoTagPassed) {
       try {
-        // Fast pre-check (2s timeout) to verify AI service is online before sending large image payloads
+        // Fast pre-check (10s timeout) to verify AI service is online before sending large image payloads
         try {
-          await axios.get(`${AI_SERVICE_URL}/health`, { timeout: 2000 });
+          await axios.get(`${AI_SERVICE_URL}/health`, { timeout: 10000 });
         } catch (healthErr) {
-          throw new Error('AI service is offline or unreachable.');
+          console.error(`[Worker] AI Health check failed (${AI_SERVICE_URL}/health):`, healthErr.message);
+          throw new Error(`AI service offline/unreachable at ${AI_SERVICE_URL}`);
         }
 
         const form = new FormData();
@@ -99,14 +100,14 @@ const aiWorker = new Worker('ai-verification', async (job) => {
 
         const aiResponse = await axios.post(`${AI_SERVICE_URL}/verify-image`, form, {
           headers: form.getHeaders(),
-          timeout: 10000
+          timeout: 45000
         });
 
         if (aiResponse.data.is_verified) isVerified = true;
         else errors.push(aiResponse.data.reason || 'AI verification failed.');
       } catch (aiErr) {
-        console.error(`[Worker] AI Service error:`, aiErr.message);
-        errors.push('AI service temporarily unavailable.');
+        console.error(`[Worker] AI Service error detail:`, aiErr.response?.data || aiErr.message);
+        errors.push(aiErr.message?.includes('AI service offline') ? aiErr.message : 'AI service temporarily unavailable.');
       }
     } else {
       isVerified = false;
