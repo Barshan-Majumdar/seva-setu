@@ -4,7 +4,7 @@ import Logo from '../components/Logo';
 import { useAuth } from '../hooks/useAuth';
 import {
   ChevronDown, Send, LogOut, Menu, X,
-  LayoutDashboard, FileText, Users, MapPin, ClipboardCheck
+  LayoutDashboard, FileText, Users, MapPin, ClipboardCheck, Building2
 } from 'lucide-react';
 
 /* ── Role-based nav definitions ─────────────────────────────── */
@@ -13,19 +13,24 @@ const NAV_BY_ROLE = {
     { to: '/dashboard',            label: 'Dashboard',  Icon: LayoutDashboard },
     { to: '/needs-archive',        label: 'All Issues', Icon: FileText },
     { to: '/volunteer-approvals',  label: 'Volunteers', Icon: Users },
+    { to: '/shelters',             label: 'Shelters',   Icon: Building2 },
   ],
   volunteer: [
-    { to: '/volunteer',   label: 'My Tasks',  Icon: ClipboardCheck },
-    { to: '/my-reports',  label: 'Reports',   Icon: FileText },
+    { to: '/volunteer',       label: 'My Tasks',  Icon: ClipboardCheck },
+    { to: '/field',           label: 'Report Need', Icon: MapPin },
+    { to: '/my-reports',      label: 'Reports',   Icon: FileText },
+    { to: '/public-shelters', label: 'Shelters',  Icon: Building2 },
   ],
   field_worker: [
-    { to: '/field',       label: 'Report Need',  Icon: MapPin },
-    { to: '/my-reports',  label: 'My Reports',   Icon: FileText },
+    { to: '/field',           label: 'Report Need',  Icon: MapPin },
+    { to: '/my-reports',      label: 'My Reports',   Icon: FileText },
+    { to: '/public-shelters', label: 'Shelters',     Icon: Building2 },
   ],
   user: [
-    { to: '/user-dashboard', label: 'Dashboard',   Icon: LayoutDashboard },
-    { to: '/field',          label: 'Report Need', Icon: MapPin },
-    { to: '/my-reports',     label: 'My Reports',  Icon: FileText },
+    { to: '/user-dashboard',  label: 'Dashboard',   Icon: LayoutDashboard },
+    { to: '/field',           label: 'Report Need', Icon: MapPin },
+    { to: '/my-reports',      label: 'My Reports',  Icon: FileText },
+    { to: '/public-shelters', label: 'Shelters',    Icon: Building2 },
   ],
 };
 
