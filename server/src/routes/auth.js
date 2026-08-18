@@ -176,7 +176,7 @@ router.post('/set-role', auth, async (req, res) => {
     // Invalidate the auth cache so the new role takes effect instantly!
     const redisService = require('../services/redisService');
     if (updatedUser.clerkId) {
-      await redisService.clearCache(`auth_user:${updatedUser.clerkId}`);
+      await redisService.deleteCache(`auth_user:${updatedUser.clerkId}`);
     }
 
     res.json({

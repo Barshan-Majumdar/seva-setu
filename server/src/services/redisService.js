@@ -49,6 +49,10 @@ const clearCache = async (pattern) => {
   }
 };
 
+const deleteCache = async (key) => {
+  await redis.del(`cache:${key}`);
+};
+
 /**
  * Set Operations (for background jobs)
  */
@@ -71,6 +75,7 @@ module.exports = {
   getCache,
   setCache,
   clearCache,
+  deleteCache,
   addToSet,
   removeFromSet,
   getSet,

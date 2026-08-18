@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FileText, Plus, UserCheck, Loader2, Clock, CheckCircle, XCircle, ArrowRight } from 'lucide-react';
+import { FileText, Plus, UserCheck, Loader2, Clock, CheckCircle, XCircle, ArrowRight, Home } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import ReporterStatusList from '../components/ReporterStatusList';
 import VolunteerApplicationModal from '../components/VolunteerApplicationModal';
@@ -138,6 +138,17 @@ const UserDashboardPage = () => {
             </div>
             <ArrowRight className="w-4 h-4 user-dashboard-action-arrow" />
           </Link>
+
+          <Link to="/public-shelters" className="user-dashboard-action-card card">
+            <div className="user-dashboard-action-icon" style={{ background: 'rgba(234, 179, 8, 0.05)', border: '1px solid rgba(234, 179, 8, 0.1)' }}>
+              <Home className="w-6 h-6" style={{ color: '#ca8a04' }} />
+            </div>
+            <div>
+              <h3 className="user-dashboard-action-title">Find Shelters</h3>
+              <p className="user-dashboard-action-desc">Locate nearby active shelters, check live capacity, and get directions.</p>
+            </div>
+            <ArrowRight className="w-4 h-4 user-dashboard-action-arrow" />
+          </Link>
         </section>
 
         {/* ── Volunteer Application Status / CTA ─────────────── */}
@@ -193,7 +204,7 @@ const UserDashboardPage = () => {
                   style={{ marginTop: '1rem' }}
                   onClick={() => {
                     localStorage.removeItem('dbRole');
-                    window.location.href = '/post-login';
+                    navigate('/post-login');
                   }}
                 >
                   <ArrowRight className="w-4 h-4" />

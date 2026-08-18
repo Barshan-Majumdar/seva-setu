@@ -1,5 +1,6 @@
 /* VOLUNTEER PAGE VERSION: 2.1 - ROBUST MAP LOADING */
 import { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import exifr from 'exifr';
 import {
   AlertCircle,
@@ -14,6 +15,8 @@ import {
   Navigation,
   Upload,
   Phone,
+  Plus,
+  ArrowRight
 } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import { useVolunteerApp, haversineKm } from '../hooks/useVolunteerApp';
@@ -160,6 +163,19 @@ const VolunteerPage = () => {
             <p className="volunteer-stat-label">Distance Covered</p>
             <p className="volunteer-stat-value">{distanceCoveredKm.toFixed(2)} km</p>
           </article>
+        </section>
+
+        <section className="user-dashboard-actions-grid" style={{ marginBottom: '1.25rem' }}>
+          <Link to="/field" className="user-dashboard-action-card card" style={{ gridColumn: '1 / -1' }}>
+            <div className="user-dashboard-action-icon" style={{ background: 'rgba(45, 97, 72, 0.06)', border: '1px solid rgba(45, 97, 72, 0.1)' }}>
+              <Plus className="w-6 h-6" style={{ color: '#2d6148' }} />
+            </div>
+            <div>
+              <h3 className="user-dashboard-action-title">Report New Incident</h3>
+              <p className="user-dashboard-action-desc">Notice a critical issue nearby? Report it instantly to the operations center.</p>
+            </div>
+            <ArrowRight className="w-4 h-4 user-dashboard-action-arrow" />
+          </Link>
         </section>
 
         <section className="card volunteer-availability" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'stretch' }}>
