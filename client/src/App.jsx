@@ -4,6 +4,9 @@ import { ClerkProvider } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { Geolocation } from '@capacitor/geolocation';
+import { Camera } from '@capacitor/camera';
+import { Browser } from '@capacitor/browser';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -101,10 +104,12 @@ function MainContent() {
     const setupApp = async () => {
       // 1. Handle Deep Links (for OAuth redirects like Google)
       if (Capacitor.isNativePlatform()) {
-        appUrlListener = await CapApp.addListener('appUrlOpen', (data) => {
+        appUrlListener = await CapApp.addListener('appUrlOpen', async (data) => {
           console.log('[Native] App opened with URL:', data.url);
-          // Example: com.sevasetu.app://post-login?tokens...
-          // We want: /post-login?tokens...
+
+          // Close the in-app browser layer if it's open
+          await Browser.close().catch(() => {});
+
           const slug = data.url.split('.app://').pop();
           if (slug) {
             navigate('/' + slug);
