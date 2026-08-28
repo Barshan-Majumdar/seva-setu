@@ -179,7 +179,7 @@ router.patch('/:id/approve', auth, async (req, res) => {
       select: { clerkId: true }
     });
     if (promotedUser && promotedUser.clerkId) {
-      await redisService.clearCache(`auth_user:${promotedUser.clerkId}`);
+      await redisService.deleteCache(`auth_user:${promotedUser.clerkId}`);
     }
 
     // Invalidate caches

@@ -32,6 +32,8 @@ const NeedsArchivePage = lazy(() => import('./pages/NeedsArchivePage'));
 const MyReportsPage = lazy(() => import('./pages/MyReportsPage'));
 const UserDashboardPage = lazy(() => import('./pages/UserDashboardPage'));
 const VolunteerApprovalsPage = lazy(() => import('./pages/VolunteerApprovalsPage'));
+const ShelterDashboardPage = lazy(() => import('./pages/ShelterDashboardPage'));
+const PublicSheltersPage = lazy(() => import('./pages/PublicSheltersPage'));
 
 const PageLoader = ({ text = 'Synchronizing' }) => (
   <div className="page-loader">
@@ -188,6 +190,24 @@ function MainContent() {
               element={
                 <ProtectedRoute requiredRole="coordinator">
                   <VolunteerApprovalsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/shelters"
+              element={
+                <ProtectedRoute requiredRole="coordinator">
+                  <ShelterDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/public-shelters"
+              element={
+                <ProtectedRoute>
+                  <PublicSheltersPage />
                 </ProtectedRoute>
               }
             />

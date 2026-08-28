@@ -709,3 +709,163 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SHELTER COMPARISON
+   ══════════════════════════════════════════════════════════════ */
+
+/* New status pills for shelter-specific statuses */
+.dashboard-pill-full {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.15);
+}
+
+.dashboard-pill-closing {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.15);
+}
+
+.dashboard-pill-closed {
+  color: #475569;
+  background: rgba(71, 85, 105, 0.06);
+  border-color: rgba(71, 85, 105, 0.12);
+}
+
+/* Occupancy progress bar */
+.shelter-occupancy-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.shelter-occupancy-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+.shelter-occupancy-green { background: #059669; }
+.shelter-occupancy-amber { background: #d97706; }
+.shelter-occupancy-red { background: #dc2626; }
+
+/* Resource status chips */
+.shelter-resource-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.shelter-resource-ok {
+  color: #059669;
+  background: rgba(5, 150, 105, 0.08);
+  border-color: rgba(5, 150, 105, 0.15);
+}
+
+.shelter-resource-low {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.15);
+}
+
+.shelter-resource-out {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.15);
+}
+
+/* Selection tray — floating bottom bar */
+.shelter-selection-tray {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
+  padding: 0.875rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.shelter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #334155;
+  white-space: nowrap;
+}
+
+.shelter-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 0;
+  display: flex;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.shelter-chip button:hover {
+  color: #f43f5e;
+}
+
+/* Compare modal — wider variant of dashboard-modal */
+.dashboard-modal.shelter-compare {
+  max-width: 1100px;
+  width: min(1100px, 96vw);
+}
+
+/* Compare card */
+.shelter-compare-card {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: #fafbfc;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shelter-compare-card:hover {
+  background: rgba(45, 97, 72, 0.03);
+  border-color: rgba(45, 97, 72, 0.12);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Tray max-warning inline */
+.shelter-tray-warning {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f43f5e;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Responsive — tray stacks on mobile */
+@media (max-width: 767px) {
+  .shelter-selection-tray {
+    flex-direction: column;
+    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+  }
+}
