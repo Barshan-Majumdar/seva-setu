@@ -44,12 +44,29 @@ const LoginPage = () => {
                   Sign in to continue your coordination work.
                 </p>
               </div>
-              <SignIn
-                routing="path"
-                path="/login"
-                fallbackRedirectUrl={postLoginUrl}
-                signUpUrl="/register"
-              />
+
+              {Capacitor.isNativePlatform() ? (
+                <div className="native-auth-wrapper" style={{ marginTop: '1.5rem' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}
+                    onClick={() => window.location.href = 'https://seva-setu-ai.vercel.app/login'}
+                  >
+                    <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" style={{ width: '20px', height: '20px' }} />
+                    Continue with Google
+                  </button>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', marginTop: '1rem' }}>
+                    You will be redirected to your browser to sign in securely, then returned to the app.
+                  </p>
+                </div>
+              ) : (
+                <SignIn
+                  routing="path"
+                  path="/login"
+                  forceRedirectUrl={postLoginUrl}
+                  signUpUrl="/register"
+                />
+              )}
             </div>
           </div>
         </div>
