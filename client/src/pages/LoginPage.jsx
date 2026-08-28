@@ -147,11 +147,27 @@ const LoginPage = () => {
               <button
                 type="button"
                 className="btn-outline"
-                onClick={handleGoogleSignIn}
-                style={{ width: '100%', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'white', border: '1px solid #e2e8f0' }}
+                onClick={() => {
+                  console.log('Google Sign-In Clicked');
+                  handleGoogleSignIn();
+                }}
+                style={{
+                  width: '100%',
+                  minHeight: '52px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  background: 'white',
+                  border: '1px solid #e2e8f0',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  zIndex: 10,
+                  opacity: isLoaded ? 1 : 0.6
+                }}
               >
                 <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" style={{ width: '20px', height: '20px' }} />
-                Continue with Google
+                {isLoaded ? 'Continue with Google' : 'Loading Google...'}
               </button>
 
               <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.875rem', color: '#64748b' }}>

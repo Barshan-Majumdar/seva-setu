@@ -165,9 +165,30 @@ const RegisterPage = () => {
                     <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }}></div>
                   </div>
 
-                  <button type="button" className="btn-outline" onClick={handleGoogleSignUp} style={{ width: '100%', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'white', border: '1px solid #e2e8f0' }}>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => {
+                      console.log('Google Sign-Up Clicked');
+                      handleGoogleSignUp();
+                    }}
+                    style={{
+                      width: '100%',
+                      minHeight: '52px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px',
+                      background: 'white',
+                      border: '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      zIndex: 10,
+                      opacity: isLoaded ? 1 : 0.6
+                    }}
+                  >
                     <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" style={{ width: '20px', height: '20px' }} />
-                    Sign up with Google
+                    {isLoaded ? 'Sign up with Google' : 'Loading Google...'}
                   </button>
                 </>
               ) : (
