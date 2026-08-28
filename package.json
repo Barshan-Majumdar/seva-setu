@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@capacitor/camera": "^8.2.3",
+    "@capacitor/geolocation": "^8.2.2"
+  }
+}

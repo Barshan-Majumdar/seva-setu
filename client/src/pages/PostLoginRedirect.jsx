@@ -17,6 +17,20 @@ const PostLoginRedirect = () => {
   const [dbRole, setDbRole] = useState(null);
 
   useEffect(() => {
+    // ── NATIVE APP BOUNCE ─────────────────────────────────────
+    // If we are on the WEB (Vercel) and the user has just logged in,
+    // but they originated from the app, we bounce them back to the app.
+    if (!Capacitor.isNativePlatform() && window.location.search.includes('__clerk_status')) {
+      const nativeAppUrl = 'com.sevasetu.app://post-login' + window.location.search;
+      window.location.href = nativeAppUrl;
+
+      // Safety timeout: if app doesn't open in 2 seconds, stay on web
+      setTimeout(() => {
+        setPhase('web_fallback');
+      }, 2000);
+      return;
+    }
+
     if (!isLoaded || !isSignedIn) return;
 
     let cancelled = false;

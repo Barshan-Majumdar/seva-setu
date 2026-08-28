@@ -1,10 +1,17 @@
 import { SignIn, useAuth } from '@clerk/react';
 import { Link, Navigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import MainLayout from '../layouts/MainLayout';
 
 const LoginPage = () => {
   const { isSignedIn, isLoaded } = useAuth();
+
+  // On Native, we redirect to Vercel first, which will then "bounce" the user back to the app
+  // This avoids Clerk "Unauthorized Redirect" errors in dev mode.
+  const postLoginUrl = Capacitor.isNativePlatform()
+    ? 'https://seva-setu-ai.vercel.app/post-login'
+    : '/post-login';
 
   // Already signed in → let PostLoginRedirect handle role detection & routing
   if (isLoaded && isSignedIn) {
@@ -40,7 +47,7 @@ const LoginPage = () => {
               <SignIn
                 routing="path"
                 path="/login"
-                fallbackRedirectUrl="/post-login"
+                fallbackRedirectUrl={postLoginUrl}
                 signUpUrl="/register"
               />
             </div>

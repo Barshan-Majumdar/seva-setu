@@ -2,6 +2,8 @@ import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -45,8 +47,6 @@ const PageLoader = ({ text = 'Synchronizing' }) => (
 
 /**
  * ClerkProviderWithRouter — Wraps Clerk around our React Router.
- * This fixes the blank/whitescreen issue on login because Clerk now 
- * pushes navigation events directly into React Router instead of fighting it via window.history.
  */
 function ClerkProviderWithRouter({ children }) {
   const navigate = useNavigate();
@@ -82,20 +82,57 @@ function ClerkProviderWithRouter({ children }) {
 
 /**
  * MainContent — rendered INSIDE Router so all hooks have full context.
- * This is the fix for "dispatcher is null" in React 19 + Clerk + react-router.
- * Hooks (useAuth, useNavigate, etc.) must be called after providers are mounted.
  */
 function MainContent() {
   const { isAuthenticated } = useAuth();
   const [isReady, setIsReady] = useState(false);
+  const navigate = useNavigate();
 
   const handleSyncReady = useCallback(() => {
     setIsReady(true);
   }, []);
 
+  // Deep Link & Native Permission Handler
+  useEffect(() => {
+    let appUrlListener = null;
+
+    const setupApp = async () => {
+      // 1. Handle Deep Links (for OAuth redirects like Google)
+      if (Capacitor.isNativePlatform()) {
+        appUrlListener = await CapApp.addListener('appUrlOpen', (data) => {
+          console.log('[Native] App opened with URL:', data.url);
+          // Example: com.sevasetu.app://post-login?tokens...
+          // We want: /post-login?tokens...
+          const slug = data.url.split('.app://').pop();
+          if (slug) {
+            navigate('/' + slug);
+          }
+        });
+      }
+
+      // 2. Request Native Permissions
+      if (Capacitor.isNativePlatform() && isReady) {
+        try {
+          const { Geolocation } = await import('@capacitor/geolocation');
+          const { Camera } = await import('@capacitor/camera');
+          await Geolocation.requestPermissions();
+          await Camera.requestPermissions();
+          console.log('[Native] Permissions requested successfully');
+        } catch (e) {
+          console.warn('[Native] Permission request failed or plugins missing:', e);
+        }
+      }
+    };
+
+    setupApp();
+
+    return () => {
+      if (appUrlListener) appUrlListener.remove();
+    };
+  }, [isReady, navigate]);
+
   return (
     <>
-      {/* <ServerMaintenanceAlert /> */}
       <AuthTokenBridge />
       <RoleSync onReady={handleSyncReady} />
 
@@ -191,10 +228,6 @@ function MainContent() {
   );
 }
 
-/**
- * App — minimal shell. Only providers and ErrorBoundary here.
- * NO hooks called at this level.
- */
 function App() {
   const [showIntro, setShowIntro] = useState(() => {
     return !sessionStorage.getItem('introShown');
