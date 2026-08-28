@@ -13,21 +13,25 @@ import api from '../services/api';
  */
 const PostLoginRedirect = () => {
   const { isSignedIn, isLoaded, getToken } = useAuth();
-  const [phase, setPhase] = useState('loading'); // 'loading' | 'redirect'
+  const [phase, setPhase] = useState('loading'); // 'loading' | 'redirect' | 'web_bounce'
   const [dbRole, setDbRole] = useState(null);
 
   useEffect(() => {
     // ── NATIVE APP BOUNCE ─────────────────────────────────────
-    // If we are on the WEB (Vercel) and the user has just logged in,
-    // but they originated from the app, we bounce them back to the app.
-    if (!Capacitor.isNativePlatform() && window.location.search.includes('__clerk_status')) {
+    // Check if we are on Web but were sent here from the Native App
+    const isWeb = !Capacitor.isNativePlatform();
+    const hasTokens = window.location.search.includes('__clerk_status');
+    const isFromApp = localStorage.getItem('was_native_auth') === 'true';
+
+    if (isWeb && (hasTokens || isFromApp)) {
+      setPhase('web_bounce');
+
+      // Attempt automatic jump
       const nativeAppUrl = 'com.sevasetu.app://post-login' + window.location.search;
       window.location.href = nativeAppUrl;
 
-      // Safety timeout: if app doesn't open in 2 seconds, stay on web
-      setTimeout(() => {
-        setPhase('web_fallback');
-      }, 2000);
+      // Cleanup flag so normal web logins don't bounce
+      localStorage.removeItem('was_native_auth');
       return;
     }
 
@@ -80,6 +84,29 @@ const PostLoginRedirect = () => {
   }, [isLoaded, isSignedIn, getToken]);
 
   // ── Loading state ──────────────────────────────────────────
+  if (phase === 'web_bounce') {
+    return (
+      <div className="page-loader">
+        <div className="page-loader-inner">
+          <Logo size={64} />
+          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Success! Returning to App...</h2>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginTop: '0.5rem' }}>
+              If you aren't redirected automatically, click the button below.
+            </p>
+            <button
+              className="btn-primary"
+              style={{ marginTop: '1.5rem', padding: '0.75rem 2rem' }}
+              onClick={() => window.location.href = 'com.sevasetu.app://post-login' + window.location.search}
+            >
+              Open SevaSetu App
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!isLoaded || phase === 'loading') {
     return (
       <div className="page-loader">

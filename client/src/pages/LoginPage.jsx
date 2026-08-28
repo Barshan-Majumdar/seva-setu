@@ -50,7 +50,10 @@ const LoginPage = () => {
                   <button
                     className="btn-primary"
                     style={{ width: '100%', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}
-                    onClick={() => window.location.href = 'https://seva-setu-ai.vercel.app/login'}
+                    onClick={() => {
+                      localStorage.setItem('was_native_auth', 'true');
+                      window.location.href = 'https://seva-setu-ai.vercel.app/login';
+                    }}
                   >
                     <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" style={{ width: '20px', height: '20px' }} />
                     Continue with Google

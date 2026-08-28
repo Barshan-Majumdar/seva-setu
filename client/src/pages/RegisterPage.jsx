@@ -50,7 +50,10 @@ const RegisterPage = () => {
                   <button
                     className="btn-primary"
                     style={{ width: '100%', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}
-                    onClick={() => window.location.href = 'https://seva-setu-ai.vercel.app/register'}
+                    onClick={() => {
+                      localStorage.setItem('was_native_auth', 'true');
+                      window.location.href = 'https://seva-setu-ai.vercel.app/register';
+                    }}
                   >
                     <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="Google" style={{ width: '20px', height: '20px' }} />
                     Sign up with Google
