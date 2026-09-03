@@ -48,9 +48,15 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           if (!hasTriggeredRef.current && mountedRef.current) {
             setSessionState('error');
           }
+        },
+        null,
+        (interimText) => {
+          if (!hasTriggeredRef.current && mountedRef.current) {
+            setTranscript(interimText);
+          }
         }
       );
-    }, 150);
+    }, 200);
   }, []);
 
   // ── Start passive wake word listening ──

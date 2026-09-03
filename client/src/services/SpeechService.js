@@ -137,7 +137,7 @@ export class SpeechService {
       this._onWakeWord();
     }
 
-    if (transcript.trim() && this._onTranscript) {
+    if (transcript.trim()) {
       let cleaned = transcript.trim();
       const wakeWordStripRegex = /^(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)\b/i;
       cleaned = cleaned.replace(wakeWordStripRegex, '').trim();
@@ -149,38 +149,61 @@ export class SpeechService {
       });
       
       if (cleaned.length > 0) {
-        clearTimeout(this._transcriptDebounce);
-        
-        // If the speech engine guarantees this is the final sentence, execute instantly.
-        if (isFinal) {
-          this._onTranscript(cleaned);
-        } else {
-          // Otherwise, wait for 800ms of silence (debounce)
-          this._transcriptDebounce = setTimeout(() => {
+        if (this._onPartialTranscript) {
+          this._onPartialTranscript(cleaned);
+        }
+
+        if (this._onTranscript) {
+          clearTimeout(this._transcriptDebounce);
+          
+          // If the speech engine guarantees this is the final sentence, execute instantly.
+          if (isFinal) {
             this._onTranscript(cleaned);
-          }, 800);
+          } else {
+            // Otherwise, wait for 800ms of silence (debounce)
+            this._transcriptDebounce = setTimeout(() => {
+              this._onTranscript(cleaned);
+            }, 800);
+          }
         }
       }
     }
   }
 
-  async start(onWakeWordCb, onTranscriptCb, onErrorCb, onEndCb = null) {
+  async start(onWakeWordCb, onTranscriptCb, onErrorCb, onEndCb = null, onPartialTranscriptCb = null) {
     this._onWakeWord = onWakeWordCb || (() => {});
     this._onTranscript = onTranscriptCb || (() => {});
     this._onError = onErrorCb || (() => {});
     this._onEnd = onEndCb;
+    this._onPartialTranscript = onPartialTranscriptCb;
     this._wakeWordFired = false;
     this._autoRestart = true;
 
     if (Capacitor.isNativePlatform()) {
       const ok = await this._ensureNativeInitialized();
       if (!ok) { if (onErrorCb) onErrorCb('not-supported'); return; }
-      if (!this.isListening) {
+
+      // Force stop any active hardware recording session and wait for Android hardware release
+      try { await SpeechRecognition.stop(); } catch (e) {}
+      await new Promise(r => setTimeout(r, 250));
+
+      let retries = 3;
+      while (retries > 0 && !this.isListening) {
         try {
-          await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
+          // Attempt 1: en-IN, Attempts 2 & 3: device default locale fallback
+          const options = retries === 3 
+            ? { language: 'en-IN', partialResults: true, popup: false }
+            : { partialResults: true, popup: false };
+
+          await SpeechRecognition.start(options);
           this.isListening = true;
+          console.log('[SpeechService] Native SpeechRecognition started successfully!');
+          break;
         } catch (e) {
-          console.warn('[SpeechService] Native start error:', e);
+          console.warn(`[SpeechService] Native start error (retries left: ${retries - 1}):`, e);
+          retries--;
+          this.isListening = false;
+          await new Promise(r => setTimeout(r, 350));
         }
       }
     } else {
@@ -199,9 +222,8 @@ export class SpeechService {
     clearTimeout(this._transcriptDebounce);
     
     if (Capacitor.isNativePlatform()) {
-      if (this.isListening) {
-        try { await SpeechRecognition.stop(); this.isListening = false; } catch (e) {}
-      }
+      this.isListening = false;
+      try { await SpeechRecognition.stop(); } catch (e) {}
     } else {
       if (this.recognition && this.isListening) {
         try { this.recognition.stop(); } catch (e) {}

@@ -140,18 +140,31 @@ class BackgroundVoiceService {
     this._backoffMs = 1000;
 
     if (Capacitor.isNativePlatform()) {
-      try {
-        await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
-        this._isListening = true;
-        this._lastStartTime = Date.now();
-        this._showForegroundNotification();
-      } catch (err) {
-        console.warn('[BackgroundVoice] Native start error:', err);
-        this._isListening = false;
-        // Schedule a restart since it failed to start
-        if (this._enabled) {
-          this._scheduleRestart(2000);
+      try { await SpeechRecognition.stop(); } catch (e) {}
+      await new Promise(r => setTimeout(r, 200));
+
+      let retries = 3;
+      while (retries > 0 && this._enabled && !this._isListening) {
+        try {
+          const options = retries === 3 
+            ? { language: 'en-IN', partialResults: true, popup: false }
+            : { partialResults: true, popup: false };
+
+          await SpeechRecognition.start(options);
+          this._isListening = true;
+          this._lastStartTime = Date.now();
+          this._showForegroundNotification();
+          console.log('[BackgroundVoice] Native start succeeded');
+          break;
+        } catch (err) {
+          console.warn(`[BackgroundVoice] Native start error (retries left: ${retries - 1}):`, err);
+          retries--;
+          this._isListening = false;
+          await new Promise(r => setTimeout(r, 350));
         }
+      }
+      if (!this._isListening && this._enabled) {
+        this._scheduleRestart(2000);
       }
     } else {
       try {
