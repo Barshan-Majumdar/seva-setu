@@ -58,7 +58,7 @@ Schema:
                     "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
                 }
                 
-                response = requests.post(url, json=payload, timeout=5)
+                response = requests.post(url, json=payload, timeout=15)
                 response.raise_for_status()
                 
                 res_data = response.json()

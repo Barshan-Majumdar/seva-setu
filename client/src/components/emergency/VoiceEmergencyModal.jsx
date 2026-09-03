@@ -24,6 +24,78 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
   const hasTriggeredRef = useRef(false);
   const mountedRef = useRef(true);
 
+  // ── Start capturing emergency description (called after system finishes speaking) ──
+  const startCapturing = useCallback(() => {
+    if (!mountedRef.current) return;
+    hasTriggeredRef.current = false;
+
+    speechService.stop();
+    // Wait longer to ensure TTS audio has fully physically stopped playing in the room
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      setSessionState('active_session'); // Mic is on!
+      speechService.start(
+        null,
+        (finalText) => {
+          if (hasTriggeredRef.current) return;
+          setTranscript(finalText);
+          if (finalText.trim().length > 0) {
+            hasTriggeredRef.current = true;
+            handleEmergencyTrigger(finalText);
+          }
+        },
+        (err) => {
+          if (!hasTriggeredRef.current && mountedRef.current) {
+            setSessionState('error');
+          }
+        }
+      );
+    }, 150);
+  }, []);
+
+  // ── Start passive wake word listening ──
+  const beginWakeWordListening = useCallback(() => {
+    if (!speechService.isSupported) {
+      setSessionState('error');
+      return;
+    }
+
+    setSessionState('listening_for_wake');
+    speechService.stop();
+
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      speechService.start(
+        () => {
+          // "Hey Seva Setu" detected!
+          console.log('[VoiceUI] Wake word detected');
+          speechService.stop();
+
+          if (mountedRef.current) {
+            setSessionState('speaking');
+            setTranscript('');
+            
+            // Stop the microphone so it doesn't hear itself speak
+            speechService.stop();
+            
+            const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
+            setSystemReply(reply);
+            VoiceFeedback.speak(reply, () => {
+              // After speaking the reply, start active listening for the emergency description
+              if (mountedRef.current) startCapturing();
+            });
+          }
+        },
+        () => { }, // ignore transcripts during wake-word mode
+        (err) => {
+          if (err === 'not-allowed' && mountedRef.current) {
+            setSessionState('idle'); // permission revoked — show button
+          }
+        }
+      );
+    }, 100);
+  }, [startCapturing]);
+
 
 
   // ── On mount: check mic permission and auto-start if already granted ──
@@ -58,77 +130,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     };
   }, [autoActivate, startCapturing, beginWakeWordListening]);
 
-  // ── Start passive wake word listening ──
-    const beginWakeWordListening = useCallback(() => {
-      if (!speechService.isSupported) {
-        setSessionState('error');
-        return;
-      }
 
-      setSessionState('listening_for_wake');
-      speechService.stop();
-
-      setTimeout(() => {
-        if (!mountedRef.current) return;
-        speechService.start(
-          () => {
-            // "Hey Seva Setu" detected!
-            console.log('[VoiceUI] Wake word detected');
-            speechService.stop();
-
-            if (mountedRef.current) {
-              setSessionState('speaking');
-              setTranscript('');
-            
-              // Stop the microphone so it doesn't hear itself speak
-              speechService.stop();
-            
-              const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
-              setSystemReply(reply);
-              VoiceFeedback.speak(reply, () => {
-                // After speaking the reply, start active listening for the emergency description
-                if (mountedRef.current) startCapturing();
-              });
-            }
-          },
-          () => { }, // ignore transcripts during wake-word mode
-          (err) => {
-            if (err === 'not-allowed' && mountedRef.current) {
-              setSessionState('idle'); // permission revoked — show button
-            }
-          }
-        );
-      }, 100);
-    }, []);
-
-    // ── Start capturing emergency description (called after system finishes speaking) ──
-    const startCapturing = useCallback(() => {
-      if (!mountedRef.current) return;
-      hasTriggeredRef.current = false;
-
-      speechService.stop();
-      // Wait longer to ensure TTS audio has fully physically stopped playing in the room
-      setTimeout(() => {
-        if (!mountedRef.current) return;
-        setSessionState('active_session'); // Mic is on!
-        speechService.start(
-          null,
-          (finalText) => {
-            if (hasTriggeredRef.current) return;
-            setTranscript(finalText);
-            if (finalText.trim().length > 0) {
-              hasTriggeredRef.current = true;
-              handleEmergencyTrigger(finalText);
-            }
-          },
-          (err) => {
-            if (!hasTriggeredRef.current && mountedRef.current) {
-              setSessionState('error');
-            }
-          }
-        );
-      }, 150);
-    }, []);
 
     // ── Manual button click → skip wake word, go directly to active listening ──
     const handleManualActivate = useCallback(() => {
