@@ -132,9 +132,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       setTranscript('');
       const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
       setSystemReply(reply);
-      VoiceFeedback.speak(reply, () => {
+      VoiceFeedback.speak(reply); // Fire and forget
+      // Start capturing after TTS finishes (~4s for this longer sentence)
+      setTimeout(() => {
         if (mountedRef.current) startCapturing();
-      });
+      }, 4000);
     } else if (!Capacitor.isNativePlatform()) {
       // Web: check permissions and start wake word listening
       if (speechService.isSupported) {
@@ -188,9 +190,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
 
       const reply = "I'm listening. What's the emergency?";
       setSystemReply(reply);
-      VoiceFeedback.speak(reply, () => {
+      VoiceFeedback.speak(reply); // Fire and forget
+      // Start capturing after TTS finishes (~2.5s for this short sentence)
+      setTimeout(() => {
         if (mountedRef.current) startCapturing();
-      });
+      }, 2500);
     }, [startCapturing]);
 
     // ── Handle emergency SOS ──
@@ -221,11 +225,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           const intentName = nlpData.intent !== 'UNKNOWN' ? nlpData.intent.toLowerCase().replace('_', ' ') : 'emergency';
           const ackReply = nlpData.reply || `Got it. Sending SOS now for: ${intentName}. Help is on the way to your location.`;
           setSystemReply(ackReply);
-          VoiceFeedback.speak(ackReply, () => {
-            if (mountedRef.current) {
-              setTimeout(() => handleClose(), 2000);
-            }
-          });
+          VoiceFeedback.speak(ackReply); // Fire and forget - don't depend on callback
 
           const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
           setEmergencyData(emergency);
@@ -256,7 +256,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           };
           pushFacts();
 
-          if (mountedRef.current) setSessionState('completed');
+          if (mountedRef.current) {
+            setSessionState('completed');
+            // BULLETPROOF AUTO-CLOSE: 5 seconds after completed, close no matter what
+            setTimeout(() => {
+              if (mountedRef.current) handleClose();
+            }, 5000);
+          }
         } else {
           // Conversational interaction (not an emergency yet)
           const reply = nlpData.reply || "I'm here to talk. How can I help you?";
@@ -264,17 +270,21 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         
           if (nlpData.intent === 'SAFE' || nlpData.intent === 'CANCEL' || nlpData.intent === 'CLOSE_SESSION') {
             setSessionState('speaking');
-            VoiceFeedback.speak(reply, () => {
+            VoiceFeedback.speak(reply); // Fire and forget
+            // Close after TTS finishes (estimate ~3s for short reply)
+            setTimeout(() => {
               if (mountedRef.current) handleClose();
-            });
+            }, 3000);
           } else {
             setSessionState('speaking');
-            VoiceFeedback.speak(reply, () => {
+            VoiceFeedback.speak(reply); // Fire and forget
+            // Resume listening after TTS finishes (estimate based on text length)
+            const estimatedMs = Math.max(2000, (reply.length / 12) * 1000 + 1000);
+            setTimeout(() => {
               if (mountedRef.current) {
-                // Let user speak again
                 startCapturing();
               }
-            });
+            }, estimatedMs);
           }
         }
       } catch (e) {
@@ -282,7 +292,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       
         const ackReply = `Got it. Sending SOS now.`;
         setSystemReply(ackReply);
-        VoiceFeedback.speak(ackReply);
+        VoiceFeedback.speak(ackReply); // Fire and forget
 
         const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
         setEmergencyData(emergency);
@@ -290,13 +300,15 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
 
         const doneReply = 'Help request started. Your SOS has been transmitted. Stay safe.';
         setSystemReply(doneReply);
-        VoiceFeedback.speak(doneReply, () => {
-          if (mountedRef.current) {
-            setTimeout(() => handleClose(), 2000);
-          }
-        });
+        VoiceFeedback.speak(doneReply); // Fire and forget
 
-        if (mountedRef.current) setSessionState('completed');
+        if (mountedRef.current) {
+          setSessionState('completed');
+          // BULLETPROOF AUTO-CLOSE: 5 seconds after completed, close no matter what
+          setTimeout(() => {
+            if (mountedRef.current) handleClose();
+          }, 5000);
+        }
       }
     };
 
