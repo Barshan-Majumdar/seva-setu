@@ -194,6 +194,7 @@ class NativeSpeechBridge {
       }
     }
 
+    this._log('Stopping previous session...');
     await this._hardStop();
 
     this._mode = 'CONVERSATION';
@@ -204,6 +205,7 @@ class NativeSpeechBridge {
     this._onError = onError || null;
     this._onEnd = onEnd || null;
 
+    this._log('Starting hardware...');
     await this._startHardware();
   }
 
@@ -220,20 +222,29 @@ class NativeSpeechBridge {
     this._enabled = false;
     clearTimeout(this._restartTimeout);
     clearTimeout(this._transcriptDebounce);
-    try { await SpeechRecognition.stop(); } catch (e) {}
+    try { SpeechRecognition.stop(); } catch (e) {}
     this._isListening = false;
     this._log('⏸ Paused');
   }
 
   // ── Internal: force stop hardware ──
   async _hardStop() {
+    this._log('Executing _hardStop...');
     this._enabled = false;
     clearTimeout(this._restartTimeout);
     clearTimeout(this._transcriptDebounce);
     this._isListening = false;
-    try { await SpeechRecognition.stop(); } catch (e) {}
+    try { 
+      this._log('Calling native stop() (no await due to plugin bug)...');
+      SpeechRecognition.stop(); // CRITICAL: Do NOT await, the plugin never resolves this promise!
+      this._log('Native stop() fired');
+    } catch (e) {
+      this._log('Native stop() error: ' + e.message);
+    }
     // Wait for Android hardware to release the audio track
+    this._log('Waiting 500ms for hardware release...');
     await new Promise(r => setTimeout(r, 500));
+    this._log('_hardStop complete');
   }
 
   // ── Internal: start the hardware mic ──

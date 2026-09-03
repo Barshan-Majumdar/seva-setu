@@ -1,20 +1,13 @@
 /**
  * BackgroundVoiceService — Always-on "Seva Setu" wake word detection.
  * 
- * On native (Capacitor): Uses a foreground service notification to keep 
- * the app alive in the background. The mic stays open and continuously 
- * listens for the wake word "seva setu" even when the screen is locked.
+ * On native (Capacitor): Delegates entirely to nativeSpeechBridge to prevent
+ * hardware race conditions. NativeSpeechBridge is the SOLE owner of the mic.
  * 
  * On web: Uses standard Web Speech API with automatic restart.
- * 
- * Architecture:
- *   - Continuous SpeechRecognition loop
- *   - Wake word detection: "seva setu", "seba setu", "sheva setu" (fuzzy)
- *   - On wake word detected → triggers the VoiceEmergencyModal
- *   - Foreground notification keeps Android from killing the process
  */
 import { Capacitor } from '@capacitor/core';
-import { SpeechRecognition } from '@capacitor-community/speech-recognition';
+import { nativeSpeechBridge } from './NativeSpeechBridge';
 
 const WAKE_WORDS = ['seva setu', 'seba setu', 'sheva setu', 'seva sethu', 'save a satu', 'seva set to', 'seva set u'];
 
@@ -27,49 +20,15 @@ class BackgroundVoiceService {
     this._enabled = false;
     this._consecutiveErrors = 0;
     this._maxConsecutiveErrors = 5;
-    this._nativeInitialized = false;
   }
 
   async init(onWakeWordDetected) {
     this._onWakeWordDetected = onWakeWordDetected;
     
     if (Capacitor.isNativePlatform()) {
-      try {
-        const { speechRecognition } = await SpeechRecognition.checkPermissions();
-        if (speechRecognition !== 'granted') {
-          await SpeechRecognition.requestPermissions();
-        }
-        
-        SpeechRecognition.addListener('partialResults', (data) => {
-          this._lastResultTime = Date.now();
-          if (data.matches && data.matches.length > 0) {
-            const transcript = data.matches[0].toLowerCase().trim();
-            const detected = WAKE_WORDS.some(ww => transcript.includes(ww));
-            if (detected) {
-              console.log('[BackgroundVoice] 🎤 Wake word detected:', transcript);
-              this._consecutiveErrors = 0;
-              this._backoffMs = 1000;
-              this.pause();
-              if (this._onWakeWordDetected) this._onWakeWordDetected(transcript);
-            }
-          }
-        });
-
-        SpeechRecognition.addListener('listeningState', (data) => {
-          if (data.status === 'stopped') {
-            this._isListening = false;
-            if (this._enabled) {
-              this._scheduleRestart(1000);
-            }
-          }
-        });
-        this._nativeInitialized = true;
-        console.log('[BackgroundVoice] Native Initialized');
-        return true;
-      } catch (err) {
-        console.error('[BackgroundVoice] Native Init Error:', err);
-        return false;
-      }
+      // Native wake word detection is completely delegated to NativeSpeechBridge
+      const ok = await nativeSpeechBridge.init();
+      return ok;
     } else {
       const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!WebSpeechRecognition) {
@@ -134,39 +93,20 @@ class BackgroundVoiceService {
   }
 
   async start() {
-    if (!Capacitor.isNativePlatform() && !this._recognition) return;
     this._enabled = true;
     this._consecutiveErrors = 0;
     this._backoffMs = 1000;
 
     if (Capacitor.isNativePlatform()) {
-      try { await SpeechRecognition.stop(); } catch (e) {}
-      await new Promise(r => setTimeout(r, 200));
-
-      let retries = 3;
-      while (retries > 0 && this._enabled && !this._isListening) {
-        try {
-          const options = retries === 3 
-            ? { language: 'en-IN', partialResults: true, popup: false }
-            : (retries === 2 ? { partialResults: true, popup: false } : { partialResults: true });
-
-          await SpeechRecognition.start(options);
-          this._isListening = true;
-          this._lastStartTime = Date.now();
-          this._showForegroundNotification();
-          console.log('[BackgroundVoice] Native start succeeded');
-          break;
-        } catch (err) {
-          console.warn(`[BackgroundVoice] Native start error (retries left: ${retries - 1}):`, err);
-          retries--;
-          this._isListening = false;
-          await new Promise(r => setTimeout(r, 350));
-        }
-      }
-      if (!this._isListening && this._enabled) {
-        this._scheduleRestart(2000);
-      }
+      // Proxy to NativeSpeechBridge
+      await nativeSpeechBridge.startWakeWord((text) => {
+        this.pause(); // Pause wake word listening
+        if (this._onWakeWordDetected) this._onWakeWordDetected(text);
+      });
+      this._showForegroundNotification();
+      this._isListening = true;
     } else {
+      if (!this._recognition) return;
       try {
         this._isListening = true;
         this._recognition.start();
@@ -185,7 +125,7 @@ class BackgroundVoiceService {
     this._isListening = false;
     clearTimeout(this._restartTimeout);
     if (Capacitor.isNativePlatform()) {
-      try { SpeechRecognition.stop(); } catch (e) {}
+      nativeSpeechBridge.pause();
     } else {
       try { this._recognition?.stop(); } catch (e) {}
     }
@@ -196,7 +136,11 @@ class BackgroundVoiceService {
       this.start();
       return;
     }
-    this._scheduleRestart(600);
+    if (Capacitor.isNativePlatform()) {
+      this.start();
+    } else {
+      this._scheduleRestart(600);
+    }
   }
 
   stop() {
@@ -204,7 +148,7 @@ class BackgroundVoiceService {
     this._isListening = false;
     clearTimeout(this._restartTimeout);
     if (Capacitor.isNativePlatform()) {
-      try { SpeechRecognition.stop(); } catch (e) {}
+      nativeSpeechBridge.stop();
     } else {
       try { this._recognition?.stop(); } catch (e) {}
     }
@@ -212,6 +156,9 @@ class BackgroundVoiceService {
   }
 
   get isActive() {
+    if (Capacitor.isNativePlatform()) {
+      return nativeSpeechBridge.isActive && nativeSpeechBridge.mode === 'WAKE_WORD';
+    }
     return this._enabled && this._isListening;
   }
 
@@ -219,14 +166,7 @@ class BackgroundVoiceService {
     clearTimeout(this._restartTimeout);
     this._restartTimeout = setTimeout(async () => {
       if (this._enabled && this._isListening) {
-        if (Capacitor.isNativePlatform()) {
-          try {
-            await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
-            this._lastStartTime = Date.now();
-          } catch (err) {
-            console.warn('[BackgroundVoice] Native restart error:', err);
-          }
-        } else {
+        if (!Capacitor.isNativePlatform()) {
           try {
             this._recognition?.start();
             this._lastStartTime = Date.now();
