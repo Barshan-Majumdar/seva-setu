@@ -126,14 +126,14 @@ function MainContent() {
       // We only want continuous background listening on Native Mobile
       // Web browsers (Chrome/Safari) aggressively kill background mic access, causing flickering
       if (Capacitor.isNativePlatform()) {
-        const supported = backgroundVoiceService.init((transcript) => {
+        backgroundVoiceService.init((transcript) => {
           console.log('[App] Wake word detected! Opening emergency modal...');
           setShowVoiceEmergency(true);
+        }).then(supported => {
+          if (supported) {
+            backgroundVoiceService.start();
+          }
         });
-        
-        if (supported) {
-          backgroundVoiceService.start();
-        }
       } else {
         console.log('[App] Web environment detected. Skipping background wake word to prevent browser mic flickering.');
       }

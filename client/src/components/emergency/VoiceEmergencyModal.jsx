@@ -30,21 +30,12 @@ export const VoiceEmergencyModal = () => {
 
     if (!speechService.isSupported) return;
 
-    // Check if mic permission was already granted in a previous session
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'microphone' })
-        .then((result) => {
-          if (result.state === 'granted' && mountedRef.current) {
-            // Permission already granted — silently start wake word listening
-            console.log('[VoiceUI] Mic permission already granted — auto-starting wake word');
-            beginWakeWordListening();
-          }
-          // If 'prompt' or 'denied' → stay in idle, show button
-        })
-        .catch(() => {
-          // permissions.query not supported — stay in idle, show button
-        });
-    }
+    speechService.checkPermissions().then((isGranted) => {
+      if (isGranted && mountedRef.current) {
+        console.log('[VoiceUI] Mic permission already granted — auto-starting wake word');
+        beginWakeWordListening();
+      }
+    });
 
     return () => {
       mountedRef.current = false;
@@ -122,7 +113,7 @@ export const VoiceEmergencyModal = () => {
           }
         }
       );
-    }, 1500);
+    }, 150);
   }, []);
 
   // ── Manual button click → skip wake word, go directly to active listening ──

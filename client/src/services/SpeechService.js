@@ -45,8 +45,9 @@ export class SpeechService {
           this.isListening = false;
           if (this._onEnd) this._onEnd();
           if (this._autoRestart) {
-            setTimeout(() => {
-              if (!this.isListening) {
+            clearTimeout(this._restartTimeout);
+            this._restartTimeout = setTimeout(() => {
+              if (!this.isListening && this._autoRestart) {
                 try { SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false }); this.isListening = true; } catch (e) {}
               }
             }, 500);
@@ -154,10 +155,10 @@ export class SpeechService {
         if (isFinal) {
           this._onTranscript(cleaned);
         } else {
-          // Otherwise, wait for 1.2 seconds of silence (debounce)
+          // Otherwise, wait for 800ms of silence (debounce)
           this._transcriptDebounce = setTimeout(() => {
             this._onTranscript(cleaned);
-          }, 1200);
+          }, 800);
         }
       }
     }
@@ -205,6 +206,27 @@ export class SpeechService {
       if (this.recognition && this.isListening) {
         try { this.recognition.stop(); } catch (e) {}
       }
+    }
+  }
+
+  async checkPermissions() {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { speechRecognition } = await SpeechRecognition.checkPermissions();
+        return speechRecognition === 'granted';
+      } catch (err) {
+        return false;
+      }
+    } else {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const result = await navigator.permissions.query({ name: 'microphone' });
+          return result.state === 'granted';
+        } catch (err) {
+          return false;
+        }
+      }
+      return false;
     }
   }
 

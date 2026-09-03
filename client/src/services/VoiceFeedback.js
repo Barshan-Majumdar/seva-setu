@@ -17,25 +17,43 @@ export const VoiceFeedback = {
         // Cancel any ongoing native speech
         await TextToSpeech.stop().catch(() => {});
         
+        let hasFinished = false;
+        let listenerHandle = null;
+
+        if (onEnd) {
+          // Listen to native progress to know EXACTLY when the speech ends
+          listenerHandle = await TextToSpeech.addListener('onRangeStart', (info) => {
+            // If the engine is speaking the very last word of the sentence
+            if (info.end >= message.length - Math.max(10, message.length * 0.1)) {
+              if (!hasFinished) {
+                hasFinished = true;
+                setTimeout(() => {
+                  if (listenerHandle) listenerHandle.remove();
+                  onEnd();
+                }, 600); // 600ms buffer for the physical last word to finish
+              }
+            }
+          });
+
+          // Absolute fallback safety timeout (in case onRangeStart glitches)
+          const fallbackMs = (message.length / 10) * 1000 + 2000;
+          setTimeout(() => {
+            if (!hasFinished) {
+              hasFinished = true;
+              if (listenerHandle) listenerHandle.remove();
+              onEnd();
+            }
+          }, fallbackMs);
+        }
+
         await TextToSpeech.speak({
           text: message,
           lang: 'en-IN',
           rate: 1.0,
           pitch: 1.0,
           volume: 1.0,
-          category: 'ambient', // iOS audio session category
+          category: 'ambient', 
         });
-        
-        // @capacitor-community/text-to-speech speak() promise resolves immediately when queued, 
-        // NOT when finished. We must calculate the duration based on text length to prevent 
-        // the microphone from turning on while the speaker is still talking (which causes an infinite loop).
-        // Average speaking rate is ~14 characters per second, plus a 600ms buffer.
-        if (onEnd) {
-          const estimatedDurationMs = (message.length / 14) * 1000 + 600;
-          setTimeout(() => {
-            onEnd();
-          }, estimatedDurationMs);
-        }
       } catch (err) {
         console.error('[VoiceFeedback] Native TTS Error:', err);
         if (onEnd) onEnd();
@@ -68,21 +86,30 @@ export const VoiceFeedback = {
       utterance.voice = preferred;
     }
     
+    if (onEnd) {
+      // We trust the browser's native onend event on Web, but keep a safety timeout 
+      // just in case the browser completely fails to fire it.
+      const maxTimeout = (message.length / 10) * 1000 + 5000; 
+
+      const safetyTimeout = setTimeout(() => {
+        utterance.onend = null;
+        utterance.onerror = null;
+        onEnd();
+      }, maxTimeout);
+
+      utterance.onend = () => {
+        clearTimeout(safetyTimeout);
+        onEnd();
+      };
+      utterance.onerror = () => {
+        clearTimeout(safetyTimeout);
+        onEnd();
+      };
+    }
+    
     // Prevent Chrome from garbage collecting the utterance
     window.__speech_utterance = utterance;
-    
     window.speechSynthesis.speak(utterance);
-
-    if (onEnd) {
-      // Browser SpeechSynthesis onend events are notoriously buggy and can fire prematurely.
-      // We forcibly calculate the strict minimum time it should take to speak the text 
-      // (approx 13 chars per second) to guarantee the microphone never turns on while speaking.
-      const estimatedDurationMs = (message.length / 13) * 1000 + 800;
-      
-      setTimeout(() => {
-        onEnd();
-      }, estimatedDurationMs);
-    }
   },
 
   /** Stop any ongoing speech. */
