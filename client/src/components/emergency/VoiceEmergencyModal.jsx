@@ -168,8 +168,12 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       setTranscript('');
       hasTriggeredRef.current = false;
     
-      // Stop the microphone so it doesn't hear itself speak
-      speechService.stop();
+      // Stop any current mic session
+      if (Capacitor.isNativePlatform()) {
+        nativeSpeechBridge.pause();
+      } else {
+        speechService.stop();
+      }
 
       const reply = "I'm listening. What's the emergency?";
       setSystemReply(reply);
@@ -181,7 +185,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     // ── Handle emergency SOS ──
     const handleEmergencyTrigger = async (text) => {
       setSessionState('processing');
-      speechService.stop();
+      if (Capacitor.isNativePlatform()) {
+        nativeSpeechBridge.pause();
+      } else {
+        speechService.stop();
+      }
 
       try {
         // 1. Ask NLP about intent BEFORE triggering SOS

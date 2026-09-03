@@ -20,47 +20,11 @@ export class SpeechService {
   }
 
   async _ensureNativeInitialized() {
-    if (this._initialized) return true;
-    try {
-      const { speechRecognition } = await SpeechRecognition.checkPermissions();
-      if (speechRecognition !== 'granted') {
-        await SpeechRecognition.requestPermissions();
-      }
-      const { available } = await SpeechRecognition.available();
-      if (!available) {
-        console.warn('[SpeechService] Native Speech Recognition not available');
-        return false;
-      }
-
-      SpeechRecognition.addListener('partialResults', (data) => {
-        if (data.matches && data.matches.length > 0) {
-          const finalTranscript = data.matches[0];
-          this._processTranscript(finalTranscript);
-        }
-      });
-      
-      // Native plugin stops automatically on silence
-      SpeechRecognition.addListener('listeningState', (data) => {
-        if (data.status === 'stopped') {
-          this.isListening = false;
-          if (this._onEnd) this._onEnd();
-          if (this._autoRestart) {
-            clearTimeout(this._restartTimeout);
-            this._restartTimeout = setTimeout(() => {
-              if (!this.isListening && this._autoRestart) {
-                try { SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false }); this.isListening = true; } catch (e) {}
-              }
-            }, 500);
-          }
-        }
-      });
-      
-      this._initialized = true;
-      return true;
-    } catch (e) {
-      console.error('[SpeechService] Native Init Error:', e);
-      return false;
-    }
+    // On native, NativeSpeechBridge is the sole owner of the Android SpeechRecognizer.
+    // SpeechService must NEVER register its own listeners on native — they would
+    // conflict with NativeSpeechBridge and permanently kill the microphone.
+    console.warn('[SpeechService] _ensureNativeInitialized blocked — use NativeSpeechBridge on native');
+    return false;
   }
 
   _ensureWebInitialized() {

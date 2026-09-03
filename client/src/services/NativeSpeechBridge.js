@@ -44,16 +44,18 @@ class NativeSpeechBridge {
     try {
       const { speechRecognition } = await SpeechRecognition.checkPermissions();
       if (speechRecognition !== 'granted') {
-        await SpeechRecognition.requestPermissions();
-      }
-      const { available } = await SpeechRecognition.available();
-      if (!available) {
-        console.warn('[NativeBridge] Speech Recognition not available on device');
-        return false;
+        const result = await SpeechRecognition.requestPermissions();
+        if (result.speechRecognition !== 'granted') {
+          console.warn('[NativeBridge] Mic permission denied');
+          return false;
+        }
       }
 
+      // Skip SpeechRecognition.available() — it returns false on many devices
+      // even though speech recognition works perfectly fine.
+
       // Remove any stale listeners from previous sessions
-      await SpeechRecognition.removeAllListeners();
+      try { await SpeechRecognition.removeAllListeners(); } catch (e) {}
 
       // Register THE ONLY listeners for the entire app
       SpeechRecognition.addListener('partialResults', (data) => {

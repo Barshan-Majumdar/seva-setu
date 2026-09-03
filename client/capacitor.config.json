@@ -8,7 +8,9 @@
       "seva-setu-cuo5.onrender.com",
       "seva-setu-1wbx.onrender.com",
       "localhost:5000",
-      "localhost:8000"
+      "localhost:8000",
+      "10.154.209.193:8000",
+      "*"
     ]
   },
   "plugins": {
@@ -17,6 +19,9 @@
     },
     "Geolocation": {
       "permissions": ["location"]
+    },
+    "SpeechRecognition": {
+      "permissions": ["microphone"]
     },
     "SplashScreen": {
       "launchShowDuration": 2000,
