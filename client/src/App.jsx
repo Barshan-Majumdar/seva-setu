@@ -197,7 +197,7 @@ function MainContent() {
                     </div>
                     {(() => {
                       const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
-                      return <SignIn routing={clerkRouting} path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                      return <SignIn routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-in" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
                 </div>
@@ -214,7 +214,7 @@ function MainContent() {
                     </div>
                     {(() => {
                       const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
-                      return <SignUp routing={clerkRouting} path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                      return <SignUp routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-up" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
                 </div>
@@ -330,7 +330,7 @@ function MainContent() {
 }
 
 const AppRouter = Capacitor.isNativePlatform() ? HashRouter : BrowserRouter;
-const clerkRouting = Capacitor.isNativePlatform() ? 'hash' : 'path';
+const clerkRouting = Capacitor.isNativePlatform() ? 'virtual' : 'path';
 
 function App() {
   const [showIntro, setShowIntro] = useState(() => {
