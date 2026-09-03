@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
-import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignIn, SignUp } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -160,9 +160,14 @@ function MainContent() {
           // Close the in-app browser layer if it's open
           await Browser.close().catch(() => {});
 
-          const slug = data.url.split('.app://').pop();
-          if (slug) {
-            navigate('/' + slug);
+          try {
+            const url = new URL(data.url);
+            // If it's our custom scheme, route the pathname into our MemoryRouter
+            if (url.protocol === 'sevasetu:' && url.pathname) {
+              navigate(url.pathname + url.search);
+            }
+          } catch (e) {
+            console.error('[Native] Invalid URL:', data.url);
           }
         });
       }
@@ -196,7 +201,7 @@ function MainContent() {
                       <Logo size={48} />
                     </div>
                     {(() => {
-                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
+                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://localhost/post-login' : '/post-login';
                       return <SignIn routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-in" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
@@ -213,7 +218,7 @@ function MainContent() {
                       <Logo size={48} />
                     </div>
                     {(() => {
-                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
+                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://localhost/post-login' : '/post-login';
                       return <SignUp routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-up" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
@@ -329,7 +334,7 @@ function MainContent() {
   );
 }
 
-const AppRouter = Capacitor.isNativePlatform() ? HashRouter : BrowserRouter;
+const AppRouter = Capacitor.isNativePlatform() ? MemoryRouter : BrowserRouter;
 const clerkRouting = Capacitor.isNativePlatform() ? 'virtual' : 'path';
 
 function App() {
