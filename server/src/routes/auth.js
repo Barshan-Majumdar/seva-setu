@@ -130,6 +130,17 @@ router.post('/login', async (req, res) => {
 });
 
 /**
+ * @route   GET /api/auth/mobile-redirect
+ * @desc    Proxy redirect for Clerk OAuth on Capacitor mobile
+ * @access  Public
+ */
+router.get('/mobile-redirect', (req, res) => {
+  // Clerk sends the user here after OAuth finishes.
+  // We simply 302 redirect them back to the Capacitor custom scheme!
+  res.redirect('sevasetu://localhost/post-login');
+});
+
+/**
  * @route   GET /api/auth/me
  * @desc    Return current user's DB profile (id, role, email, name)
  * @access  Private

@@ -201,7 +201,9 @@ function MainContent() {
                       <Logo size={48} />
                     </div>
                     {(() => {
-                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://localhost/post-login' : '/post-login';
+                      const redirectUrl = Capacitor.isNativePlatform() 
+                        ? `${import.meta.env.VITE_API_BASE_URL}/auth/mobile-redirect` 
+                        : '/post-login';
                       return <SignIn routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-in" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
@@ -218,7 +220,9 @@ function MainContent() {
                       <Logo size={48} />
                     </div>
                     {(() => {
-                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://localhost/post-login' : '/post-login';
+                      const redirectUrl = Capacitor.isNativePlatform() 
+                        ? `${import.meta.env.VITE_API_BASE_URL}/auth/mobile-redirect` 
+                        : '/post-login';
                       return <SignUp routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-up" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
