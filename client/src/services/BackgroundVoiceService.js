@@ -136,24 +136,34 @@ class BackgroundVoiceService {
   async start() {
     if (!Capacitor.isNativePlatform() && !this._recognition) return;
     this._enabled = true;
-    this._isListening = true;
     this._consecutiveErrors = 0;
     this._backoffMs = 1000;
 
     if (Capacitor.isNativePlatform()) {
       try {
         await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
+        this._isListening = true;
         this._lastStartTime = Date.now();
         this._showForegroundNotification();
       } catch (err) {
         console.warn('[BackgroundVoice] Native start error:', err);
+        this._isListening = false;
+        // Schedule a restart since it failed to start
+        if (this._enabled) {
+          this._scheduleRestart(2000);
+        }
       }
     } else {
       try {
+        this._isListening = true;
         this._recognition.start();
         this._lastStartTime = Date.now();
       } catch (err) {
-        if (err.name !== 'InvalidStateError') console.warn('[BackgroundVoice] Start error:', err.message);
+        if (err.name !== 'InvalidStateError') {
+          console.warn('[BackgroundVoice] Start error:', err.message);
+          this._isListening = false;
+          if (this._enabled) this._scheduleRestart(2000);
+        }
       }
     }
   }
@@ -169,8 +179,10 @@ class BackgroundVoiceService {
   }
 
   resume() {
-    if (!this._enabled) return;
-    this._isListening = true;
+    if (!this._enabled) {
+      this.start();
+      return;
+    }
     this._scheduleRestart(600);
   }
 

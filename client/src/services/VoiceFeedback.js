@@ -87,23 +87,45 @@ export const VoiceFeedback = {
     }
     
     if (onEnd) {
-      // We trust the browser's native onend event on Web, but keep a safety timeout 
-      // just in case the browser completely fails to fire it.
+      // Browser SpeechSynthesis onend events are notoriously buggy and can fire prematurely.
+      // We enforce a STRICT minimum delay based on a very fast speaking rate (18 chars/sec).
+      const minDurationMs = (message.length / 18) * 1000 + 400; 
       const maxTimeout = (message.length / 10) * 1000 + 5000; 
+      
+      const startTime = Date.now();
+      let hasFinished = false;
+
+      const finishAndResolve = () => {
+        if (hasFinished) return;
+        const elapsed = Date.now() - startTime;
+        
+        if (elapsed < minDurationMs) {
+          // onend fired prematurely! Wait for the physical minimum duration.
+          setTimeout(() => {
+            if (!hasFinished) {
+              hasFinished = true;
+              onEnd();
+            }
+          }, minDurationMs - elapsed);
+        } else {
+          hasFinished = true;
+          onEnd();
+        }
+      };
 
       const safetyTimeout = setTimeout(() => {
         utterance.onend = null;
         utterance.onerror = null;
-        onEnd();
+        finishAndResolve();
       }, maxTimeout);
 
       utterance.onend = () => {
         clearTimeout(safetyTimeout);
-        onEnd();
+        finishAndResolve();
       };
       utterance.onerror = () => {
         clearTimeout(safetyTimeout);
-        onEnd();
+        finishAndResolve();
       };
     }
     

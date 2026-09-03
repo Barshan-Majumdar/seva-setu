@@ -128,6 +128,7 @@ function MainContent() {
       if (Capacitor.isNativePlatform()) {
         backgroundVoiceService.init((transcript) => {
           console.log('[App] Wake word detected! Opening emergency modal...');
+          autoActivateEmergency.current = true;
           setShowVoiceEmergency(true);
         }).then(supported => {
           if (supported) {
@@ -147,6 +148,7 @@ function MainContent() {
   // Pause background voice when emergency modal is open, resume when closed
   const handleVoiceEmergencyClose = useCallback(() => {
     setShowVoiceEmergency(false);
+    autoActivateEmergency.current = false;
     // Resume background listening after a delay for audio to settle
     setTimeout(() => backgroundVoiceService.resume(), 1500);
   }, []);
@@ -329,7 +331,11 @@ function MainContent() {
           {/* Voice Emergency Modal — triggered by wake word or manual activation */}
           {showVoiceEmergency && (
             <Suspense fallback={null}>
-              <VoiceEmergencyModal onClose={handleVoiceEmergencyClose} />
+              <VoiceEmergencyModal 
+                open={showVoiceEmergency} 
+                autoActivate={autoActivateEmergency.current}
+                handleClose={handleVoiceEmergencyClose} 
+              />
             </Suspense>
           )}
         </Suspense>
