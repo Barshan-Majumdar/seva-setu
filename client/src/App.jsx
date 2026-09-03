@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignIn, SignUp } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -175,9 +175,6 @@ function MainContent() {
     };
   }, [isReady, navigate]);
 
-  // Determine the correct redirect URL based on platform
-  const redirectUrl = Capacitor.isNativePlatform() ? 'com.sevasetu.app://post-login' : '/post-login';
-
   return (
     <>
       <AuthTokenBridge />
@@ -200,7 +197,7 @@ function MainContent() {
                     </div>
                     {(() => {
                       const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
-                      return <SignIn routing="path" path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                      return <SignIn routing={clerkRouting} path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
                 </div>
@@ -217,7 +214,7 @@ function MainContent() {
                     </div>
                     {(() => {
                       const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
-                      return <SignUp routing="path" path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                      return <SignUp routing={clerkRouting} path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
                 </div>
@@ -316,7 +313,7 @@ function MainContent() {
               }
             />
 
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           {isAuthenticated && <ChatWidget />}
 
@@ -332,6 +329,9 @@ function MainContent() {
   );
 }
 
+const AppRouter = Capacitor.isNativePlatform() ? HashRouter : BrowserRouter;
+const clerkRouting = Capacitor.isNativePlatform() ? 'hash' : 'path';
+
 function App() {
   const [showIntro, setShowIntro] = useState(() => {
     return !sessionStorage.getItem('introShown');
@@ -345,11 +345,11 @@ function App() {
   return (
     <ErrorBoundary>
       {showIntro && <LoadingScreen onComplete={handleIntroComplete} />}
-      <Router>
+      <AppRouter>
         <ClerkProviderWithRouter>
           <MainContent />
         </ClerkProviderWithRouter>
-      </Router>
+      </AppRouter>
     </ErrorBoundary>
   );
 }
