@@ -23,6 +23,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
   const [transcript, setTranscript] = useState('');
   const [systemReply, setSystemReply] = useState('');
   const [emergencyData, setEmergencyData] = useState(null);
+  const [debugLogs, setDebugLogs] = useState([]);
   const hasTriggeredRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -160,6 +161,16 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     };
   }, [autoActivate, startCapturing, beginWakeWordListening]);
 
+  // Subscribe to NativeSpeechBridge debug updates (native only)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      setDebugLogs(nativeSpeechBridge.getDebugLog());
+      nativeSpeechBridge.onDebugUpdate((logs) => {
+        if (mountedRef.current) setDebugLogs(logs);
+      });
+      return () => nativeSpeechBridge.onDebugUpdate(null);
+    }
+  }, []);
 
 
     // ── Manual button click → skip wake word, go directly to active listening ──
@@ -304,15 +315,38 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
   };
 
     // ══════════════════════════════════════════════════
+    // DEBUG PANEL (native only — remove after debugging)
+    // ══════════════════════════════════════════════════
+    const DebugPanel = Capacitor.isNativePlatform() ? () => (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        background: 'rgba(0,0,0,0.9)', color: '#0f0',
+        fontFamily: 'monospace', fontSize: '10px',
+        padding: '4px', zIndex: 99999,
+        maxHeight: '35vh', overflowY: 'auto',
+        lineHeight: '1.3'
+      }}>
+        <div style={{color: '#ff0', fontWeight: 'bold', marginBottom: '2px'}}>
+          STATE: {sessionState} | Bridge: {nativeSpeechBridge.statusText}
+        </div>
+        {debugLogs.map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+      </div>
+    ) : () => null;
+
+    // ══════════════════════════════════════════════════
     // RENDER: Idle — Permission not yet granted, show button
     // ══════════════════════════════════════════════════
     if (sessionState === 'idle') {
       return (
-        <div style={{
-          position: 'fixed', bottom: '1.5rem', right: '1.5rem',
-          display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
-          zIndex: 9999, gap: '0.5rem'
-        }}>
+        <>
+          <DebugPanel />
+          <div style={{
+            position: 'fixed', bottom: '1.5rem', right: '1.5rem',
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+            zIndex: 9999, gap: '0.5rem'
+          }}>
           <button
             onClick={handleManualActivate}
             aria-label="Activate Voice SOS"
@@ -337,7 +371,8 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           }}>
             Tap or say "Hey Seva Setu"
           </span>
-        </div>
+          </div>
+        </>
       );
     }
 
@@ -346,8 +381,10 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     // ══════════════════════════════════════════════════
     if (sessionState === 'listening_for_wake') {
       return (
-        <div style={{
-          position: 'fixed', bottom: '1.5rem', right: '1.5rem',
+        <>
+          <DebugPanel />
+          <div style={{
+            position: 'fixed', bottom: '1.5rem', right: '1.5rem',
           display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
           zIndex: 9999, gap: '0.5rem'
         }}>
@@ -396,6 +433,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           }
         `}</style>
         </div>
+        </>
       );
     }
 
@@ -403,7 +441,9 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     // RENDER: Full-screen Modal
     // ══════════════════════════════════════════════════
     return (
-      <div style={{
+      <>
+        <DebugPanel />
+        <div style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
         backdropFilter: 'blur(8px)', zIndex: 10000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -628,5 +668,6 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         }
       `}</style>
       </div>
+      </>
     );
   };

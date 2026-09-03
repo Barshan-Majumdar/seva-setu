@@ -7,10 +7,6 @@ import { SpeechRecognition } from '@capacitor-community/speech-recognition';
  * Android only allows ONE SpeechRecognizer session at a time, and the
  * @capacitor-community/speech-recognition plugin is a global singleton.
  * 
- * Previously, BackgroundVoiceService and SpeechService BOTH registered
- * their own listeners on this singleton, causing them to fight each other
- * and permanently kill the microphone (ERROR_RECOGNIZER_BUSY).
- * 
  * This bridge is the SOLE owner of the native plugin. All speech recognition
  * on Android goes through here. It supports two modes:
  *   - WAKE_WORD: Continuously listens for "Seva Setu" wake phrase
@@ -29,49 +25,92 @@ class NativeSpeechBridge {
 
     // Callbacks
     this._onWakeWord = null;
-    this._onTranscript = null;       // final transcript (debounced)
-    this._onPartialTranscript = null; // live interim text
+    this._onTranscript = null;
+    this._onPartialTranscript = null;
     this._onError = null;
     this._onEnd = null;
 
     this._transcriptDebounce = null;
+
+    // Debug log (visible on screen via getDebugLog())
+    this._debugLog = [];
+    this._maxLogLines = 30;
+    this._onDebugUpdate = null; // UI callback to refresh debug display
+  }
+
+  _log(msg) {
+    const ts = new Date().toLocaleTimeString();
+    const line = `[${ts}] ${msg}`;
+    console.log('[NativeBridge] ' + msg);
+    this._debugLog.push(line);
+    if (this._debugLog.length > this._maxLogLines) {
+      this._debugLog.shift();
+    }
+    if (this._onDebugUpdate) {
+      try { this._onDebugUpdate([...this._debugLog]); } catch (e) {}
+    }
+  }
+
+  getDebugLog() {
+    return [...this._debugLog];
+  }
+
+  onDebugUpdate(cb) {
+    this._onDebugUpdate = cb;
   }
 
   async init() {
-    if (!Capacitor.isNativePlatform()) return false;
-    if (this._initialized) return true;
+    if (!Capacitor.isNativePlatform()) {
+      this._log('Not native platform, skipping');
+      return false;
+    }
+    if (this._initialized) {
+      this._log('Already initialized');
+      return true;
+    }
 
     try {
+      this._log('Checking permissions...');
       const { speechRecognition } = await SpeechRecognition.checkPermissions();
+      this._log('Permission status: ' + speechRecognition);
+      
       if (speechRecognition !== 'granted') {
+        this._log('Requesting permissions...');
         const result = await SpeechRecognition.requestPermissions();
+        this._log('Permission result: ' + result.speechRecognition);
         if (result.speechRecognition !== 'granted') {
-          console.warn('[NativeBridge] Mic permission denied');
+          this._log('❌ Permission denied');
           return false;
         }
       }
 
-      // Skip SpeechRecognition.available() — it returns false on many devices
-      // even though speech recognition works perfectly fine.
+      // Check availability (log only, don't block)
+      try {
+        const { available } = await SpeechRecognition.available();
+        this._log('Available check: ' + available);
+      } catch (e) {
+        this._log('Available check failed: ' + e.message);
+      }
 
-      // Remove any stale listeners from previous sessions
+      // Remove any stale listeners
       try { await SpeechRecognition.removeAllListeners(); } catch (e) {}
+      this._log('Cleared old listeners');
 
       // Register THE ONLY listeners for the entire app
-      SpeechRecognition.addListener('partialResults', (data) => {
+      await SpeechRecognition.addListener('partialResults', (data) => {
         if (data.matches && data.matches.length > 0) {
+          this._log('📝 Got speech: "' + data.matches[0].substring(0, 50) + '"');
           this._handleResult(data.matches[0]);
         }
       });
 
-      SpeechRecognition.addListener('listeningState', (data) => {
+      await SpeechRecognition.addListener('listeningState', (data) => {
+        this._log('🔔 listeningState: ' + data.status);
         if (data.status === 'started') {
           this._isListening = true;
-          console.log('[NativeBridge] 🎤 Mic is ON (mode: ' + this._mode + ')');
         }
         if (data.status === 'stopped') {
           this._isListening = false;
-          console.log('[NativeBridge] 🔇 Mic is OFF (mode: ' + this._mode + ')');
           
           if (this._mode === 'CONVERSATION' && this._onEnd) {
             this._onEnd();
@@ -79,16 +118,17 @@ class NativeSpeechBridge {
 
           // Auto-restart if we're supposed to be listening
           if (this._enabled && (this._mode === 'WAKE_WORD' || this._mode === 'CONVERSATION')) {
-            this._scheduleRestart(800);
+            this._log('Scheduling auto-restart...');
+            this._scheduleRestart(1000);
           }
         }
       });
 
       this._initialized = true;
-      console.log('[NativeBridge] ✅ Initialized successfully');
+      this._log('✅ Initialized OK');
       return true;
     } catch (e) {
-      console.error('[NativeBridge] Init error:', e);
+      this._log('❌ Init error: ' + (e.message || e));
       return false;
     }
   }
@@ -101,19 +141,18 @@ class NativeSpeechBridge {
       const lower = text.toLowerCase();
       const detected = WAKE_WORDS.some(ww => lower.includes(ww));
       if (detected && this._onWakeWord) {
-        console.log('[NativeBridge] 🎤 Wake word detected:', lower);
+        this._log('🎤 WAKE WORD DETECTED: ' + lower);
         this._onWakeWord(lower);
       }
     } else if (this._mode === 'CONVERSATION') {
-      // Send live partial transcripts for real-time UI updates
       if (this._onPartialTranscript) {
         this._onPartialTranscript(text);
       }
 
-      // Debounce final transcript (wait 800ms of silence)
       clearTimeout(this._transcriptDebounce);
       this._transcriptDebounce = setTimeout(() => {
         if (this._onTranscript) {
+          this._log('💬 Final transcript: "' + text.substring(0, 50) + '"');
           this._onTranscript(text);
         }
       }, 800);
@@ -122,12 +161,13 @@ class NativeSpeechBridge {
 
   // ── Start listening for the wake word ──
   async startWakeWord(onWakeWordCb) {
+    this._log('startWakeWord() called');
+    
     if (!this._initialized) {
       const ok = await this.init();
-      if (!ok) return;
+      if (!ok) { this._log('Cannot start wake word - init failed'); return; }
     }
 
-    // Stop any active session first
     await this._hardStop();
 
     this._mode = 'WAKE_WORD';
@@ -139,17 +179,21 @@ class NativeSpeechBridge {
     this._onEnd = null;
 
     await this._startHardware();
-    console.log('[NativeBridge] 🟢 Wake word mode started');
   }
 
-  // ── Start conversation mode (active NLP listening) ──
+  // ── Start conversation mode ──
   async startConversation({ onTranscript, onPartialTranscript, onError, onEnd }) {
+    this._log('startConversation() called');
+    
     if (!this._initialized) {
       const ok = await this.init();
-      if (!ok) { if (onError) onError('not-supported'); return; }
+      if (!ok) { 
+        this._log('Cannot start conversation - init failed');
+        if (onError) onError('not-supported'); 
+        return; 
+      }
     }
 
-    // Stop any active session first (including wake word)
     await this._hardStop();
 
     this._mode = 'CONVERSATION';
@@ -161,7 +205,6 @@ class NativeSpeechBridge {
     this._onEnd = onEnd || null;
 
     await this._startHardware();
-    console.log('[NativeBridge] 🟢 Conversation mode started');
   }
 
   // ── Stop everything ──
@@ -169,17 +212,17 @@ class NativeSpeechBridge {
     this._enabled = false;
     this._mode = 'IDLE';
     await this._hardStop();
-    console.log('[NativeBridge] ⏹ Stopped');
+    this._log('⏹ Fully stopped');
   }
 
-  // ── Pause (keep state, just stop hardware) ──
+  // ── Pause ──
   async pause() {
     this._enabled = false;
     clearTimeout(this._restartTimeout);
     clearTimeout(this._transcriptDebounce);
     try { await SpeechRecognition.stop(); } catch (e) {}
     this._isListening = false;
-    console.log('[NativeBridge] ⏸ Paused');
+    this._log('⏸ Paused');
   }
 
   // ── Internal: force stop hardware ──
@@ -189,39 +232,64 @@ class NativeSpeechBridge {
     clearTimeout(this._transcriptDebounce);
     this._isListening = false;
     try { await SpeechRecognition.stop(); } catch (e) {}
-    // Wait for Android audio track to fully release
-    await new Promise(r => setTimeout(r, 300));
+    // Wait for Android hardware to release the audio track
+    await new Promise(r => setTimeout(r, 500));
   }
 
-  // ── Internal: start the hardware mic with retry ──
+  // ── Internal: start the hardware mic ──
   async _startHardware() {
-    let retries = 3;
-    while (retries > 0 && !this._isListening && this._enabled) {
-      try {
-        const options = retries === 3
-          ? { language: 'en-IN', partialResults: true, popup: false }
-          : (retries === 2 ? { partialResults: true, popup: false } : { partialResults: true });
+    // Try multiple configurations in case some fail on specific devices
+    const configs = [
+      { language: 'en-IN', partialResults: true, popup: false },
+      { language: 'en-US', partialResults: true, popup: false },
+      { partialResults: true, popup: false },
+      { partialResults: true },
+    ];
 
-        await SpeechRecognition.start(options);
+    for (let i = 0; i < configs.length; i++) {
+      if (this._isListening || !this._enabled) return;
+      
+      try {
+        this._log(`Trying start(${JSON.stringify(configs[i])})...`);
+        await SpeechRecognition.start(configs[i]);
         this._isListening = true;
-        return;
+        this._log('✅ start() resolved OK');
+        
+        // Verify after a short delay that we're actually listening
+        // (the Java plugin resolves immediately for partialResults)
+        await new Promise(r => setTimeout(r, 500));
+        try {
+          const { listening } = await SpeechRecognition.isListening();
+          this._log('isListening() check: ' + listening);
+          if (listening) return; // Success!
+          // Not actually listening despite start() resolving
+          this._isListening = false;
+          this._log('⚠ start() resolved but not actually listening');
+        } catch (e) {
+          // isListening() might not work on all versions
+          this._log('isListening() check failed: ' + e.message);
+          return; // Assume it worked
+        }
       } catch (e) {
-        console.warn(`[NativeBridge] Start error (retries: ${retries - 1}):`, e);
-        retries--;
+        this._log(`❌ start() failed (config ${i}): ${e.message || e}`);
         this._isListening = false;
-        await new Promise(r => setTimeout(r, 400));
+        // Wait before retry
+        await new Promise(r => setTimeout(r, 600));
       }
     }
-    if (!this._isListening && this._onError) {
-      this._onError('start-failed');
+    
+    if (!this._isListening) {
+      this._log('❌ ALL start attempts failed');
+      if (this._onError) this._onError('start-failed');
     }
   }
 
-  // ── Internal: schedule auto-restart after Android auto-stops on silence ──
+  // ── Internal: schedule auto-restart ──
   _scheduleRestart(delayMs) {
     clearTimeout(this._restartTimeout);
     this._restartTimeout = setTimeout(async () => {
       if (this._enabled && !this._isListening) {
+        this._log('Auto-restarting...');
         await this._startHardware();
       }
     }, delayMs);
@@ -233,6 +301,10 @@ class NativeSpeechBridge {
 
   get mode() {
     return this._mode;
+  }
+
+  get statusText() {
+    return `Mode: ${this._mode} | Listening: ${this._isListening} | Enabled: ${this._enabled} | Init: ${this._initialized}`;
   }
 }
 
