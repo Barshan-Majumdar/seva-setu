@@ -190,10 +190,12 @@ export class SpeechService {
       let retries = 3;
       while (retries > 0 && !this.isListening) {
         try {
-          // Attempt 1: en-IN, Attempts 2 & 3: device default locale fallback
+          // Attempt 1: en-IN + popup:false
+          // Attempt 2: device default locale + popup:false
+          // Attempt 3: device default locale without popup restriction
           const options = retries === 3 
             ? { language: 'en-IN', partialResults: true, popup: false }
-            : { partialResults: true, popup: false };
+            : (retries === 2 ? { partialResults: true, popup: false } : { partialResults: true });
 
           await SpeechRecognition.start(options);
           this.isListening = true;

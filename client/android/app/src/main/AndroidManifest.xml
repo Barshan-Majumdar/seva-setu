@@ -78,4 +78,12 @@
     <!-- Vibrate for emergency alerts -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Android 11+ (API 30+) Package Visibility for Speech Recognition Services -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <package android:name="com.google.android.googlequicksearchbox" />
+    </queries>
+
 </manifest>

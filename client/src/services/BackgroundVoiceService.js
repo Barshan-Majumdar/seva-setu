@@ -148,7 +148,7 @@ class BackgroundVoiceService {
         try {
           const options = retries === 3 
             ? { language: 'en-IN', partialResults: true, popup: false }
-            : { partialResults: true, popup: false };
+            : (retries === 2 ? { partialResults: true, popup: false } : { partialResults: true });
 
           await SpeechRecognition.start(options);
           this._isListening = true;
