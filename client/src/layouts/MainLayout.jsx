@@ -6,6 +6,7 @@ import {
   ChevronDown, Send, LogOut, Menu, X,
   LayoutDashboard, FileText, Users, MapPin, ClipboardCheck, Building2
 } from 'lucide-react';
+import { VoiceEmergencyModal } from '../components/emergency/VoiceEmergencyModal';
 
 /* ── Role-based nav definitions ─────────────────────────────── */
 const NAV_BY_ROLE = {
@@ -173,6 +174,7 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
           <main className="saas-main-content">
             {children}
           </main>
+          <VoiceEmergencyModal />
         </div>
       </div>
     );
@@ -253,6 +255,8 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
       <main className="layout-main">
         {children}
       </main>
+
+      <VoiceEmergencyModal />
 
       {/* ── Footer ────────────────────────────────────────────── */}
       {!hideFooter && (

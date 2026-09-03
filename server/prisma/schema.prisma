@@ -213,3 +213,30 @@ model VolunteerRequest {
   @@index([status])
   @@map("volunteer_requests")
 }
+
+model EmergencyEvent {
+  clientEventId       String   @id @map("client_event_id")
+  deviceId            String   @map("device_id")
+  triggerType         String   @map("trigger_type")
+  triggeredAt         DateTime @map("triggered_at")
+  sessionId           String?  @map("session_id")
+  
+  // Best available location
+  lat                 Float?
+  lng                 Float?
+  accuracyMeters      Float?   @map("accuracy_meters")
+  locationSource      String?  @map("location_source")
+  locationConfidence  Float?   @map("location_confidence")
+  
+  // Snapshots & facts
+  capabilitySnapshot  Json?    @map("capability_snapshot")
+  facts               Json?
+  
+  // State machine
+  status              String   @default("INCIDENT_CREATED")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("emergency_events")
+}

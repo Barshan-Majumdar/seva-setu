@@ -1,6 +1,6 @@
-import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { ClerkProvider } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
@@ -16,6 +16,8 @@ import ChatWidget from './components/ChatWidget';
 import ServerMaintenanceAlert from './components/ServerMaintenanceAlert';
 import LoadingScreen from './components/LoadingScreen';
 import { useAuth } from './hooks/useAuth';
+import { requestAllPermissions } from './services/NativePermissions';
+import backgroundVoiceService from './services/BackgroundVoiceService';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -37,6 +39,7 @@ const UserDashboardPage = lazy(() => import('./pages/UserDashboardPage'));
 const VolunteerApprovalsPage = lazy(() => import('./pages/VolunteerApprovalsPage'));
 const ShelterDashboardPage = lazy(() => import('./pages/ShelterDashboardPage'));
 const PublicSheltersPage = lazy(() => import('./pages/PublicSheltersPage'));
+const VoiceEmergencyModal = lazy(() => import('./components/emergency/VoiceEmergencyModal'));
 
 const PageLoader = ({ text = 'Synchronizing' }) => (
   <div className="page-loader">
@@ -97,6 +100,53 @@ function MainContent() {
     setIsReady(true);
   }, []);
 
+  const [showVoiceEmergency, setShowVoiceEmergency] = useState(false);
+  const bgVoiceInitialized = useRef(false);
+
+  // Request all native permissions on first launch
+  useEffect(() => {
+    if (isReady) {
+      requestAllPermissions().then(results => {
+        console.log('[App] Permission results:', results);
+      }).catch(err => {
+        console.warn('[App] Permission request error:', err);
+      });
+    }
+  }, [isReady]);
+
+  // Start background wake word listener after user is authenticated (NATIVE ONLY)
+  useEffect(() => {
+    if (isAuthenticated && isReady && !bgVoiceInitialized.current) {
+      bgVoiceInitialized.current = true;
+      
+      // We only want continuous background listening on Native Mobile
+      // Web browsers (Chrome/Safari) aggressively kill background mic access, causing flickering
+      if (Capacitor.isNativePlatform()) {
+        const supported = backgroundVoiceService.init((transcript) => {
+          console.log('[App] Wake word detected! Opening emergency modal...');
+          setShowVoiceEmergency(true);
+        });
+        
+        if (supported) {
+          backgroundVoiceService.start();
+        }
+      } else {
+        console.log('[App] Web environment detected. Skipping background wake word to prevent browser mic flickering.');
+      }
+    }
+
+    return () => {
+      // Don't stop on cleanup — we want it to persist across route changes
+    };
+  }, [isAuthenticated, isReady]);
+
+  // Pause background voice when emergency modal is open, resume when closed
+  const handleVoiceEmergencyClose = useCallback(() => {
+    setShowVoiceEmergency(false);
+    // Resume background listening after a delay for audio to settle
+    setTimeout(() => backgroundVoiceService.resume(), 1500);
+  }, []);
+
   // Deep Link & Native Permission Handler
   useEffect(() => {
     let appUrlListener = null;
@@ -116,19 +166,6 @@ function MainContent() {
           }
         });
       }
-
-      // 2. Request Native Permissions
-      if (Capacitor.isNativePlatform() && isReady) {
-        try {
-          const { Geolocation } = await import('@capacitor/geolocation');
-          const { Camera } = await import('@capacitor/camera');
-          await Geolocation.requestPermissions();
-          await Camera.requestPermissions();
-          console.log('[Native] Permissions requested successfully');
-        } catch (e) {
-          console.warn('[Native] Permission request failed or plugins missing:', e);
-        }
-      }
     };
 
     setupApp();
@@ -137,6 +174,9 @@ function MainContent() {
       if (appUrlListener) appUrlListener.remove();
     };
   }, [isReady, navigate]);
+
+  // Determine the correct redirect URL based on platform
+  const redirectUrl = Capacitor.isNativePlatform() ? 'com.sevasetu.app://post-login' : '/post-login';
 
   return (
     <>
@@ -149,10 +189,36 @@ function MainContent() {
         <Suspense fallback={<PageLoader text="Loading Workspace" />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/login/*" element={<LoginPage />} />
-            <Route path="/register/*" element={<RegisterPage />} />
-            <Route path="/sign-in/*" element={<Navigate to="/login" replace />} />
-            <Route path="/sign-up/*" element={<Navigate to="/register" replace />} />
+            <Route
+              path="/sign-in/*"
+              element={
+                <div className="min-h-screen flex items-center justify-center bg-surface-primary relative overflow-hidden">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent-sky/[0.03] rounded-full blur-[120px]" />
+                  <div className="relative z-10 w-full max-w-md px-6 flex flex-col items-center">
+                    <div className="mb-8">
+                      <Logo size={48} />
+                    </div>
+                    <SignIn routing="path" path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
+                  </div>
+                </div>
+              }
+            />
+            <Route
+              path="/sign-up/*"
+              element={
+                <div className="min-h-screen flex items-center justify-center bg-surface-primary relative overflow-hidden">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent-indigo/[0.03] rounded-full blur-[120px]" />
+                  <div className="relative z-10 w-full max-w-md px-6 flex flex-col items-center">
+                    <div className="mb-8">
+                      <Logo size={48} />
+                    </div>
+                    <SignUp routing="path" path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
+                  </div>
+                </div>
+              }
+            />
+            <Route path="/login/*" element={<Navigate to="/sign-in" replace />} />
+            <Route path="/register/*" element={<Navigate to="/sign-up" replace />} />
 
             <Route
               path="/post-login"
@@ -247,6 +313,13 @@ function MainContent() {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
           {isAuthenticated && <ChatWidget />}
+
+          {/* Voice Emergency Modal — triggered by wake word or manual activation */}
+          {showVoiceEmergency && (
+            <Suspense fallback={null}>
+              <VoiceEmergencyModal onClose={handleVoiceEmergencyClose} />
+            </Suspense>
+          )}
         </Suspense>
       )}
     </>

@@ -154,7 +154,7 @@ export const useCoordinatorDashboard = () => {
   const pendingVolunteerRequests = systemStats.pendingVolunteerRequests || 0;
 
   const summary = useMemo(() => {
-    const openNeeds = needs.filter((n) => n.status === 'open').length;
+    const openNeeds = needs.filter((n) => ['open', 'pending', 'assigned', 'in_progress'].includes(n.status)).length;
     const activeVolunteers = volunteers.filter((v) => v.is_available).length;
     const totalUsers = systemStats.totalUsers || 0;
     const completedToday = systemStats.completedToday || 0;

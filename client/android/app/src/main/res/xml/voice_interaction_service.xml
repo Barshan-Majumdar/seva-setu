@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.sevasetu.app.voice.SevaSetuVoiceSessionService"
+    android:recognitionService="com.sevasetu.app.voice.SevaSetuRecognitionService"
+    android:settingsActivity="com.sevasetu.app.SettingsActivity"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true"
+    android:supportsLocalInteraction="true" />

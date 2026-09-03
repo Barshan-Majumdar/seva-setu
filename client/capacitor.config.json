@@ -1,5 +1,39 @@
 {
   "appId": "com.sevasetu.app",
   "appName": "SevaSetu",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": [
+      "seva-setu-cuo5.onrender.com",
+      "seva-setu-1wbx.onrender.com",
+      "localhost:5000",
+      "localhost:8000"
+    ]
+  },
+  "plugins": {
+    "Camera": {
+      "permissions": ["camera"]
+    },
+    "Geolocation": {
+      "permissions": ["location"]
+    },
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#1a2332",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon_config_sample",
+      "iconColor": "#2d6148"
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#1a2332"
+  },
+  "ios": {
+    "backgroundColor": "#1a2332"
+  }
 }

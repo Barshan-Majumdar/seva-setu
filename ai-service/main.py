@@ -6,6 +6,7 @@ from transformers import CLIPProcessor, CLIPModel
 import io
 import os
 from typing import Optional
+from nlp_module import FactExtractionRequest, nlp_module
 
 # ══════════════════════════════════════════════════════════════════════
 # ENVIRONMENT SETUP
@@ -269,6 +270,22 @@ async def verify_image(
         print(f"[AI-SERVICE] ❌ CRASH: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ══════════════════════════════════════════════════════════════════════
+# NLP EXTRACTION ENDPOINT
+# ══════════════════════════════════════════════════════════════════════
+@app.post("/extract-facts")
+async def extract_facts(req: FactExtractionRequest):
+    """
+    Takes a voice transcript and extracts structured JSON EmergencyFacts using Qwen-based NLP.
+    """
+    try:
+        print(f"[AI-SERVICE] Extracting facts for transcript: '{req.transcript}'")
+        result = nlp_module.extract_facts(req.transcript)
+        return result
+    except Exception as e:
+        print(f"[AI-SERVICE] ❌ NLP CRASH: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ══════════════════════════════════════════════════════════════════════
 # STARTUP
