@@ -1,8 +1,9 @@
+import { Capacitor } from '@capacitor/core';
+import { SpeechRecognition } from '@capacitor-community/speech-recognition';
+
 /**
- * SpeechService — Web Speech API wrapper for SevaSetu voice assistant.
- * 
- * Lazily initialized to avoid crashing on browsers that don't support 
- * the Web Speech API (e.g. Firefox, server-side rendering).
+ * SpeechService — Speech Recognition wrapper for SevaSetu voice assistant.
+ * Uses Capacitor Speech Recognition on mobile, and Web Speech API on browser.
  */
 export class SpeechService {
   constructor() {
@@ -18,100 +19,87 @@ export class SpeechService {
     this._initialized = false;
   }
 
-  /**
-   * Lazily initialize the SpeechRecognition instance.
-   * Returns true if initialization succeeded, false otherwise.
-   */
-  _ensureInitialized() {
-    if (this._initialized) return !!this.recognition;
-    this._initialized = true;
+  async _ensureNativeInitialized() {
+    if (this._initialized) return true;
+    try {
+      const { speechRecognition } = await SpeechRecognition.checkPermissions();
+      if (speechRecognition !== 'granted') {
+        await SpeechRecognition.requestPermissions();
+      }
+      const { available } = await SpeechRecognition.available();
+      if (!available) {
+        console.warn('[SpeechService] Native Speech Recognition not available');
+        return false;
+      }
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn('[SpeechService] Web Speech API is not supported in this browser.');
+      SpeechRecognition.addListener('partialResults', (data) => {
+        if (data.matches && data.matches.length > 0) {
+          const finalTranscript = data.matches[0];
+          this._processTranscript(finalTranscript);
+        }
+      });
+      
+      // Native plugin stops automatically on silence
+      SpeechRecognition.addListener('listeningState', (data) => {
+        if (data.status === 'stopped') {
+          this.isListening = false;
+          if (this._onEnd) this._onEnd();
+          if (this._autoRestart) {
+            setTimeout(() => {
+              if (!this.isListening) {
+                try { SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false }); this.isListening = true; } catch (e) {}
+              }
+            }, 500);
+          }
+        }
+      });
+      
+      this._initialized = true;
+      return true;
+    } catch (e) {
+      console.error('[SpeechService] Native Init Error:', e);
+      return false;
+    }
+  }
+
+  _ensureWebInitialized() {
+    if (this._initialized) return !!this.recognition;
+    
+    const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!WebSpeechRecognition) {
+      console.warn('[SpeechService] Web Speech API not supported.');
       return false;
     }
 
-    this.recognition = new SpeechRecognition();
+    this.recognition = new WebSpeechRecognition();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
-    this.recognition.lang = 'en-IN'; // Indian English
+    this.recognition.lang = 'en-IN';
 
     this.recognition.onstart = () => {
       this.isListening = true;
-      console.log('[SpeechService] Started listening...');
     };
 
     this.recognition.onresult = (event) => {
       let finalTranscript = '';
       let interimTranscript = '';
-
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+        else interimTranscript += event.results[i][0].transcript;
       }
-
-      const fullText = (finalTranscript || interimTranscript).toLowerCase().trim();
-
-      // Check for wake word (fire only once per session)
-      const compressedText = fullText.replace(/\s+/g, '');
-      // Account for common Speech-to-Text mistranscriptions of "Seva Setu"
-      const wakeWordRegex = /(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)/i;
-      
-      const wakeWordMatch = wakeWordRegex.test(fullText) || 
-                            wakeWordRegex.test(compressedText) ||
-                            compressedText.includes('sevasetu') ||
-                            compressedText.includes('sevasethu') ||
-                            compressedText.includes('shivasetu') ||
-                            compressedText.includes('hisevasetu') ||
-                            compressedText.includes('heyseva');
-      if (!this._wakeWordFired && wakeWordMatch && this._onWakeWord) {
-        console.log('[SpeechService] Wake word detected!');
-        this._wakeWordFired = true;
-        this._onWakeWord();
-      }
-
-      // Pass final transcripts to the callback
-      if (finalTranscript.trim() && this._onTranscript) {
-        // Strip wake word from the transcript so the NLP only gets the emergency description
-        let cleaned = finalTranscript.trim();
-        
-        // Use regex to strip wake word at the start (accounting for misspellings)
-        const wakeWordStripRegex = /^(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)\b/i;
-        cleaned = cleaned.replace(wakeWordStripRegex, '').trim();
-        
-        // Try fallback removals
-        ['hey sevasetu', 'hey seva setu', 'hey seva', 'sevasetu', 'sevasethu', 'seva setu', 'seva sethu'].forEach(w => {
-          if (cleaned.toLowerCase().startsWith(w)) {
-            cleaned = cleaned.substring(w.length).trim();
-          }
-        });
-        
-        if (cleaned.length > 0) {
-          this._onTranscript(cleaned);
-        }
-      }
+      this._processTranscript(finalTranscript || interimTranscript);
     };
 
     this.recognition.onerror = (event) => {
-      // 'no-speech' is not a real error, just silence timeout
       if (event.error === 'no-speech') return;
-      console.error('[SpeechService] Error:', event.error);
       this.isListening = false;
       if (this._onError) this._onError(event.error);
     };
 
     this.recognition.onend = () => {
       this.isListening = false;
-      console.log('[SpeechService] Stopped listening.');
       if (this._onEnd) this._onEnd();
-      
-      // Auto-restart if we didn't explicitly call stop()
       if (this._autoRestart) {
-        console.log('[SpeechService] Auto-restarting recognition...');
         setTimeout(() => {
           if (!this.isListening) {
             try { this.recognition.start(); } catch (e) {}
@@ -120,55 +108,89 @@ export class SpeechService {
       }
     };
 
+    this._initialized = true;
     return true;
   }
 
-  /**
-   * Start listening.
-   * @param {Function|null} onWakeWordCb - Called when "Hey Seva Setu" is detected.
-   * @param {Function|null} onTranscriptCb - Called with the final transcript text.
-   * @param {Function|null} onErrorCb - Called on error.
-   * @param {Function|null} onEndCb - Called when the recognition service disconnects.
-   */
-  start(onWakeWordCb, onTranscriptCb, onErrorCb, onEndCb = null) {
-    if (!this._ensureInitialized()) {
-      if (onErrorCb) onErrorCb('not-supported');
-      return;
-    }
+  _processTranscript(transcript) {
+    const fullText = transcript.toLowerCase().trim();
+    const compressedText = fullText.replace(/\s+/g, '');
+    const wakeWordRegex = /(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)/i;
     
-    this._onWakeWord = onWakeWordCb || (() => {}); // never null
+    const wakeWordMatch = wakeWordRegex.test(fullText) || 
+                          wakeWordRegex.test(compressedText) ||
+                          compressedText.includes('sevasetu') ||
+                          compressedText.includes('sevasethu') ||
+                          compressedText.includes('shivasetu') ||
+                          compressedText.includes('hisevasetu') ||
+                          compressedText.includes('heyseva');
+    
+    if (!this._wakeWordFired && wakeWordMatch && this._onWakeWord) {
+      this._wakeWordFired = true;
+      this._onWakeWord();
+    }
+
+    if (transcript.trim() && this._onTranscript) {
+      let cleaned = transcript.trim();
+      const wakeWordStripRegex = /^(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)\b/i;
+      cleaned = cleaned.replace(wakeWordStripRegex, '').trim();
+      
+      ['hey sevasetu', 'hey seva setu', 'hey seva', 'sevasetu', 'sevasethu', 'seva setu', 'seva sethu'].forEach(w => {
+        if (cleaned.toLowerCase().startsWith(w)) {
+          cleaned = cleaned.substring(w.length).trim();
+        }
+      });
+      
+      if (cleaned.length > 0) {
+        this._onTranscript(cleaned);
+      }
+    }
+  }
+
+  async start(onWakeWordCb, onTranscriptCb, onErrorCb, onEndCb = null) {
+    this._onWakeWord = onWakeWordCb || (() => {});
     this._onTranscript = onTranscriptCb || (() => {});
     this._onError = onErrorCb || (() => {});
     this._onEnd = onEndCb;
     this._wakeWordFired = false;
-    // If it's a wake word listener (no transcript callback usually, or we just always want it persistent until stop() is called)
     this._autoRestart = true;
 
-    if (!this.isListening) {
-      try {
-        this.recognition.start();
-      } catch (e) {
-        // Already started — safe to ignore
-        console.warn('[SpeechService] Could not start recognition:', e.message);
+    if (Capacitor.isNativePlatform()) {
+      const ok = await this._ensureNativeInitialized();
+      if (!ok) { if (onErrorCb) onErrorCb('not-supported'); return; }
+      if (!this.isListening) {
+        try {
+          await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
+          this.isListening = true;
+        } catch (e) {
+          console.warn('[SpeechService] Native start error:', e);
+        }
+      }
+    } else {
+      const ok = this._ensureWebInitialized();
+      if (!ok) { if (onErrorCb) onErrorCb('not-supported'); return; }
+      if (!this.isListening) {
+        try { this.recognition.start(); } catch (e) {}
       }
     }
   }
 
-  stop() {
-    this._autoRestart = false; // Disable auto-restart when explicitly stopped
-    if (this.recognition && this.isListening) {
-      try {
-        this.recognition.stop();
-      } catch (e) {
-        // Already stopped — safe to ignore
-      }
-    }
+  async stop() {
+    this._autoRestart = false;
     this._wakeWordFired = false;
+    if (Capacitor.isNativePlatform()) {
+      if (this.isListening) {
+        try { await SpeechRecognition.stop(); this.isListening = false; } catch (e) {}
+      }
+    } else {
+      if (this.recognition && this.isListening) {
+        try { this.recognition.stop(); } catch (e) {}
+      }
+    }
   }
 
-  /** Returns true if the browser supports the Web Speech API. */
   get isSupported() {
-    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    return Capacitor.isNativePlatform() || !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   }
 }
 

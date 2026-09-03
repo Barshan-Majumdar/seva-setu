@@ -3,7 +3,7 @@
   "appName": "SevaSetu",
   "webDir": "dist",
   "server": {
-    "androidScheme": "sevasetu",
+    "androidScheme": "http",
     "allowNavigation": [
       "seva-setu-cuo5.onrender.com",
       "seva-setu-1wbx.onrender.com",

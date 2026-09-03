@@ -1,6 +1,9 @@
+import { Capacitor } from '@capacitor/core';
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
+
 /**
  * VoiceFeedback — Text-to-Speech service for SevaSetu voice replies.
- * Uses the browser's built-in Speech Synthesis API.
+ * Uses Capacitor Native TTS on Mobile, and Browser Speech Synthesis on Web.
  */
 export const VoiceFeedback = {
   /**
@@ -8,7 +11,29 @@ export const VoiceFeedback = {
    * @param {string} message - The text to speak
    * @param {Function} [onEnd] - Optional callback when speech finishes
    */
-  speak(message, onEnd) {
+  async speak(message, onEnd) {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        // Cancel any ongoing native speech
+        await TextToSpeech.stop().catch(() => {});
+        
+        await TextToSpeech.speak({
+          text: message,
+          lang: 'en-IN',
+          rate: 1.0,
+          pitch: 1.0,
+          volume: 1.0,
+          category: 'ambient', // iOS audio session category
+        });
+        if (onEnd) onEnd();
+      } catch (err) {
+        console.error('[VoiceFeedback] Native TTS Error:', err);
+        if (onEnd) onEnd();
+      }
+      return;
+    }
+
+    // --- Web Fallback below ---
     if (!window.speechSynthesis) {
       console.warn('[VoiceFeedback] Speech Synthesis not supported.');
       if (onEnd) onEnd();
@@ -62,8 +87,10 @@ export const VoiceFeedback = {
   },
 
   /** Stop any ongoing speech. */
-  stop() {
-    if (window.speechSynthesis) {
+  async stop() {
+    if (Capacitor.isNativePlatform()) {
+      await TextToSpeech.stop().catch(() => {});
+    } else if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
   }

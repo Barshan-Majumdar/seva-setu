@@ -14,6 +14,7 @@
  *   - Foreground notification keeps Android from killing the process
  */
 import { Capacitor } from '@capacitor/core';
+import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 
 const WAKE_WORDS = ['seva setu', 'seba setu', 'sheva setu', 'seva sethu', 'save a satu', 'seva set to', 'seva set u'];
 
@@ -26,180 +27,186 @@ class BackgroundVoiceService {
     this._enabled = false;
     this._consecutiveErrors = 0;
     this._maxConsecutiveErrors = 5;
+    this._nativeInitialized = false;
   }
 
-  /**
-   * Initialize the background voice listener.
-   * @param {Function} onWakeWordDetected - Callback when "Seva Setu" is heard
-   */
-  init(onWakeWordDetected) {
+  async init(onWakeWordDetected) {
     this._onWakeWordDetected = onWakeWordDetected;
     
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn('[BackgroundVoice] SpeechRecognition not available');
-      return false;
-    }
-
-    this._recognition = new SpeechRecognition();
-    this._recognition.continuous = true;
-    this._recognition.interimResults = true;
-    this._recognition.lang = 'en-IN';
-    this._recognition.maxAlternatives = 3;
-
-    this._recognition.onresult = (event) => {
-      this._lastResultTime = Date.now();
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        // Check all alternatives for wake word
-        for (let j = 0; j < event.results[i].length; j++) {
-          const transcript = event.results[i][j].transcript.toLowerCase().trim();
-          
-          const detected = WAKE_WORDS.some(ww => transcript.includes(ww));
-          if (detected) {
-            console.log('[BackgroundVoice] 🎤 Wake word detected:', transcript);
-            this._consecutiveErrors = 0;
-            this._backoffMs = 1000;
-            
-            // Temporarily stop listening to prevent self-hearing
-            this.pause();
-            
-            // Trigger the emergency modal
-            if (this._onWakeWordDetected) {
-              this._onWakeWordDetected(transcript);
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { speechRecognition } = await SpeechRecognition.checkPermissions();
+        if (speechRecognition !== 'granted') {
+          await SpeechRecognition.requestPermissions();
+        }
+        
+        SpeechRecognition.addListener('partialResults', (data) => {
+          this._lastResultTime = Date.now();
+          if (data.matches && data.matches.length > 0) {
+            const transcript = data.matches[0].toLowerCase().trim();
+            const detected = WAKE_WORDS.some(ww => transcript.includes(ww));
+            if (detected) {
+              console.log('[BackgroundVoice] 🎤 Wake word detected:', transcript);
+              this._consecutiveErrors = 0;
+              this._backoffMs = 1000;
+              this.pause();
+              if (this._onWakeWordDetected) this._onWakeWordDetected(transcript);
             }
-            return;
+          }
+        });
+
+        SpeechRecognition.addListener('listeningState', (data) => {
+          if (data.status === 'stopped') {
+            this._isListening = false;
+            if (this._enabled) {
+              this._scheduleRestart(1000);
+            }
+          }
+        });
+        this._nativeInitialized = true;
+        console.log('[BackgroundVoice] Native Initialized');
+        return true;
+      } catch (err) {
+        console.error('[BackgroundVoice] Native Init Error:', err);
+        return false;
+      }
+    } else {
+      const WebSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!WebSpeechRecognition) {
+        console.warn('[BackgroundVoice] SpeechRecognition not available');
+        return false;
+      }
+      this._recognition = new WebSpeechRecognition();
+      this._recognition.continuous = true;
+      this._recognition.interimResults = true;
+      this._recognition.lang = 'en-IN';
+      this._recognition.maxAlternatives = 3;
+
+      this._recognition.onresult = (event) => {
+        this._lastResultTime = Date.now();
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          for (let j = 0; j < event.results[i].length; j++) {
+            const transcript = event.results[i][j].transcript.toLowerCase().trim();
+            const detected = WAKE_WORDS.some(ww => transcript.includes(ww));
+            if (detected) {
+              console.log('[BackgroundVoice] 🎤 Wake word detected:', transcript);
+              this._consecutiveErrors = 0;
+              this._backoffMs = 1000;
+              this.pause();
+              if (this._onWakeWordDetected) this._onWakeWordDetected(transcript);
+              return;
+            }
           }
         }
-      }
-    };
+      };
 
-    this._recognition.onerror = (event) => {
-      console.warn('[BackgroundVoice] Error:', event.error);
-      
-      if (event.error === 'not-allowed') {
-        console.error('[BackgroundVoice] Mic permission denied. Stopping service.');
-        this.stop();
-        return;
-      }
-
-      // 'no-speech' is expected when user is quiet — don't count as hard error
-      if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        this._consecutiveErrors++;
-      }
-      
-      if (this._consecutiveErrors >= this._maxConsecutiveErrors) {
-        console.error('[BackgroundVoice] Too many errors, stopping to prevent infinite loops');
-        this.stop();
-        return;
-      }
-      
-      // Increase backoff on errors to prevent flickering
-      this._backoffMs = Math.min(this._backoffMs * 1.5, 10000);
-      this._scheduleRestart(this._backoffMs);
-    };
-
-    this._recognition.onend = () => {
-      // If we just started and it ended immediately, increase backoff
-      const sessionDuration = Date.now() - (this._lastStartTime || 0);
-      if (sessionDuration < 2000) {
-        this._backoffMs = Math.min(this._backoffMs * 1.5, 5000);
-      } else {
-        this._backoffMs = 1000; // Reset backoff if we had a healthy session
-      }
-
-      // Auto-restart if we're supposed to be listening
-      if (this._enabled && this._isListening) {
+      this._recognition.onerror = (event) => {
+        if (event.error === 'not-allowed') {
+          this.stop();
+          return;
+        }
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          this._consecutiveErrors++;
+        }
+        if (this._consecutiveErrors >= this._maxConsecutiveErrors) {
+          this.stop();
+          return;
+        }
+        this._backoffMs = Math.min(this._backoffMs * 1.5, 10000);
         this._scheduleRestart(this._backoffMs);
-      }
-    };
+      };
 
-    console.log('[BackgroundVoice] Initialized');
-    return true;
+      this._recognition.onend = () => {
+        const sessionDuration = Date.now() - (this._lastStartTime || 0);
+        if (sessionDuration < 2000) {
+          this._backoffMs = Math.min(this._backoffMs * 1.5, 5000);
+        } else {
+          this._backoffMs = 1000;
+        }
+        if (this._enabled && this._isListening) {
+          this._scheduleRestart(this._backoffMs);
+        }
+      };
+
+      console.log('[BackgroundVoice] Web Initialized');
+      return true;
+    }
   }
 
-  /**
-   * Start continuous background listening
-   */
-  start() {
-    if (!this._recognition) {
-      console.warn('[BackgroundVoice] Not initialized');
-      return;
-    }
-
+  async start() {
+    if (!Capacitor.isNativePlatform() && !this._recognition) return;
     this._enabled = true;
     this._isListening = true;
     this._consecutiveErrors = 0;
     this._backoffMs = 1000;
 
-    try {
-      this._recognition.start();
-      this._lastStartTime = Date.now();
-      console.log('[BackgroundVoice] ▶️ Listening for wake word...');
-    } catch (err) {
-      // Already started
-      if (err.name !== 'InvalidStateError') {
-        console.warn('[BackgroundVoice] Start error:', err.message);
-      }
-    }
-
-    // On native, show foreground notification
     if (Capacitor.isNativePlatform()) {
-      this._showForegroundNotification();
+      try {
+        await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
+        this._lastStartTime = Date.now();
+        this._showForegroundNotification();
+      } catch (err) {
+        console.warn('[BackgroundVoice] Native start error:', err);
+      }
+    } else {
+      try {
+        this._recognition.start();
+        this._lastStartTime = Date.now();
+      } catch (err) {
+        if (err.name !== 'InvalidStateError') console.warn('[BackgroundVoice] Start error:', err.message);
+      }
     }
   }
 
-  /**
-   * Temporarily pause (e.g., while the AI is speaking)
-   */
   pause() {
     this._isListening = false;
     clearTimeout(this._restartTimeout);
-    try {
-      this._recognition?.stop();
-    } catch {}
+    if (Capacitor.isNativePlatform()) {
+      try { SpeechRecognition.stop(); } catch (e) {}
+    } else {
+      try { this._recognition?.stop(); } catch (e) {}
+    }
   }
 
-  /**
-   * Resume after pause (e.g., after AI finishes speaking)
-   */
   resume() {
     if (!this._enabled) return;
     this._isListening = true;
-    this._scheduleRestart(600); // Brief delay to let audio settle
+    this._scheduleRestart(600);
   }
 
-  /**
-   * Fully stop background listening
-   */
   stop() {
     this._enabled = false;
     this._isListening = false;
     clearTimeout(this._restartTimeout);
-    try {
-      this._recognition?.stop();
-    } catch {}
+    if (Capacitor.isNativePlatform()) {
+      try { SpeechRecognition.stop(); } catch (e) {}
+    } else {
+      try { this._recognition?.stop(); } catch (e) {}
+    }
     console.log('[BackgroundVoice] ⏹️ Stopped');
   }
 
-  /**
-   * Whether the service is currently active
-   */
   get isActive() {
     return this._enabled && this._isListening;
   }
 
-  // ── Private ──
-
   _scheduleRestart(delayMs) {
     clearTimeout(this._restartTimeout);
-    this._restartTimeout = setTimeout(() => {
+    this._restartTimeout = setTimeout(async () => {
       if (this._enabled && this._isListening) {
-        try {
-          this._recognition?.start();
-          this._lastStartTime = Date.now();
-        } catch (err) {
-          if (err.name !== 'InvalidStateError') {
-            console.warn('[BackgroundVoice] Restart error:', err.message);
+        if (Capacitor.isNativePlatform()) {
+          try {
+            await SpeechRecognition.start({ language: 'en-IN', partialResults: true, popup: false });
+            this._lastStartTime = Date.now();
+          } catch (err) {
+            console.warn('[BackgroundVoice] Native restart error:', err);
+          }
+        } else {
+          try {
+            this._recognition?.start();
+            this._lastStartTime = Date.now();
+          } catch (err) {
+            if (err.name !== 'InvalidStateError') console.warn('[BackgroundVoice] Restart error:', err.message);
           }
         }
       }
@@ -207,8 +214,6 @@ class BackgroundVoiceService {
   }
 
   _showForegroundNotification() {
-    // On Android, Capacitor's LocalNotifications can show a persistent notification
-    // This keeps the app process alive in the background
     try {
       if (window.Capacitor?.Plugins?.LocalNotifications) {
         window.Capacitor.Plugins.LocalNotifications.schedule({
@@ -222,12 +227,9 @@ class BackgroundVoiceService {
           }]
         });
       }
-    } catch (err) {
-      console.warn('[BackgroundVoice] Notification error:', err.message);
-    }
+    } catch (err) {}
   }
 }
 
-// Singleton instance
 export const backgroundVoiceService = new BackgroundVoiceService();
 export default backgroundVoiceService;

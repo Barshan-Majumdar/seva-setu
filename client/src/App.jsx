@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
-import { BrowserRouter, MemoryRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignIn, SignUp } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -152,22 +152,19 @@ function MainContent() {
     let appUrlListener = null;
 
     const setupApp = async () => {
-      // 1. Handle Deep Links (for OAuth redirects like Google)
+      // 1. Handle Deep Links
       if (Capacitor.isNativePlatform()) {
         appUrlListener = await CapApp.addListener('appUrlOpen', async (data) => {
           console.log('[Native] App opened with URL:', data.url);
-
-          // Close the in-app browser layer if it's open
           await Browser.close().catch(() => {});
-
+          
           try {
             const url = new URL(data.url);
-            // If it's our custom scheme, route the pathname into our MemoryRouter
-            if (url.protocol === 'sevasetu:' && url.pathname) {
-              navigate(url.pathname + url.search);
+            if (url.hostname === 'localhost' && url.pathname) {
+              navigate(url.pathname + url.search + url.hash);
             }
           } catch (e) {
-            console.error('[Native] Invalid URL:', data.url);
+            console.error('[Native] Error parsing deep link:', e);
           }
         });
       }
@@ -201,10 +198,8 @@ function MainContent() {
                       <Logo size={48} />
                     </div>
                     {(() => {
-                      const redirectUrl = Capacitor.isNativePlatform() 
-                        ? `${import.meta.env.VITE_API_BASE_URL}/auth/mobile-redirect` 
-                        : '/post-login';
-                      return <SignIn routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-in" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                      const redirectUrl = '/post-login';
+                      return <SignIn routing="path" path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
                 </div>
@@ -220,10 +215,8 @@ function MainContent() {
                       <Logo size={48} />
                     </div>
                     {(() => {
-                      const redirectUrl = Capacitor.isNativePlatform() 
-                        ? `${import.meta.env.VITE_API_BASE_URL}/auth/mobile-redirect` 
-                        : '/post-login';
-                      return <SignUp routing={clerkRouting} {...(Capacitor.isNativePlatform() ? {} : { path: "/sign-up" })} fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                      const redirectUrl = '/post-login';
+                      return <SignUp routing="path" path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
                     })()}
                   </div>
                 </div>
@@ -338,9 +331,6 @@ function MainContent() {
   );
 }
 
-const AppRouter = Capacitor.isNativePlatform() ? MemoryRouter : BrowserRouter;
-const clerkRouting = Capacitor.isNativePlatform() ? 'virtual' : 'path';
-
 function App() {
   const [showIntro, setShowIntro] = useState(() => {
     return !sessionStorage.getItem('introShown');
@@ -354,11 +344,11 @@ function App() {
   return (
     <ErrorBoundary>
       {showIntro && <LoadingScreen onComplete={handleIntroComplete} />}
-      <AppRouter>
+      <Router>
         <ClerkProviderWithRouter>
           <MainContent />
         </ClerkProviderWithRouter>
-      </AppRouter>
+      </Router>
     </ErrorBoundary>
   );
 }
