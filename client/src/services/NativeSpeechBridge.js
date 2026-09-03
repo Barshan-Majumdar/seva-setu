@@ -13,7 +13,11 @@ import { SpeechRecognition } from '@capacitor-community/speech-recognition';
  *   - CONVERSATION: Active NLP conversation (transcript is forwarded to caller)
  */
 
-const WAKE_WORDS = ['seva setu', 'seba setu', 'sheva setu', 'seva sethu', 'save a satu', 'seva set to', 'seva set u'];
+const WAKE_WORDS = [
+  'seva setu', 'seba setu', 'sheva setu', 'seva sethu', 
+  'save a satu', 'seva set to', 'seva set u',
+  'sevasetu', 'sebasetu', 'shevasetu', 'hey sevasetu', 'hey seva setu'
+];
 
 class NativeSpeechBridge {
   constructor() {
@@ -155,7 +159,7 @@ class NativeSpeechBridge {
           this._log('💬 Final transcript: "' + text.substring(0, 50) + '"');
           this._onTranscript(text);
         }
-      }, 800);
+      }, 3000); // 3 seconds of silence before we assume they are done speaking
     }
   }
 

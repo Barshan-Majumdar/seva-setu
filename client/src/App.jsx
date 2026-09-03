@@ -125,18 +125,17 @@ function MainContent() {
       bgVoiceInitialized.current = true;
       
       if (Capacitor.isNativePlatform()) {
-        // Use the unified NativeSpeechBridge as sole mic owner
-        nativeSpeechBridge.init().then(ok => {
+        backgroundVoiceService.init((transcript) => {
+          console.log('[App] Wake word detected via BackgroundVoiceService!');
+          autoActivateEmergency.current = true;
+          setShowVoiceEmergency(true);
+        }).then((ok) => {
           if (ok) {
-            nativeSpeechBridge.startWakeWord((transcript) => {
-              console.log('[App] Wake word detected via NativeSpeechBridge!');
-              autoActivateEmergency.current = true;
-              setShowVoiceEmergency(true);
-            });
+            backgroundVoiceService.start();
           }
         });
       } else {
-        console.log('[App] Web environment detected. Skipping background wake word.');
+        console.log('[App] Web environment detected. Wake word handled by modal.');
       }
     }
 
@@ -150,11 +149,7 @@ function MainContent() {
     // Resume wake word listening after a delay for audio to settle
     if (Capacitor.isNativePlatform()) {
       setTimeout(() => {
-        nativeSpeechBridge.startWakeWord((transcript) => {
-          console.log('[App] Wake word detected via NativeSpeechBridge!');
-          autoActivateEmergency.current = true;
-          setShowVoiceEmergency(true);
-        });
+        backgroundVoiceService.resume();
       }, 1500);
     }
   }, []);
