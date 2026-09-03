@@ -83,11 +83,16 @@ export class SpeechService {
     this.recognition.onresult = (event) => {
       let finalTranscript = '';
       let interimTranscript = '';
+      let isFinalOverall = false;
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-        else interimTranscript += event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+          isFinalOverall = true;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
       }
-      this._processTranscript(finalTranscript || interimTranscript);
+      this._processTranscript(finalTranscript || interimTranscript, isFinalOverall);
     };
 
     this.recognition.onerror = (event) => {
@@ -100,8 +105,9 @@ export class SpeechService {
       this.isListening = false;
       if (this._onEnd) this._onEnd();
       if (this._autoRestart) {
-        setTimeout(() => {
-          if (!this.isListening) {
+        clearTimeout(this._restartTimeout);
+        this._restartTimeout = setTimeout(() => {
+          if (!this.isListening && this._autoRestart) {
             try { this.recognition.start(); } catch (e) {}
           }
         }, 500);
@@ -112,7 +118,7 @@ export class SpeechService {
     return true;
   }
 
-  _processTranscript(transcript) {
+  _processTranscript(transcript, isFinal = false) {
     const fullText = transcript.toLowerCase().trim();
     const compressedText = fullText.replace(/\s+/g, '');
     const wakeWordRegex = /(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)/i;
@@ -142,7 +148,17 @@ export class SpeechService {
       });
       
       if (cleaned.length > 0) {
-        this._onTranscript(cleaned);
+        clearTimeout(this._transcriptDebounce);
+        
+        // If the speech engine guarantees this is the final sentence, execute instantly.
+        if (isFinal) {
+          this._onTranscript(cleaned);
+        } else {
+          // Otherwise, wait for 1.2 seconds of silence (debounce)
+          this._transcriptDebounce = setTimeout(() => {
+            this._onTranscript(cleaned);
+          }, 1200);
+        }
       }
     }
   }
@@ -178,6 +194,9 @@ export class SpeechService {
   async stop() {
     this._autoRestart = false;
     this._wakeWordFired = false;
+    clearTimeout(this._restartTimeout);
+    clearTimeout(this._transcriptDebounce);
+    
     if (Capacitor.isNativePlatform()) {
       if (this.isListening) {
         try { await SpeechRecognition.stop(); this.isListening = false; } catch (e) {}

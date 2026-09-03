@@ -25,7 +25,17 @@ export const VoiceFeedback = {
           volume: 1.0,
           category: 'ambient', // iOS audio session category
         });
-        if (onEnd) onEnd();
+        
+        // @capacitor-community/text-to-speech speak() promise resolves immediately when queued, 
+        // NOT when finished. We must calculate the duration based on text length to prevent 
+        // the microphone from turning on while the speaker is still talking (which causes an infinite loop).
+        // Average speaking rate is ~14 characters per second, plus a 600ms buffer.
+        if (onEnd) {
+          const estimatedDurationMs = (message.length / 14) * 1000 + 600;
+          setTimeout(() => {
+            onEnd();
+          }, estimatedDurationMs);
+        }
       } catch (err) {
         console.error('[VoiceFeedback] Native TTS Error:', err);
         if (onEnd) onEnd();
@@ -57,33 +67,22 @@ export const VoiceFeedback = {
     if (preferred) {
       utterance.voice = preferred;
     }
+    
+    // Prevent Chrome from garbage collecting the utterance
+    window.__speech_utterance = utterance;
+    
+    window.speechSynthesis.speak(utterance);
 
     if (onEnd) {
-      // Prevent Chrome from garbage collecting the utterance before onend fires
-      window.__speech_utterance = utterance;
-
-      // Dynamic safety timeout based on text length (~10 chars per second + 5s buffer)
-      const estimatedMs = (message.length / 10) * 1000 + 5000;
-      const maxTimeout = Math.max(estimatedMs, 10000); 
-
-      const safetyTimeout = setTimeout(() => {
-        console.warn('[VoiceFeedback] TTS onend timeout triggered.');
-        utterance.onend = null;
-        utterance.onerror = null;
+      // Browser SpeechSynthesis onend events are notoriously buggy and can fire prematurely.
+      // We forcibly calculate the strict minimum time it should take to speak the text 
+      // (approx 13 chars per second) to guarantee the microphone never turns on while speaking.
+      const estimatedDurationMs = (message.length / 13) * 1000 + 800;
+      
+      setTimeout(() => {
         onEnd();
-      }, maxTimeout);
-
-      utterance.onend = () => {
-        clearTimeout(safetyTimeout);
-        onEnd();
-      };
-      utterance.onerror = () => {
-        clearTimeout(safetyTimeout);
-        onEnd();
-      };
+      }, estimatedDurationMs);
     }
-
-    window.speechSynthesis.speak(utterance);
   },
 
   /** Stop any ongoing speech. */

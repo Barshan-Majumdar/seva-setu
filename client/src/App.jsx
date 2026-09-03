@@ -7,6 +7,7 @@ import { App as CapApp } from '@capacitor/app';
 import { Geolocation } from '@capacitor/geolocation';
 import { Camera } from '@capacitor/camera';
 import { Browser } from '@capacitor/browser';
+import { KeepAwake } from '@capacitor-community/keep-awake';
 import ErrorBoundary from './components/ErrorBoundary';
 import Logo from './components/Logo';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -106,6 +107,9 @@ function MainContent() {
   // Request all native permissions on first launch
   useEffect(() => {
     if (isReady) {
+      if (Capacitor.isNativePlatform()) {
+        KeepAwake.keepAwake().catch(() => {});
+      }
       requestAllPermissions().then(results => {
         console.log('[App] Permission results:', results);
       }).catch(err => {
@@ -161,7 +165,10 @@ function MainContent() {
           try {
             const url = new URL(data.url);
             if (url.hostname === 'localhost' && url.pathname) {
-              navigate(url.pathname + url.search + url.hash);
+              // We MUST use window.location.href instead of React Router's navigate() 
+              // because Clerk's React SDK requires the actual browser URL to match 
+              // during initialization to process the SSO callback correctly.
+              window.location.href = url.pathname + url.search + url.hash;
             }
           } catch (e) {
             console.error('[Native] Error parsing deep link:', e);

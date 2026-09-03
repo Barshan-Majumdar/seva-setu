@@ -122,7 +122,7 @@ export const VoiceEmergencyModal = () => {
           }
         }
       );
-    }, 600);
+    }, 1500);
   }, []);
 
   // ── Manual button click → skip wake word, go directly to active listening ──
