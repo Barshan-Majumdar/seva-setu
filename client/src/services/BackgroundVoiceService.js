@@ -7,6 +7,7 @@
  * On web: Uses standard Web Speech API with automatic restart.
  */
 import { Capacitor } from '@capacitor/core';
+import { ForegroundService, ServiceType } from '@capawesome-team/capacitor-android-foreground-service';
 import { nativeSpeechBridge } from './NativeSpeechBridge';
 
 const WAKE_WORDS = ['seva setu', 'seba setu', 'sheva setu', 'seva sethu', 'save a satu', 'seva set to', 'seva set u'];
@@ -98,12 +99,14 @@ class BackgroundVoiceService {
     this._backoffMs = 1000;
 
     if (Capacitor.isNativePlatform()) {
-      // Proxy to NativeSpeechBridge
+      // 1. Command Android to keep the process alive
+      await this._showForegroundNotification();
+
+      // 2. Proxy to NativeSpeechBridge
       await nativeSpeechBridge.startWakeWord((text) => {
         this.pause(); // Pause wake word listening
         if (this._onWakeWordDetected) this._onWakeWordDetected(text);
       });
-      this._showForegroundNotification();
       this._isListening = true;
     } else {
       if (!this._recognition) return;
@@ -149,6 +152,7 @@ class BackgroundVoiceService {
     clearTimeout(this._restartTimeout);
     if (Capacitor.isNativePlatform()) {
       nativeSpeechBridge.stop();
+      this._hideForegroundNotification();
     } else {
       try { this._recognition?.stop(); } catch (e) {}
     }
@@ -178,19 +182,28 @@ class BackgroundVoiceService {
     }, delayMs);
   }
 
-  _showForegroundNotification() {
+  async _showForegroundNotification() {
     try {
-      if (window.Capacitor?.Plugins?.LocalNotifications) {
-        window.Capacitor.Plugins.LocalNotifications.schedule({
-          notifications: [{
-            id: 99999,
-            title: 'SevaSetu is listening',
-            body: 'Say "Seva Setu" to activate emergency assistance',
-            ongoing: true,
-            autoCancel: false,
-            smallIcon: 'ic_stat_icon_config_sample'
-          }]
+      if (Capacitor.isNativePlatform()) {
+        await ForegroundService.startForegroundService({
+          id: 1337,
+          title: 'SevaSetu Active',
+          body: 'Listening for emergency wake word...',
+          smallIcon: 'ic_menu_mic', // Built-in Android icon fallback
+          serviceType: ServiceType.Microphone,
         });
+        console.log('[BackgroundVoice] ForegroundService active');
+      }
+    } catch (err) {
+      console.error("Failed to lock background state:", err);
+    }
+  }
+
+  async _hideForegroundNotification() {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await ForegroundService.stopForegroundService();
+        console.log('[BackgroundVoice] ForegroundService stopped');
       }
     } catch (err) {}
   }

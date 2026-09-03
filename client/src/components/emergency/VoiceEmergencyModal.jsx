@@ -221,7 +221,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           const intentName = nlpData.intent !== 'UNKNOWN' ? nlpData.intent.toLowerCase().replace('_', ' ') : 'emergency';
           const ackReply = nlpData.reply || `Got it. Sending SOS now for: ${intentName}. Help is on the way to your location.`;
           setSystemReply(ackReply);
-          VoiceFeedback.speak(ackReply);
+          VoiceFeedback.speak(ackReply, () => {
+            if (mountedRef.current) {
+              setTimeout(() => handleClose(), 2000);
+            }
+          });
 
           const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
           setEmergencyData(emergency);
@@ -286,7 +290,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
 
         const doneReply = 'Help request started. Your SOS has been transmitted. Stay safe.';
         setSystemReply(doneReply);
-        VoiceFeedback.speak(doneReply);
+        VoiceFeedback.speak(doneReply, () => {
+          if (mountedRef.current) {
+            setTimeout(() => handleClose(), 2000);
+          }
+        });
 
         if (mountedRef.current) setSessionState('completed');
       }

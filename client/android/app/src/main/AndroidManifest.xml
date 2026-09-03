@@ -36,7 +36,7 @@
 
         <!-- Foreground service for background voice wake word detection -->
         <service
-            android:name=".VoiceListenerService"
+            android:name="app.capawesome.capacitor.androidforegroundservice.AndroidForegroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />

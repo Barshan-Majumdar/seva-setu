@@ -17,35 +17,6 @@ export const VoiceFeedback = {
         // Cancel any ongoing native speech
         await TextToSpeech.stop().catch(() => {});
         
-        let hasFinished = false;
-        let listenerHandle = null;
-
-        if (onEnd) {
-          // Listen to native progress to know EXACTLY when the speech ends
-          listenerHandle = await TextToSpeech.addListener('onRangeStart', (info) => {
-            // If the engine is speaking the very last word of the sentence
-            if (info.end >= message.length - Math.max(10, message.length * 0.1)) {
-              if (!hasFinished) {
-                hasFinished = true;
-                setTimeout(() => {
-                  if (listenerHandle) listenerHandle.remove();
-                  onEnd();
-                }, 600); // 600ms buffer for the physical last word to finish
-              }
-            }
-          });
-
-          // Absolute fallback safety timeout (in case onRangeStart glitches)
-          const fallbackMs = (message.length / 10) * 1000 + 2000;
-          setTimeout(() => {
-            if (!hasFinished) {
-              hasFinished = true;
-              if (listenerHandle) listenerHandle.remove();
-              onEnd();
-            }
-          }, fallbackMs);
-        }
-
         await TextToSpeech.speak({
           text: message,
           lang: 'en-IN',
@@ -54,6 +25,11 @@ export const VoiceFeedback = {
           volume: 1.0,
           category: 'ambient', 
         });
+
+        // The speak() promise resolves when speech finishes
+        if (onEnd) {
+          onEnd();
+        }
       } catch (err) {
         console.error('[VoiceFeedback] Native TTS Error:', err);
         if (onEnd) onEnd();
