@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { speechService } from '../../services/SpeechService';
+import { nativeSpeechBridge } from '../../services/NativeSpeechBridge';
 import { EmergencyManager } from '../../services/EmergencyManager';
 import { VoiceFeedback } from '../../services/VoiceFeedback';
 import { Mic, MicOff, CheckCircle2, Volume2 } from 'lucide-react';
@@ -29,38 +31,61 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     if (!mountedRef.current) return;
     hasTriggeredRef.current = false;
 
-    speechService.stop();
-    // Wait longer to ensure TTS audio has fully physically stopped playing in the room
-    setTimeout(() => {
-      if (!mountedRef.current) return;
-      setSessionState('active_session'); // Mic is on!
-      speechService.start(
-        null,
-        (finalText) => {
-          if (hasTriggeredRef.current) return;
-          setTranscript(finalText);
-          if (finalText.trim().length > 0) {
-            hasTriggeredRef.current = true;
-            handleEmergencyTrigger(finalText);
-          }
-        },
-        (err) => {
-          if (!hasTriggeredRef.current && mountedRef.current) {
-            setSessionState('error');
-          }
-        },
-        null,
-        (interimText) => {
-          if (!hasTriggeredRef.current && mountedRef.current) {
-            setTranscript(interimText);
-          }
-        }
-      );
-    }, 200);
+    const handleFinal = (finalText) => {
+      if (hasTriggeredRef.current) return;
+      setTranscript(finalText);
+      if (finalText.trim().length > 0) {
+        hasTriggeredRef.current = true;
+        handleEmergencyTrigger(finalText);
+      }
+    };
+
+    const handlePartial = (interimText) => {
+      if (!hasTriggeredRef.current && mountedRef.current) {
+        setTranscript(interimText);
+      }
+    };
+
+    const handleError = (err) => {
+      if (!hasTriggeredRef.current && mountedRef.current) {
+        setSessionState('error');
+      }
+    };
+
+    if (Capacitor.isNativePlatform()) {
+      // On native: use the unified bridge (sole owner of the Android mic)
+      setSessionState('active_session');
+      nativeSpeechBridge.startConversation({
+        onTranscript: handleFinal,
+        onPartialTranscript: handlePartial,
+        onError: handleError,
+      });
+    } else {
+      // On web: use SpeechService as before
+      speechService.stop();
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        setSessionState('active_session');
+        speechService.start(
+          null,
+          handleFinal,
+          handleError,
+          null,
+          handlePartial
+        );
+      }, 200);
+    }
   }, []);
 
-  // ── Start passive wake word listening ──
+  // ── Start passive wake word listening (WEB ONLY — native uses BackgroundVoiceService) ──
   const beginWakeWordListening = useCallback(() => {
+    if (Capacitor.isNativePlatform()) {
+      // On native, wake word is handled by BackgroundVoiceService via NativeSpeechBridge.
+      // VoiceEmergencyModal should NOT start its own wake word listener on native.
+      setSessionState('listening_for_wake');
+      return;
+    }
+
     if (!speechService.isSupported) {
       setSessionState('error');
       return;
@@ -73,65 +98,64 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       if (!mountedRef.current) return;
       speechService.start(
         () => {
-          // "Hey Seva Setu" detected!
-          console.log('[VoiceUI] Wake word detected');
+          console.log('[VoiceUI] Wake word detected (web)');
           speechService.stop();
-
           if (mountedRef.current) {
             setSessionState('speaking');
             setTranscript('');
-            
-            // Stop the microphone so it doesn't hear itself speak
-            speechService.stop();
-            
             const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
             setSystemReply(reply);
             VoiceFeedback.speak(reply, () => {
-              // After speaking the reply, start active listening for the emergency description
               if (mountedRef.current) startCapturing();
             });
           }
         },
-        () => { }, // ignore transcripts during wake-word mode
+        () => {},
         (err) => {
           if (err === 'not-allowed' && mountedRef.current) {
-            setSessionState('idle'); // permission revoked — show button
+            setSessionState('idle');
           }
         }
       );
     }, 100);
   }, [startCapturing]);
 
-
-
-  // ── On mount: check mic permission and auto-start if already granted ──
+  // ── On mount: auto-activate or start wake word ──
   useEffect(() => {
     mountedRef.current = true;
 
-    if (!speechService.isSupported) return;
-
-    speechService.checkPermissions().then((isGranted) => {
-      if (isGranted && mountedRef.current) {
-        if (autoActivate) {
-          console.log('[VoiceUI] Background wake word triggered — auto-activating instantly');
-          setSessionState('speaking');
-          setTranscript('');
-          speechService.stop();
-          const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
-          setSystemReply(reply);
-          VoiceFeedback.speak(reply, () => {
-            if (mountedRef.current) startCapturing();
-          });
-        } else {
-          console.log('[VoiceUI] Mic permission already granted — auto-starting wake word');
-          beginWakeWordListening();
-        }
+    if (autoActivate) {
+      // Opened by BackgroundVoiceService wake word detection
+      console.log('[VoiceUI] Auto-activating from background wake word');
+      setSessionState('speaking');
+      setTranscript('');
+      const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
+      setSystemReply(reply);
+      VoiceFeedback.speak(reply, () => {
+        if (mountedRef.current) startCapturing();
+      });
+    } else if (!Capacitor.isNativePlatform()) {
+      // Web: check permissions and start wake word listening
+      if (speechService.isSupported) {
+        speechService.checkPermissions().then((isGranted) => {
+          if (isGranted && mountedRef.current) {
+            console.log('[VoiceUI] Web: mic granted, starting wake word');
+            beginWakeWordListening();
+          }
+        });
       }
-    });
+    } else {
+      // Native: wake word is handled by BackgroundVoiceService, just show idle/listening state
+      setSessionState('listening_for_wake');
+    }
 
     return () => {
       mountedRef.current = false;
-      speechService.stop();
+      if (Capacitor.isNativePlatform()) {
+        nativeSpeechBridge.pause();
+      } else {
+        speechService.stop();
+      }
       VoiceFeedback.stop();
     };
   }, [autoActivate, startCapturing, beginWakeWordListening]);
@@ -161,7 +185,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
 
       try {
         // 1. Ask NLP about intent BEFORE triggering SOS
-        const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000';
+        const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.154.209.193:8000' : 'http://localhost:8000');
         const aiResponse = await fetch(`${AI_URL}/extract-facts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -250,24 +274,26 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     };
 
     // ── Close → go back to passive wake word listening OR close entirely ──
-    const handleClose = () => {
+  const handleClose = () => {
+    if (Capacitor.isNativePlatform()) {
+      nativeSpeechBridge.pause();
+    } else {
       speechService.stop();
-      VoiceFeedback.stop();
-      setTranscript('');
-      setSystemReply('');
-      setEmergencyData(null);
-      hasTriggeredRef.current = false;
+    }
+    VoiceFeedback.stop();
+    setTranscript('');
+    setSystemReply('');
+    setEmergencyData(null);
+    hasTriggeredRef.current = false;
     
-      // If opened from a parent via prop, trigger parent's close to unmount
-      if (parentHandleClose) {
-        parentHandleClose();
-      } else {
-        // Return to wake word listening so "Hey Seva Setu" keeps working (if not managed by parent)
-        setTimeout(() => {
-          if (mountedRef.current) beginWakeWordListening();
-        }, 300);
-      }
-    };
+    if (parentHandleClose) {
+      parentHandleClose();
+    } else if (!Capacitor.isNativePlatform()) {
+      setTimeout(() => {
+        if (mountedRef.current) beginWakeWordListening();
+      }, 300);
+    }
+  };
 
     // ══════════════════════════════════════════════════
     // RENDER: Idle — Permission not yet granted, show button

@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import localforage from 'localforage';
 
+import { Capacitor } from '@capacitor/core';
+
 // Configure local offline queue
 const offlineQueue = localforage.createInstance({
   name: 'SevaSetu',
@@ -16,7 +18,7 @@ const activeEmergencyStore = localforage.createInstance({
 let _retryInterval = null;
 
 const API_URL = import.meta.env.DEV ? 'http://localhost:5000' : (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000');
-const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000';
+const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.154.209.193:8000' : 'http://localhost:8000');
 
 /**
  * Ensure deviceId exists in localStorage (generated once, persisted forever).

@@ -18,6 +18,7 @@ import ServerMaintenanceAlert from './components/ServerMaintenanceAlert';
 import LoadingScreen from './components/LoadingScreen';
 import { useAuth } from './hooks/useAuth';
 import { requestAllPermissions } from './services/NativePermissions';
+import { nativeSpeechBridge } from './services/NativeSpeechBridge';
 import backgroundVoiceService from './services/BackgroundVoiceService';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -123,34 +124,39 @@ function MainContent() {
     if (isAuthenticated && isReady && !bgVoiceInitialized.current) {
       bgVoiceInitialized.current = true;
       
-      // We only want continuous background listening on Native Mobile
-      // Web browsers (Chrome/Safari) aggressively kill background mic access, causing flickering
       if (Capacitor.isNativePlatform()) {
-        backgroundVoiceService.init((transcript) => {
-          console.log('[App] Wake word detected! Opening emergency modal...');
-          autoActivateEmergency.current = true;
-          setShowVoiceEmergency(true);
-        }).then(supported => {
-          if (supported) {
-            backgroundVoiceService.start();
+        // Use the unified NativeSpeechBridge as sole mic owner
+        nativeSpeechBridge.init().then(ok => {
+          if (ok) {
+            nativeSpeechBridge.startWakeWord((transcript) => {
+              console.log('[App] Wake word detected via NativeSpeechBridge!');
+              autoActivateEmergency.current = true;
+              setShowVoiceEmergency(true);
+            });
           }
         });
       } else {
-        console.log('[App] Web environment detected. Skipping background wake word to prevent browser mic flickering.');
+        console.log('[App] Web environment detected. Skipping background wake word.');
       }
     }
 
-    return () => {
-      // Don't stop on cleanup — we want it to persist across route changes
-    };
+    return () => {};
   }, [isAuthenticated, isReady]);
 
   // Pause background voice when emergency modal is open, resume when closed
   const handleVoiceEmergencyClose = useCallback(() => {
     setShowVoiceEmergency(false);
     autoActivateEmergency.current = false;
-    // Resume background listening after a delay for audio to settle
-    setTimeout(() => backgroundVoiceService.resume(), 1500);
+    // Resume wake word listening after a delay for audio to settle
+    if (Capacitor.isNativePlatform()) {
+      setTimeout(() => {
+        nativeSpeechBridge.startWakeWord((transcript) => {
+          console.log('[App] Wake word detected via NativeSpeechBridge!');
+          autoActivateEmergency.current = true;
+          setShowVoiceEmergency(true);
+        });
+      }, 1500);
+    }
   }, []);
 
   // Deep Link & Native Permission Handler
