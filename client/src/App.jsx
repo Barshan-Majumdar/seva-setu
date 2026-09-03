@@ -198,7 +198,10 @@ function MainContent() {
                     <div className="mb-8">
                       <Logo size={48} />
                     </div>
-                    <SignIn routing="path" path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
+                    {(() => {
+                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
+                      return <SignIn routing="path" path="/sign-in" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                    })()}
                   </div>
                 </div>
               }
@@ -212,7 +215,10 @@ function MainContent() {
                     <div className="mb-8">
                       <Logo size={48} />
                     </div>
-                    <SignUp routing="path" path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
+                    {(() => {
+                      const redirectUrl = Capacitor.isNativePlatform() ? 'sevasetu://post-login' : '/post-login';
+                      return <SignUp routing="path" path="/sign-up" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />;
+                    })()}
                   </div>
                 </div>
               }
