@@ -363,9 +363,9 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         <>
           <DebugPanel />
           <div style={{
-            position: 'fixed', bottom: '1.5rem', right: '1.5rem',
-            display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
-            zIndex: 9999, gap: '0.5rem'
+            position: 'fixed', bottom: '104px', right: 'clamp(16px, 4vw, 64px)',
+            display: 'flex', flexDirection: 'row-reverse', alignItems: 'center',
+            zIndex: 9999, gap: '0.75rem'
           }}>
           <button
             onClick={handleManualActivate}
@@ -373,7 +373,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             style={{
               background: 'linear-gradient(135deg, #ef4444, #dc2626)',
               color: '#fff', border: 'none', borderRadius: '50%',
-              width: '56px', height: '56px',
+              width: '42px', height: '42px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer',
               boxShadow: '0 4px 20px rgba(239, 68, 68, 0.5)',
@@ -382,10 +382,10 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
           >
-            <Mic size={24} />
+            <Mic size={18} />
           </button>
           <span style={{
-            fontSize: '0.7rem', color: '#94a3b8',
+            fontSize: '0.6rem', color: '#94a3b8',
             background: '#fff', padding: '0.25rem 0.5rem',
             borderRadius: '6px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
           }}>
@@ -404,9 +404,9 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         <>
           <DebugPanel />
           <div style={{
-            position: 'fixed', bottom: '1.5rem', right: '1.5rem',
-          display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
-          zIndex: 9999, gap: '0.5rem'
+            position: 'fixed', bottom: '104px', right: 'clamp(16px, 4vw, 64px)',
+          display: 'flex', flexDirection: 'row-reverse', alignItems: 'center',
+          zIndex: 9999, gap: '0.75rem'
         }}>
           <div style={{ position: 'relative' }}>
             <div style={{
@@ -421,7 +421,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                 position: 'relative',
                 background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
                 color: '#fff', border: 'none', borderRadius: '50%',
-                width: '56px', height: '56px',
+                width: '42px', height: '42px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer',
                 boxShadow: '0 4px 24px rgba(239, 68, 68, 0.6)',
@@ -430,11 +430,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
-              <Mic size={24} />
+              <Mic size={18} />
             </button>
           </div>
           <span style={{
-            fontSize: '0.7rem', color: '#22c55e', fontWeight: 600,
+            fontSize: '0.6rem', color: '#22c55e', fontWeight: 600,
             background: '#fff', padding: '0.3rem 0.6rem',
             borderRadius: '6px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
             display: 'flex', alignItems: 'center', gap: '0.35rem',

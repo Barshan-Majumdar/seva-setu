@@ -62,7 +62,7 @@ const ShelterFilters = ({ filters, setFilters, allShelters, viewMode, setViewMod
     >
       
       {/* Top Row: Filters */}
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#334155', marginRight: '0.5rem', background: '#f1f5f9', padding: '0.5rem 0.75rem', borderRadius: '8px' }}>
           <SlidersHorizontal size={14} />
           <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filters</span>
@@ -98,9 +98,9 @@ const ShelterFilters = ({ filters, setFilters, allShelters, viewMode, setViewMod
       <div style={{ height: '1px', background: '#e2e8f0', width: '100%' }} />
 
       {/* Bottom Row: Additional Filters & Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-6">
         
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center flex-1">
           <CustomSelect 
             value={draftFilters.status}
             onChange={(e) => setDraftFilters(prev => ({ ...prev, status: e.target.value }))}
@@ -114,7 +114,7 @@ const ShelterFilters = ({ filters, setFilters, allShelters, viewMode, setViewMod
             icon={<Activity size={14} />}
           />
 
-          <div style={{ position: 'relative', width: '180px' }}>
+          <div className="relative w-full sm:w-[180px]">
             <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
               <Users size={14} />
             </div>
@@ -140,72 +140,35 @@ const ShelterFilters = ({ filters, setFilters, allShelters, viewMode, setViewMod
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
           {/* Apply Button */}
           <motion.button
             whileHover={{ scale: 1.02, backgroundColor: '#1e4b35' }}
             whileTap={{ scale: 0.95 }}
             onClick={handleApply}
-            style={{
-              padding: '0.6rem 1.5rem',
-              background: '#2d6148',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(45, 97, 72, 0.2)'
-            }}
+            className="flex items-center justify-center gap-2 whitespace-nowrap bg-[#2d6148] text-white py-2.5 px-6 rounded-lg font-semibold text-sm cursor-pointer shadow-[0_4px_12px_rgba(45,97,72,0.2)]"
           >
             <Check size={16} /> Apply Filters
           </motion.button>
 
-          <div style={{ width: '1px', height: '24px', background: '#cbd5e1' }} />
+          <div className="hidden sm:block w-[1px] h-6 bg-slate-300" />
 
           {/* View Toggle */}
-          <div style={{ display: 'flex', background: '#f1f5f9', padding: '0.35rem', borderRadius: '10px' }}>
+          <div className="flex bg-slate-100 p-1.5 rounded-xl">
             <motion.button 
               whileTap={{ scale: 0.95 }}
-              style={{ 
-                padding: '0.5rem 1rem', 
-                background: viewMode === 'map' ? '#fff' : 'transparent',
-                boxShadow: viewMode === 'map' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
-                borderRadius: '8px',
-                border: 'none',
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                color: viewMode === 'map' ? '#0f172a' : '#64748b',
-                fontWeight: viewMode === 'map' ? 600 : 500,
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-200 ${viewMode === 'map' ? 'bg-white text-slate-900 shadow-[0_2px_8px_rgba(0,0,0,0.06)]' : 'bg-transparent text-slate-500'}`}
               onClick={() => setViewMode('map')}
             >
-              <Map size={14} color={viewMode === 'map' ? '#2d6148' : '#94a3b8'} /> Map View
+              <Map size={14} className={viewMode === 'map' ? 'text-[#2d6148]' : 'text-slate-400'} /> <span className="whitespace-nowrap">Map View</span>
             </motion.button>
             
             <motion.button 
               whileTap={{ scale: 0.95 }}
-              style={{ 
-                padding: '0.5rem 1rem', 
-                background: viewMode === 'list' ? '#fff' : 'transparent',
-                boxShadow: viewMode === 'list' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
-                borderRadius: '8px',
-                border: 'none',
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                color: viewMode === 'list' ? '#0f172a' : '#64748b',
-                fontWeight: viewMode === 'list' ? 600 : 500,
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-200 ${viewMode === 'list' ? 'bg-white text-slate-900 shadow-[0_2px_8px_rgba(0,0,0,0.06)]' : 'bg-transparent text-slate-500'}`}
               onClick={() => setViewMode('list')}
             >
-              <List size={14} color={viewMode === 'list' ? '#2d6148' : '#94a3b8'} /> Directory
+              <List size={14} className={viewMode === 'list' ? 'text-[#2d6148]' : 'text-slate-400'} /> <span className="whitespace-nowrap">Directory</span>
             </motion.button>
           </div>
         </div>

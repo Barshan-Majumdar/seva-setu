@@ -7,13 +7,21 @@ const redisClient = createClient({
   url: process.env.REDIS_URL,
   socket: {
     connectTimeout: 10000, // Increase to 10s to prevent handshake timeouts
+    reconnectStrategy: (retries) => {
+      if (retries > 3) {
+        console.error('[RateLimiter] Redis connection retries exhausted.');
+        return false;
+      }
+      return Math.min(retries * 500, 3000);
+    }
   }
 });
 
 let isRedisConnected = false;
 
+let errorCount = 0;
 redisClient.on('error', (err) => {
-  console.error('[RateLimiter] Redis Client Error:', err);
+  if (errorCount++ < 1) console.error('[RateLimiter] Redis Client Error:', err.message || err);
   isRedisConnected = false;
 });
 
@@ -22,8 +30,9 @@ redisClient.on('connect', () => {
   isRedisConnected = true;
 });
 
+let reconnectCount = 0;
 redisClient.on('reconnecting', () => {
-  console.log('[RateLimiter] Reconnecting to Redis...');
+  if (reconnectCount++ < 1) console.log('[RateLimiter] Reconnecting to Redis...');
 });
 
 // Connect to Redis (non-blocking, don't await at module level to prevent crashing if down)
@@ -50,7 +59,8 @@ const rateLimiter = rateLimit({
 
   // Skip logic: VIP Bypass for cron jobs
   skip: (req, res) => {
-    const headerName = (process.env.CRON_HEADER).toLowerCase();
+    if (!process.env.CRON_HEADER) return false;
+    const headerName = process.env.CRON_HEADER.toLowerCase();
     const cronHeader = req.headers[headerName];
     if (cronHeader && cronHeader === process.env.CRON_SECRET) {
       console.log(`[RateLimiter] Skipping rate limit for internal cron job.`);
