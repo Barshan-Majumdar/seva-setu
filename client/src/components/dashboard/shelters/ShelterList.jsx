@@ -89,7 +89,7 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
     <div className="dashboard-card" style={{ padding: '0', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', height: 'min(800px, 85vh)' }}>
       
       {/* Premium Header / Sorting Bar */}
-      <div style={{ padding: '0.75rem 1.5rem', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '1rem', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
+      <div className="flex gap-4 items-center sticky top-0 z-10 px-4 sm:px-6 py-3 bg-white border-b border-slate-200 overflow-x-auto whitespace-nowrap">
         <SortButton columnKey="name" label="Shelter / Location" flex="2" Icon={Map} />
         <SortButton columnKey="occupancyPercent" label="Occupancy" flex="1.5" Icon={UsersIcon} />
         <div style={{ flex: '1.5', display: 'flex', justifyContent: 'flex-end' }}>
@@ -116,6 +116,7 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
                     variants={itemVariants}
                     key={shelter.id}
                     onClick={() => setSelectedShelterId(shelter.id)}
+                    className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start sm:items-center relative overflow-hidden transition-all duration-200"
                     style={{
                       background: '#fff',
                       borderRadius: '12px',
@@ -123,12 +124,6 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
                       cursor: 'pointer',
                       border: isSelected ? '1px solid #2d6148' : '1px solid #e2e8f0',
                       boxShadow: isSelected ? '0 4px 12px rgba(45, 97, 72, 0.1)' : '0 1px 3px rgba(0,0,0,0.02)',
-                      display: 'flex',
-                      gap: '1.5rem',
-                      alignItems: 'center',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      transition: 'all 0.2s ease'
                     }}
                     whileHover={{ y: -2, boxShadow: '0 8px 16px rgba(0,0,0,0.04)', borderColor: '#cbd5e1' }}
                   >
@@ -136,7 +131,7 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
                     <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: statusColor }} />
                     
                     {/* Column 1: Identity & Location */}
-                    <div style={{ flex: '2', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <div className="w-full sm:flex-[2] min-w-0 flex flex-col gap-1.5">
                       <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {shelter.name}
                       </h3>
@@ -159,7 +154,7 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
                     </div>
 
                     {/* Column 2: Occupancy Mini-Dashboard */}
-                    <div style={{ flex: '1.5', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div className="w-full sm:flex-[1.5] flex flex-col gap-1.5 pr-6 sm:pr-0">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                         <span style={{ fontSize: '1.1rem', fontWeight: 800, color: shelter.isOvercrowded ? '#dc2626' : '#0f172a' }}>
                           {shelter.occupancyPercent}%
@@ -183,7 +178,7 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
                     </div>
 
                     {/* Column 3: Alerts & Badges */}
-                    <div style={{ flex: '1.5', display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <div className="w-full sm:flex-[1.5] flex justify-start sm:justify-end gap-1.5 flex-wrap pr-6 sm:pr-0">
                       {shelter.hasCriticalResource && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', padding: '0.2rem 0.5rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.65rem', fontWeight: 700, borderRadius: '6px' }}>
                           <AlertCircle size={10} /> LOW STOCK

@@ -90,7 +90,7 @@ export default function ChatWidget() {
         onClick={() => setIsOpen(o => !o)}
         className="chat-trigger-btn"
         style={{
-          position: 'fixed', bottom: '32px', right: '32px', zIndex: 9999,
+          position: 'fixed', bottom: '32px', right: 'clamp(16px, 4vw, 64px)', zIndex: 9999,
           width: '60px', height: '60px', borderRadius: '20px',
           background: '#ffffff',
           border: '1px solid #e5e7eb',
@@ -134,8 +134,8 @@ export default function ChatWidget() {
       {/* Chat Window */}
       {isOpen && (
         <div style={{
-          position: 'fixed', bottom: '110px', right: '32px', zIndex: 9998,
-          width: '400px', maxWidth: 'calc(100vw - 64px)',
+          position: 'fixed', bottom: '110px', right: 'clamp(16px, 4vw, 64px)', zIndex: 9998,
+          width: '400px', maxWidth: 'calc(100vw - 32px)',
           height: '600px', maxHeight: 'calc(100vh - 160px)',
           background: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(16px)',

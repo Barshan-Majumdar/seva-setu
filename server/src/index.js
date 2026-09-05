@@ -1,6 +1,5 @@
 /**
  * SevaSetu — Server Entry Point
- * Minimal setup for Phase 1: health check + DB connectivity verification.
  */
 require('dotenv').config();
 
