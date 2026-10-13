@@ -13,6 +13,8 @@ const { aiVerificationQueue, connection } = require('../config/queue');
 const cache = require('../middleware/cache');
 const redisService = require('../services/redisService');
 
+const { parseVoiceTranscript } = require('../services/voiceFormParser');
+
 const router = express.Router();
 
 // Ensure uploads directory exists
@@ -32,6 +34,32 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
+
+/**
+ * @route   POST /api/needs/parse-voice-form
+ * @desc    AI-powered voice form field extractor with word-to-field matching
+ * @access  Public / Private
+ */
+router.post('/parse-voice-form', async (req, res) => {
+  try {
+    const { transcript } = req.body;
+    if (!transcript || !transcript.trim()) {
+      return res.status(400).json({ error: 'Transcript is required' });
+    }
+
+    const parsedData = await parseVoiceTranscript(transcript);
+    return res.json({
+      success: true,
+      ...parsedData
+    });
+  } catch (error) {
+    console.error('[VoiceParse] Failed to parse voice transcript:', error);
+    return res.status(500).json({
+      error: 'Failed to process voice transcript',
+      details: error.message
+    });
+  }
+});
 
 /**
  * @route   POST /api/needs
@@ -88,16 +116,20 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
     });
 
     // --- 3. Queue the AI Verification Job with the local path ---
-    await aiVerificationQueue.add('verify-incident', {
-      type: 'incident',
-      id: need.id,
-      localPath: req.file.path,
-      fileName: req.file.filename,
-      metadata: { 
-        lat: lat != null ? Number(lat) : null, 
-        lng: lng != null ? Number(lng) : null 
-      }
-    });
+    try {
+      await aiVerificationQueue.add('verify-incident', {
+        type: 'incident',
+        id: need.id,
+        localPath: req.file.path,
+        fileName: req.file.filename,
+        metadata: { 
+          lat: lat != null ? Number(lat) : null, 
+          lng: lng != null ? Number(lng) : null 
+        }
+      });
+    } catch (queueErr) {
+      console.warn('[Queue] Could not enqueue AI verification job:', queueErr.message);
+    }
 
     // --- SMART INVALIDATION ---
     // --- SMART INVALIDATION ---

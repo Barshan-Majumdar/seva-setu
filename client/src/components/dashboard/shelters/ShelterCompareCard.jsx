@@ -63,7 +63,7 @@ const ShelterCompareCard = ({ shelter }) => {
             key={res.category}
             className={`shelter-resource-chip shelter-resource-${res.status}`}
           >
-            {RESOURCE_ICONS[res.category] || '📦'} {res.category} {res.status.toUpperCase()}
+            {res.category} {res.status.toUpperCase()}
             {res.status === 'low' && res.hoursRemaining != null && (
               <span style={{ opacity: 0.8, marginLeft: '2px' }}>({res.hoursRemaining}h)</span>
             )}

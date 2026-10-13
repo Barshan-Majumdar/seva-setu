@@ -79,7 +79,7 @@ class NativeSpeechBridge {
         const result = await SpeechRecognition.requestPermissions();
         this._log('Permission result: ' + result.speechRecognition);
         if (result.speechRecognition !== 'granted') {
-          this._log('❌ Permission denied');
+          this._log('[ERROR] Permission denied');
           return false;
         }
       }
@@ -91,13 +91,13 @@ class NativeSpeechBridge {
       // Register THE ONLY listeners for the entire app
       await SpeechRecognition.addListener('partialResults', (data) => {
         if (data.matches && data.matches.length > 0) {
-          this._log('📝 Got speech: "' + data.matches[0].substring(0, 50) + '"');
+          this._log('Got speech: "' + data.matches[0].substring(0, 50) + '"');
           this._handleResult(data.matches[0]);
         }
       });
 
       await SpeechRecognition.addListener('listeningState', (data) => {
-        this._log('🔔 listeningState: ' + data.status + ' (mode=' + this._mode + ', enabled=' + this._enabled + ')');
+        this._log('listeningState: ' + data.status + ' (mode=' + this._mode + ', enabled=' + this._enabled + ')');
         if (data.status === 'started') {
           this._isListening = true;
         }
@@ -116,10 +116,10 @@ class NativeSpeechBridge {
       });
 
       this._initialized = true;
-      this._log('✅ Initialized OK');
+      this._log('[OK] Initialized OK');
       return true;
     } catch (e) {
-      this._log('❌ Init error: ' + (e.message || e));
+      this._log('[ERROR] Init error: ' + (e.message || e));
       return false;
     }
   }
@@ -132,7 +132,7 @@ class NativeSpeechBridge {
       const lower = text.toLowerCase();
       const detected = WAKE_WORDS.some(ww => lower.includes(ww));
       if (detected && this._onWakeWord) {
-        this._log('🎤 WAKE WORD DETECTED: ' + lower);
+        this._log('WAKE WORD DETECTED: ' + lower);
         this._onWakeWord(lower);
       }
     } else if (this._mode === 'CONVERSATION') {
@@ -143,7 +143,7 @@ class NativeSpeechBridge {
       clearTimeout(this._transcriptDebounce);
       this._transcriptDebounce = setTimeout(() => {
         if (this._onTranscript) {
-          this._log('💬 Final transcript: "' + text.substring(0, 50) + '"');
+          this._log('Final transcript: "' + text.substring(0, 50) + '"');
           this._onTranscript(text);
         }
       }, 3000); // 3 seconds of silence before we assume they are done speaking
@@ -209,7 +209,7 @@ class NativeSpeechBridge {
     clearTimeout(this._transcriptDebounce);
     this._isListening = false;
     try { SpeechRecognition.stop(); } catch (e) {}
-    this._log('⏹ Fully stopped');
+    this._log('Fully stopped');
   }
 
   // ── Pause (temporarily stop but keep mode) ──
@@ -219,7 +219,7 @@ class NativeSpeechBridge {
     clearTimeout(this._transcriptDebounce);
     try { SpeechRecognition.stop(); } catch (e) {}
     this._isListening = false;
-    this._log('⏸ Paused');
+    this._log('Paused');
   }
 
   // ── Internal: stop hardware WITHOUT touching _enabled or _mode ──
@@ -263,10 +263,10 @@ class NativeSpeechBridge {
         this._isListening = true;
         this._restartCount++;
         this._lastRestartTime = Date.now();
-        this._log('✅ start() OK (restart #' + this._restartCount + ')');
+        this._log('[OK] start() OK (restart #' + this._restartCount + ')');
         return; // Success!
       } catch (e) {
-        this._log(`❌ start() failed (config ${i}): ${e.message || e}`);
+        this._log(`[ERROR] start() failed (config ${i}): ${e.message || e}`);
         this._isListening = false;
         // Wait before retry
         await new Promise(r => setTimeout(r, 500));

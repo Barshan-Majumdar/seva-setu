@@ -122,6 +122,10 @@ export const useFieldForm = () => {
     }
   }, []);
 
+  const updateMultipleFields = useCallback((fieldsObject) => {
+    setFormData((p) => ({ ...p, ...fieldsObject }));
+  }, []);
+
   const [verificationResult, setVerificationResult] = useState(null);
 
   const resetForm = useCallback(() => {
@@ -303,6 +307,7 @@ export const useFieldForm = () => {
     syncingQueue,
     urgencyPreview,
     updateField,
+    updateMultipleFields,
     resetForm,
     getLocation,
     setManualLocation,

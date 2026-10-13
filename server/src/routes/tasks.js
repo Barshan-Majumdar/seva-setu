@@ -176,18 +176,22 @@ router.patch('/:id/complete', auth, upload.single('image'), async (req, res) => 
       }
     });
 
-    await aiVerificationQueue.add('verify-task', {
-      type: 'task',
-      id: task.id,
-      localPath: req.file.path,
-      fileName: req.file.filename,
-      metadata: { 
-        lat: lat != null ? Number(lat) : null, 
-        lng: lng != null ? Number(lng) : null,
-        browserLat: req.body.browserLat ? Number(req.body.browserLat) : null,
-        browserLng: req.body.browserLng ? Number(req.body.browserLng) : null
-      }
-    });
+    try {
+      await aiVerificationQueue.add('verify-task', {
+        type: 'task',
+        id: task.id,
+        localPath: req.file.path,
+        fileName: req.file.filename,
+        metadata: { 
+          lat: lat != null ? Number(lat) : null, 
+          lng: lng != null ? Number(lng) : null,
+          browserLat: req.body.browserLat ? Number(req.body.browserLat) : null,
+          browserLng: req.body.browserLng ? Number(req.body.browserLng) : null
+        }
+      });
+    } catch (queueErr) {
+      console.warn('[Queue] Could not enqueue AI verification job:', queueErr.message);
+    }
 
     // Clear cache so coordinator and volunteer know it's being verified
     await redisService.clearCache('/api/tasks').catch(() => {});

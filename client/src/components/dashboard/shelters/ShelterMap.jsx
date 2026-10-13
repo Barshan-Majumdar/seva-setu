@@ -130,12 +130,12 @@ const ShelterMap = ({ shelters, filters, selectedShelterId, setSelectedShelterId
                     <p className="text-xs text-slate-600"><strong>Status:</strong> <span style={{ textTransform: 'capitalize' }}>{shelter.status}</span></p>
                     {shelter.hasCriticalResource && (
                       <p className="text-xs" style={{ color: '#dc2626', fontWeight: 700, marginTop: '0.25rem' }}>
-                        ⚠️ Low Stock Alert
+                        Low Stock Alert
                       </p>
                     )}
                     {shelter.openIncidentsCount > 0 && (
                       <p className="text-xs" style={{ color: '#d97706', fontWeight: 700 }}>
-                        ⚠️ {shelter.openIncidentsCount} Open Incident(s)
+                        {shelter.openIncidentsCount} Open Incident(s)
                       </p>
                     )}
                     <button

@@ -25,14 +25,19 @@ redisClient.on('error', (err) => {
   isRedisConnected = false;
 });
 
-redisClient.on('connect', () => {
+redisClient.on('ready', () => {
   console.log('[RateLimiter] Successfully connected to Redis');
   isRedisConnected = true;
+});
+
+redisClient.on('end', () => {
+  isRedisConnected = false;
 });
 
 let reconnectCount = 0;
 redisClient.on('reconnecting', () => {
   if (reconnectCount++ < 1) console.log('[RateLimiter] Reconnecting to Redis...');
+  isRedisConnected = false;
 });
 
 // Connect to Redis (non-blocking, don't await at module level to prevent crashing if down)
@@ -77,11 +82,18 @@ const rateLimiter = rateLimit({
     // If Redis is down, we want to fail-open (allow traffic).
     init: function (options) {
       this.redisStore = new RedisStore({
-        sendCommand: (...args) => redisClient.sendCommand(args),
+        sendCommand: async (...args) => {
+          if (!isRedisConnected) {
+            throw new Error('Redis is not connected or ready');
+          }
+          return await redisClient.sendCommand(args);
+        },
       });
       // RateLimit store init
       if (typeof this.redisStore.init === 'function') {
-        this.redisStore.init(options);
+        this.redisStore.init(options).catch((err) => {
+          console.warn('[RateLimiter] RedisStore init deferred/failed (will fail-open):', err.message);
+        });
       }
     },
     increment: async function (key) {

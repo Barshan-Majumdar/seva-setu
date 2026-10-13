@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const isLocalhost = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const API_BASE_URL = isLocalhost
+  ? 'http://localhost:5000/api'
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -34,17 +39,20 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-const API_SECONDARY_BASE_URL = import.meta.env.VITE_API_SECONDARY_BASE_URL || 'http://localhost:5001/api';
+const API_SECONDARY_BASE_URL = isLocalhost
+  ? 'http://localhost:5000/api'
+  : (import.meta.env.VITE_API_SECONDARY_BASE_URL || 'http://localhost:5001/api');
 
 const SERVERS = [API_BASE_URL, API_SECONDARY_BASE_URL];
 
-// Load assigned server from storage, or pick one randomly for proper 50/50 load balancing
-let currentBaseUrl = localStorage.getItem('assigned_server');
+// Load assigned server from storage, or use local server on localhost
+let currentBaseUrl = isLocalhost ? 'http://localhost:5000/api' : localStorage.getItem('assigned_server');
 
 if (!currentBaseUrl || !SERVERS.includes(currentBaseUrl)) {
-  // Flip a coin to distribute load evenly across both servers
   currentBaseUrl = SERVERS[Math.floor(Math.random() * SERVERS.length)];
-  localStorage.setItem('assigned_server', currentBaseUrl);
+  if (!isLocalhost) {
+    localStorage.setItem('assigned_server', currentBaseUrl);
+  }
 }
 
 // Set the initial base URL for this user's session
