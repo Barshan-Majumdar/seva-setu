@@ -223,7 +223,6 @@ export const VoiceFormFiller = ({ onApplyVoiceData }) => {
           <Mic style={{ width: 12, height: 12 }} />
         </span>
         <span>Fill with Voice</span>
-        <Sparkles style={{ width: 13, height: 13, color: '#059669' }} />
       </button>
 
       {/* ── Voice Assistant Modal ── */}

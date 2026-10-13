@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Mic, MicOff, Sparkles, Loader2, CheckCircle2, AlertTriangle,
-  RotateCcw, X, ArrowRight, Volume2, ShieldAlert, Check, ChevronDown, ChevronUp, Zap
+  RotateCcw, X, ArrowRight, Volume2, ShieldAlert, Check, ChevronDown, ChevronUp, Camera
 } from 'lucide-react';
 import api from '../../services/api';
 import { speechService } from '../../services/SpeechService';
@@ -109,7 +109,7 @@ export const extractLiveFormFields = (text) => {
   return { fields, matches };
 };
 
-export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = false }) => {
+export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = false, onCapturePhoto }) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimText, setInterimText] = useState('');
@@ -557,7 +557,7 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
       {/* ── Collapsible Body ── */}
       {isExpanded && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(226, 232, 240, 0.7)' }}>
-          {/* Active Listening Waveform & Transcript Box */}
+          {/* Active Listening Transcript Box */}
           {isListening && (
             <div style={{
               background: '#ffffff',
@@ -565,77 +565,13 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
               padding: '0.9rem 1.1rem',
               border: '1px solid rgba(5, 150, 105, 0.25)',
               marginBottom: '0.75rem',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
+              boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+              fontSize: '0.9rem',
+              color: fullDisplayTranscript ? '#0f172a' : '#94a3b8',
+              fontStyle: fullDisplayTranscript ? 'normal' : 'italic',
+              lineHeight: 1.5
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%', background: '#dc2626',
-                  animation: 'pulse 1s infinite'
-                }} />
-                <span style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', color: '#dc2626', letterSpacing: '0.05em' }}>
-                  Live Speech Audio:
-                </span>
-              </div>
-              <p style={{
-                fontSize: '0.9rem',
-                color: fullDisplayTranscript ? '#0f172a' : '#94a3b8',
-                fontStyle: fullDisplayTranscript ? 'normal' : 'italic',
-                margin: 0,
-                lineHeight: 1.5
-              }}>
-                {fullDisplayTranscript || 'Speak your incident details aloud...'}
-              </p>
-
-              {/* ── Live Form Auto-Fill Chips ── */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginTop: '0.75rem',
-                paddingTop: '0.75rem',
-                borderTop: '1px dashed #e2e8f0',
-                flexWrap: 'wrap'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#059669', fontSize: '0.72rem', fontWeight: 800 }}>
-                  <Zap style={{ width: 13, height: 13, color: '#059669' }} />
-                  <span>Live Form Filling:</span>
-                </div>
-                {liveFields.need_type && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(5, 150, 105, 0.1)', color: '#065f46', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(5, 150, 105, 0.25)' }}>
-                    <Check size={11} strokeWidth={2.5} /> Need: {liveFields.need_type.toUpperCase()}
-                  </span>
-                )}
-                {liveFields.people_affected && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(37, 99, 235, 0.1)', color: '#1d4ed8', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(37, 99, 235, 0.25)' }}>
-                    <Check size={11} strokeWidth={2.5} /> People: {liveFields.people_affected}
-                  </span>
-                )}
-                {liveFields.district && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(217, 119, 6, 0.1)', color: '#b45309', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(217, 119, 6, 0.25)' }}>
-                    <Check size={11} strokeWidth={2.5} /> District: {liveFields.district}
-                  </span>
-                )}
-                {liveFields.ward && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(124, 58, 237, 0.1)', color: '#6d28d9', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(124, 58, 237, 0.25)' }}>
-                    <Check size={11} strokeWidth={2.5} /> Ward: {liveFields.ward}
-                  </span>
-                )}
-                {liveFields.contact_number && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(8, 145, 178, 0.1)', color: '#0e7490', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(8, 145, 178, 0.25)' }}>
-                    <Check size={11} strokeWidth={2.5} /> Contact: {liveFields.contact_number}
-                  </span>
-                )}
-                {liveFields.is_disaster_zone && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.7rem', fontWeight: 700, background: 'rgba(220, 38, 38, 0.1)', color: '#b91c1c', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(220, 38, 38, 0.25)' }}>
-                    <Check size={11} strokeWidth={2.5} /> Disaster: Active
-                  </span>
-                )}
-                {Object.keys(liveFields).length === 0 && (
-                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic' }}>
-                    Speak details (e.g. "Accident in Ward 12 Kolkata, 4 injured"). Watch fields populate below!
-                  </span>
-                )}
-              </div>
+              {fullDisplayTranscript || 'Speak your incident details aloud...'}
             </div>
           )}
 
@@ -846,6 +782,67 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
                   </div>
                 ))}
               </div>
+
+              {/* ── Option: Capture Live Photo after incident is described ── */}
+              {onCapturePhoto && (
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '0.9rem 1.1rem',
+                  background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.08), rgba(16, 185, 129, 0.12))',
+                  border: '1.5px solid rgba(5, 150, 105, 0.3)',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: '8px',
+                      background: '#059669', color: '#ffffff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                    }}>
+                      <Camera style={{ width: 17, height: 17 }} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: '0.82rem', color: '#065f46', display: 'block' }}>
+                        Incident Described! Next: Capture Live Photo
+                      </strong>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        Take a real-time camera photo with verified GPS watermark.
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onCapturePhoto}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      padding: '0.55rem 1.1rem',
+                      background: '#059669',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                      transition: 'transform 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  >
+                    <Camera style={{ width: 15, height: 15 }} />
+                    Capture Live Photo
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

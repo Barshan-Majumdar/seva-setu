@@ -8,41 +8,59 @@ import {
 import { useFieldForm } from '../hooks/useFieldForm';
 import MainLayout from '../layouts/MainLayout';
 import CameraWatermark from '../components/CameraWatermark';
-import TopVoiceFormBanner from '../components/voice/TopVoiceFormBanner';
+import VoiceVideoAssistantModal from '../components/voice/VoiceVideoAssistantModal';
+import { VoiceFeedback } from '../services/VoiceFeedback';
 
 const TWILIO_WHATSAPP_NUMBER = import.meta.env.VITE_TWILIO_WHATSAPP_NUMBER ;
 const TWILIO_SANDBOX_CODE = import.meta.env.VITE_TWILIO_SANDBOX_CODE ;
 
 const FieldForm = () => {
   const [showCamera, setShowCamera] = useState(false);
+  const [showVoiceAssistantModal, setShowVoiceAssistantModal] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [voiceMatches, setVoiceMatches] = useState({});
-  const [voiceFilledSuccess, setVoiceFilledSuccess] = useState(false);
   const [isLiveFilling, setIsLiveFilling] = useState(false);
-  const [showVoiceFiller, setShowVoiceFiller] = useState(false);
   const galleryInputRef = useRef(null);
 
-  // Open voice filler on custom trigger (e.g. from bottom mic or wake word)
+  // Open dedicated voice assistant modal on trigger (e.g. from bottom mic button or wake word)
   useEffect(() => {
     const handleVoiceTrigger = () => {
-      setShowVoiceFiller(true);
+      setShowVoiceAssistantModal(true);
     };
     window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
     return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
   }, []);
+
   const {
     formData, loading, locLoading, success, successMessage,
     error, verificationResult, isOnline, queuedCount, syncingQueue, urgencyPreview,
     updateField, updateMultipleFields, resetForm, getLocation, setManualLocation, submitForm,
   } = useFieldForm();
 
-  const handleApplyVoiceData = ({ fields, matches, isLive = false }) => {
-    updateMultipleFields(fields);
-    setVoiceMatches(matches || {});
-    setIsLiveFilling(isLive);
-    if (!isLive) {
-      setVoiceFilledSuccess(true);
+  const handleApplyVoiceData = (fields, photoFile, loc) => {
+    if (fields && Object.keys(fields).length > 0) {
+      updateMultipleFields(fields);
     }
+    if (photoFile) {
+      updateField('imageFile', photoFile);
+    }
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+  };
+
+  const handlePhotoCaptured = (file, loc) => {
+    updateField('imageFile', file);
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+    setShowCamera(false);
   };
 
   const clearVoiceBadge = (fieldKey) => {
@@ -275,85 +293,30 @@ const FieldForm = () => {
                   Incident Details
                 </h2>
 
-                {/* ── Voice-Based Fill Up Option ── */}
                 <button
                   type="button"
-                  onClick={() => setShowVoiceFiller((prev) => !prev)}
+                  onClick={() => setShowVoiceAssistantModal(true)}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.45rem',
-                    padding: '0.45rem 0.95rem',
-                    borderRadius: 9999,
-                    background: showVoiceFiller ? 'rgba(5, 150, 105, 0.15)' : 'rgba(5, 150, 105, 0.08)',
-                    border: '1.5px solid rgba(5, 150, 105, 0.28)',
-                    color: '#065f46',
-                    fontSize: '0.75rem',
+                    padding: '0.42rem 0.85rem',
+                    borderRadius: '8px',
+                    fontSize: '0.74rem',
                     fontWeight: 700,
+                    color: '#059669',
+                    background: 'rgba(5, 150, 105, 0.08)',
+                    border: '1px solid rgba(5, 150, 105, 0.25)',
                     cursor: 'pointer',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: showVoiceFiller ? '0 0 0 3px rgba(5, 150, 105, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)',
+                    transition: 'all 0.15s ease',
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = '0 3px 10px rgba(5, 150, 105, 0.2)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = showVoiceFiller ? '0 0 0 3px rgba(5, 150, 105, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.04)';
-                  }}
-                  title="Click to fill form using voice"
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.15)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.08)'; }}
                 >
-                  <span style={{
-                    width: 20, height: 20, borderRadius: '50%',
-                    background: '#059669', color: '#ffffff',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <Mic style={{ width: 12, height: 12 }} />
-                  </span>
-                  <span>Voice-Based Fill Up</span>
-                  <Sparkles style={{ width: 13, height: 13, color: '#059669' }} />
+                  <Mic style={{ width: 14, height: 14 }} />
+                  Voice & Video Assistant
                 </button>
               </div>
-
-              {/* ── Inline Voice Assistant Panel ── */}
-              {showVoiceFiller && (
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <TopVoiceFormBanner
-                    onApplyVoiceData={handleApplyVoiceData}
-                    onClose={() => setShowVoiceFiller(false)}
-                    autoStart={true}
-                  />
-                </div>
-              )}
-
-              {voiceFilledSuccess && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: 'rgba(5, 150, 105, 0.08)',
-                  border: '1px solid rgba(5, 150, 105, 0.25)',
-                  borderRadius: '10px',
-                  padding: '0.65rem 1rem',
-                  marginBottom: '1.25rem',
-                  fontSize: '0.8rem',
-                  color: '#065f46'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Sparkles style={{ width: 16, height: 16, color: '#059669', flexShrink: 0 }} />
-                    <span><strong>Voice Fill Applied:</strong> Form auto-populated from speech. Review the green badges below to see matched words.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setVoiceFilledSuccess(false)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#059669', padding: '2px' }}
-                    title="Dismiss notification"
-                  >
-                    <X style={{ width: 14, height: 14 }} />
-                  </button>
-                </div>
-              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                 <div>
@@ -1027,10 +990,26 @@ const FieldForm = () => {
 
       {showCamera && (
         <CameraWatermark
-          onCapture={(file) => { updateField('imageFile', file); setShowCamera(false); }}
+          onCapture={(file, hasGps, loc) => handlePhotoCaptured(file, loc)}
           onCancel={() => setShowCamera(false)}
+          onSubmit={submitForm}
+          isSubmitting={loading}
+          submitSuccess={success}
+          submitError={error}
         />
       )}
+
+      <VoiceVideoAssistantModal
+        isOpen={showVoiceAssistantModal}
+        onClose={() => setShowVoiceAssistantModal(false)}
+        onApplyData={handleApplyVoiceData}
+        onSubmitForm={submitForm}
+        formData={formData}
+        isOnline={isOnline}
+        isSubmitting={loading}
+        submitSuccess={success}
+        submitError={error}
+      />
     </MainLayout>
   );
 };
