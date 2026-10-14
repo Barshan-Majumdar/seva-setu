@@ -250,6 +250,12 @@ router.get('/my', auth, async (req, res) => {
         n.title,
         n.need_type,
         n.urgency_score,
+        n.priority_level,
+        n.vulnerability_factors,
+        n.children_count,
+        n.adults_count,
+        n.pregnant_count,
+        n.people_affected,
         n.ward,
         n.district,
         n.contact_number,
@@ -290,12 +296,18 @@ router.get('/', auth, async (req, res) => {
     const tasks = await prisma.$queryRaw`
       SELECT
         t.id AS task_id,
+        t.need_id,
         t.status AS task_status,
         t.assigned_at,
         t.checked_in_at,
         t.completed_at,
         t.is_completion_verified AS is_verified,
         n.title AS need_title,
+        n.priority_level,
+        n.vulnerability_factors,
+        n.children_count,
+        n.adults_count,
+        n.pregnant_count,
         u.name AS volunteer_name
       FROM tasks t
       JOIN needs n ON t.need_id = n.id

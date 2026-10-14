@@ -39,14 +39,53 @@ export const extractLiveFormFields = (text) => {
     matches.need_type = { value: 'rescue', matched_text: m ? m[0] : 'rescue' };
   }
 
-  // 2. People Affected
+  // 2. People Affected & Demographics (Children / Adults)
   const numWordMap = {
     'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
     'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
     'eleven': 11, 'twelve': 12, 'fifteen': 15, 'twenty': 20, 'fifty': 50, 'hundred': 100,
     'ek': 1, 'do': 2, 'teen': 3, 'char': 4, 'panch': 5, 'chhah': 6, 'saat': 7, 'aath': 8, 'nau': 9, 'das': 10
   };
-  const peopleRegex = /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|fifty|hundred|ek|do|teen|char|panch|chhah|saat|aath|nau|das)\s*(?:people|persons|injured|trapped|affected|victims|men|women|children|lok|manush|jon|log|vyakti)/i;
+
+  // 2.1 Children Count
+  const childrenRegex = /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|ek|do|teen|char|panch|chhah|saat|aath|nau|das)\s*(?:children|child|kids|kid|babies|baby|infants|infant|minors|minor|bacche|baccha|sishu|shishu|choto\s*bachha|chotobacha)/i;
+  const cMatch = lower.match(childrenRegex);
+  if (cMatch) {
+    const rawVal = cMatch[1].toLowerCase();
+    const count = numWordMap[rawVal] || parseInt(rawVal, 10);
+    if (!isNaN(count)) {
+      fields.children_count = String(count);
+      matches.children_count = { value: count, matched_text: cMatch[0] };
+    }
+  }
+
+  // 2.2 Adults Count
+  const adultsRegex = /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|ek|do|teen|char|panch|chhah|saat|aath|nau|das)\s*(?:adults|adult|grownups|grownup|men|women|elderly|seniors|boroder)/i;
+  const aMatch = lower.match(adultsRegex);
+  if (aMatch) {
+    const rawVal = aMatch[1].toLowerCase();
+    const count = numWordMap[rawVal] || parseInt(rawVal, 10);
+    if (!isNaN(count)) {
+      fields.adults_count = String(count);
+      matches.adults_count = { value: count, matched_text: aMatch[0] };
+    }
+  }
+
+  // 2.3 Pregnant Women Count
+  const pregnantRegex = /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|ek|do|teen|char|panch|chhah|saat|aath|nau|das)?\s*(?:pregnant\s*(?:women|woman|lady|mother|mothers)?|expecting\s*mothers?|garbhvati|garbhavati|prasuti|pettik)\b/i;
+  const prMatch = lower.match(pregnantRegex);
+  if (prMatch) {
+    const rawVal = prMatch[1]?.toLowerCase();
+    const count = (rawVal && numWordMap[rawVal]) ? numWordMap[rawVal] : (parseInt(rawVal, 10) || 1);
+    fields.pregnant_count = String(count);
+    matches.pregnant_count = { value: count, matched_text: prMatch[0] };
+    if (!fields.adults_count || parseInt(fields.adults_count, 10) < count) {
+      fields.adults_count = String(count);
+    }
+  }
+
+  // 2.4 General People Affected
+  const peopleRegex = /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|fifty|hundred|ek|do|teen|char|panch|chhah|saat|aath|nau|das)\s*(?:people|persons|injured|trapped|affected|victims|lok|manush|jon|log|vyakti)/i;
   const pMatch = lower.match(peopleRegex);
   if (pMatch) {
     const rawVal = pMatch[1].toLowerCase();
@@ -54,6 +93,11 @@ export const extractLiveFormFields = (text) => {
     if (!isNaN(count)) {
       fields.people_affected = String(count);
       matches.people_affected = { value: count, matched_text: pMatch[0] };
+    }
+  } else if (fields.children_count || fields.adults_count || fields.pregnant_count) {
+    const total = (parseInt(fields.children_count, 10) || 0) + Math.max(parseInt(fields.adults_count, 10) || 0, parseInt(fields.pregnant_count, 10) || 0);
+    if (total > 0) {
+      fields.people_affected = String(total);
     }
   }
 

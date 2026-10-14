@@ -3,7 +3,7 @@ import {
   MapPin, Send, Users, AlertTriangle,
   CheckCircle2, Crosshair, Loader2, Clock3, Camera, X,
   Navigation, ShieldCheck, Heart, Utensils, Home, Anchor, Package, Upload,
-  MessageCircle, Copy, Check, ExternalLink, Phone, Sparkles, Mic
+  MessageCircle, Copy, Check, ExternalLink, Phone, Sparkles, Mic, Baby
 } from 'lucide-react';
 import { useFieldForm } from '../hooks/useFieldForm';
 import MainLayout from '../layouts/MainLayout';
@@ -61,6 +61,42 @@ const FieldForm = () => {
       getLocation();
     }
     setShowCamera(false);
+  };
+
+  const handleChildrenChange = (val) => {
+    updateField('children_count', val);
+    const c = parseInt(val, 10) || 0;
+    const a = parseInt(formData.adults_count, 10) || 0;
+    const p = parseInt(formData.pregnant_count, 10) || 0;
+    const effectiveAdults = Math.max(a, p);
+    if (c + effectiveAdults > 0) {
+      updateField('people_affected', String(c + effectiveAdults));
+    }
+  };
+
+  const handleAdultsChange = (val) => {
+    updateField('adults_count', val);
+    const a = parseInt(val, 10) || 0;
+    const c = parseInt(formData.children_count, 10) || 0;
+    const p = parseInt(formData.pregnant_count, 10) || 0;
+    const effectiveAdults = Math.max(a, p);
+    if (c + effectiveAdults > 0) {
+      updateField('people_affected', String(c + effectiveAdults));
+    }
+  };
+
+  const handlePregnantChange = (val) => {
+    updateField('pregnant_count', val);
+    const p = parseInt(val, 10) || 0;
+    const c = parseInt(formData.children_count, 10) || 0;
+    const a = parseInt(formData.adults_count, 10) || 0;
+    const effectiveAdults = Math.max(a, p);
+    if (p > a) {
+      updateField('adults_count', String(p));
+    }
+    if (c + effectiveAdults > 0) {
+      updateField('people_affected', String(c + effectiveAdults));
+    }
   };
 
   const clearVoiceBadge = (fieldKey) => {
@@ -287,41 +323,18 @@ const FieldForm = () => {
 
             {/* ── Core details card ───────────────────── */}
             <div className="card" style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.6rem' }}>
+              <div style={{ marginBottom: '1.25rem' }}>
                 <h2 style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748b', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span style={{ width: 4, height: 16, background: '#2d6148', borderRadius: 9999, display: 'inline-block' }} />
                   Incident Details
                 </h2>
-
-                <button
-                  type="button"
-                  onClick={() => setShowVoiceAssistantModal(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.45rem',
-                    padding: '0.42rem 0.85rem',
-                    borderRadius: '8px',
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                    color: '#059669',
-                    background: 'rgba(5, 150, 105, 0.08)',
-                    border: '1px solid rgba(5, 150, 105, 0.25)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.15)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.08)'; }}
-                >
-                  <Mic style={{ width: 14, height: 14 }} />
-                  Voice & Video Assistant
-                </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+              {/* Need Classification + People Affected (Side by Side matching Image 1) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={labelStyle}>Need Classification</label>
+                    <label style={labelStyle}>Need Classification *</label>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                     {[
@@ -358,19 +371,81 @@ const FieldForm = () => {
                   {renderVoiceBadge('need_type')}
                 </div>
 
-                <div>
-                  <label style={labelStyle}>People Affected (approx.)</label>
-                  <div style={{ position: 'relative' }}>
-                    <Users style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} />
-                    <input
-                      type="number"
-                      style={getDynamicFieldStyle('people_affected', fieldIconStyle)}
-                      placeholder="Estimated headcount"
-                      value={formData.people_affected}
-                      onChange={(e) => updateField('people_affected', e.target.value)}
-                    />
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <label style={labelStyle}>People Affected (approx.)</label>
+                    <div style={{ position: 'relative' }}>
+                      <Users style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} />
+                      <input
+                        type="number"
+                        min="0"
+                        style={getDynamicFieldStyle('people_affected', fieldIconStyle)}
+                        placeholder="Estimated headcount"
+                        value={formData.people_affected}
+                        onChange={(e) => updateField('people_affected', e.target.value)}
+                      />
+                    </div>
+                    {renderVoiceBadge('people_affected')}
                   </div>
-                  {renderVoiceBadge('people_affected')}
+
+                  {/* Demographics & Vulnerability Sub-inputs: Children, Adults, Pregnant Women */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.62rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap' }}>Children</label>
+                      <div style={{ position: 'relative' }}>
+                        <Baby style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: '#94a3b8' }} />
+                        <input
+                          type="number"
+                          min="0"
+                          style={{ ...getDynamicFieldStyle('children_count', fieldStyle), paddingLeft: '1.9rem', paddingRight: '0.35rem', paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '0.82rem' }}
+                          placeholder="e.g. 2"
+                          value={formData.children_count || ''}
+                          onChange={(e) => handleChildrenChange(e.target.value)}
+                        />
+                      </div>
+                      {renderVoiceBadge('children_count')}
+                    </div>
+
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.62rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap' }}>Adults</label>
+                      <div style={{ position: 'relative' }}>
+                        <Users style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: '#94a3b8' }} />
+                        <input
+                          type="number"
+                          min="0"
+                          style={{ ...getDynamicFieldStyle('adults_count', fieldStyle), paddingLeft: '1.9rem', paddingRight: '0.35rem', paddingTop: '0.5rem', paddingBottom: '0.5rem', fontSize: '0.82rem' }}
+                          placeholder="e.g. 3"
+                          value={formData.adults_count || ''}
+                          onChange={(e) => handleAdultsChange(e.target.value)}
+                        />
+                      </div>
+                      {renderVoiceBadge('adults_count')}
+                    </div>
+
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.62rem', color: (parseInt(formData.pregnant_count, 10) > 0) ? '#be185d' : '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap' }}>Pregnant</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          style={{
+                            ...getDynamicFieldStyle('pregnant_count', fieldStyle),
+                            paddingLeft: '0.65rem',
+                            paddingRight: '0.35rem',
+                            paddingTop: '0.5rem',
+                            paddingBottom: '0.5rem',
+                            fontSize: '0.82rem',
+                            borderColor: (parseInt(formData.pregnant_count, 10) > 0) ? '#f43f5e' : undefined,
+                            background: (parseInt(formData.pregnant_count, 10) > 0) ? 'rgba(244, 63, 94, 0.05)' : undefined,
+                          }}
+                          placeholder="e.g. 1"
+                          value={formData.pregnant_count || ''}
+                          onChange={(e) => handlePregnantChange(e.target.value)}
+                        />
+                      </div>
+                      {renderVoiceBadge('pregnant_count')}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -444,9 +519,29 @@ const FieldForm = () => {
               {/* Priority + Disaster mode */}
               <div className="field-priority-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div style={{ background: 'rgba(45, 97, 72, 0.04)', border: '1px solid rgba(45, 97, 72, 0.12)', borderRadius: 12, padding: '1rem' }}>
-                  <p style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#2d6148' }}>Priority Index</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#2d6148', margin: 0 }}>Priority Index</p>
+                    {urgencyPreview?.priority && (
+                      <span style={{
+                        fontSize: '0.6rem',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: urgencyPreview.isLifeThreatening ? 'rgba(239, 68, 68, 0.15)' : urgencyPreview.priority === 'High' ? 'rgba(239, 68, 68, 0.1)' : urgencyPreview.priority === 'Medium' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                        color: urgencyPreview.isLifeThreatening || urgencyPreview.priority === 'High' ? '#dc2626' : urgencyPreview.priority === 'Medium' ? '#d97706' : '#64748b',
+                        border: `1px solid ${urgencyPreview.priority === 'High' ? 'rgba(239, 68, 68, 0.3)' : urgencyPreview.priority === 'Medium' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`,
+                      }}>
+                        {urgencyPreview.isLifeThreatening ? '🚨 Life Threat' : `${urgencyPreview.priority}`}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem', marginTop: '0.25rem' }}>
-                    <span style={{ fontSize: '2rem', fontWeight: 900, color: '#0f171d' }}>{urgencyPreview}</span>
+                    <span style={{ fontSize: '2rem', fontWeight: 900, color: urgencyPreview.priority === 'High' ? '#dc2626' : '#0f171d' }}>
+                      {urgencyPreview?.score10 !== undefined 
+                        ? (Number.isInteger(Number(urgencyPreview.score10)) ? Number(urgencyPreview.score10) : Number(urgencyPreview.score10).toFixed(1)) 
+                        : (typeof urgencyPreview === 'object' ? urgencyPreview.score : urgencyPreview)}
+                    </span>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8' }}>/ 10</span>
                   </div>
                 </div>

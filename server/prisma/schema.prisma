@@ -126,6 +126,11 @@ model Need {
   district       String?
   contactNumber  String?    @map("contact_number")
   peopleAffected         Int        @default(0) @map("people_affected")
+  childrenCount          Int        @default(0) @map("children_count")
+  adultsCount            Int        @default(0) @map("adults_count")
+  pregnantCount          Int        @default(0) @map("pregnant_count")
+  priorityLevel          String     @default("Medium") @map("priority_level")
+  vulnerabilityFactors   String[]   @default([]) @map("vulnerability_factors")
   urgencyScore           Float      @default(1.0) @map("urgency_score")
   isVerified             Boolean    @default(false) @map("is_verified")
   verificationConfidence Float?     @map("verification_confidence")
@@ -143,6 +148,7 @@ model Need {
   broadcastRequests BroadcastRequest[]
 
   @@index([status])
+  @@index([priorityLevel])
   @@map("needs")
 }
 
