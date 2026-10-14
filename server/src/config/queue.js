@@ -4,7 +4,7 @@ const Redis = require('ioredis');
 // We use the same Redis URL as the rate limiter
 const connection = new Redis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null, // Required by BullMQ
-  enableReadyCheck: false,
+  enableReadyCheck: true,
   retryStrategy(times) {
     if (times > 3) return null; // Stop retrying after 3 attempts
     return Math.min(times * 200, 2000);
@@ -18,6 +18,9 @@ connection.on('error', (err) => {
 
 // Create the AI Verification Queue
 const aiVerificationQueue = new Queue('ai-verification', { connection });
+aiVerificationQueue.on('error', (err) => {
+  if (queueErrorCount++ < 1) console.error('[BullMQ Queue] Error:', err.message);
+});
 
 module.exports = {
   connection,

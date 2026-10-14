@@ -246,6 +246,48 @@ const aiWorker = new Worker('ai-verification', async (job) => {
   } catch (err) {
     console.error(`[Worker] Job failed:`, err);
   }
-}, { connection, concurrency: 5 });
+}, { connection, concurrency: 5, autorun: false });
+
+let consecutiveErrors = 0;
+let fatalAuthReported = false;
+
+aiWorker.on('error', async (err) => {
+  const isAuthError = err.message && (
+    err.message.includes('WRONGPASS') ||
+    err.message.includes('NOAUTH') ||
+    err.message.includes('ERR AUTH')
+  );
+
+  if (isAuthError) {
+    if (!fatalAuthReported) {
+      fatalAuthReported = true;
+      console.error('\n❌ [BullMQ Worker] Redis Authentication Failed: WRONGPASS invalid username-password pair');
+      console.error('👉 Please check REDIS_URL in server/.env — the password or username is incorrect.\n');
+    }
+    if (aiWorker.isRunning() && !aiWorker.isPaused()) {
+      try {
+        await aiWorker.pause(true);
+      } catch (_) {}
+    }
+    return;
+  }
+
+  consecutiveErrors++;
+  if (consecutiveErrors <= 2) {
+    console.warn('[BullMQ Worker] Error:', err.message);
+  } else if (consecutiveErrors === 3) {
+    console.warn('[BullMQ Worker] Suppressing further connection error logs...');
+  }
+});
+
+// Start worker only when Redis connection is authenticated and ready
+if (connection.status === 'ready') {
+  aiWorker.run();
+} else {
+  connection.once('ready', () => {
+    console.log('[BullMQ Worker] Redis connection ready — starting worker.');
+    aiWorker.run();
+  });
+}
 
 module.exports = aiWorker;

@@ -49,7 +49,7 @@ class BackgroundVoiceService {
             const transcript = event.results[i][j].transcript.toLowerCase().trim();
             const detected = WAKE_WORDS.some(ww => transcript.includes(ww));
             if (detected) {
-              console.log('[BackgroundVoice] 🎤 Wake word detected:', transcript);
+              console.log('[BackgroundVoice] Wake word detected:', transcript);
               this._consecutiveErrors = 0;
               this._backoffMs = 1000;
               this.pause();
@@ -156,7 +156,7 @@ class BackgroundVoiceService {
     } else {
       try { this._recognition?.stop(); } catch (e) {}
     }
-    console.log('[BackgroundVoice] ⏹️ Stopped');
+    console.log('[BackgroundVoice] Stopped');
   }
 
   get isActive() {

@@ -183,10 +183,10 @@ const ShelterCompareModal = ({
                   <th>Shelter</th>
                   <th>Status</th>
                   <th>Occupancy</th>
-                  <th>🍚 Food</th>
-                  <th>🚰 Water</th>
-                  <th>🩹 Medical</th>
-                  <th>🛏️ Bedding</th>
+                  <th>Food</th>
+                  <th>Water</th>
+                  <th>Medical</th>
+                  <th>Bedding</th>
                   <th>Incidents</th>
                 </tr>
               </thead>

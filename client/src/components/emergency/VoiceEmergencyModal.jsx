@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { speechService } from '../../services/SpeechService';
 import { nativeSpeechBridge } from '../../services/NativeSpeechBridge';
@@ -18,6 +19,12 @@ import { Mic, MicOff, CheckCircle2, Volume2 } from 'lucide-react';
  *   4. After close → returns to passive wake word listening
  */
 export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handleClose: parentHandleClose }) => {
+  const location = useLocation();
+  const isFieldPage = Boolean(
+    (location?.pathname && (location.pathname.includes('/field') || location.pathname.includes('/report'))) ||
+    (typeof window !== 'undefined' && (window.location.pathname.includes('/field') || window.location.pathname.includes('/report')))
+  );
+
   // idle | listening_for_wake | active_session | processing | completed | error
   const [sessionState, setSessionState] = useState('idle');
   const [transcript, setTranscript] = useState('');
@@ -101,6 +108,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         () => {
           console.log('[VoiceUI] Wake word detected (web)');
           speechService.stop();
+          if (isFieldPage) {
+            window.dispatchEvent(new CustomEvent('sevasetu:activate-voice-form'));
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
           if (mountedRef.current) {
             setSessionState('speaking');
             setTranscript('');
@@ -138,10 +150,15 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         if (mountedRef.current) startCapturing();
       }, 4000);
     } else if (!Capacitor.isNativePlatform()) {
-      // Web: check permissions and start wake word listening
-      if (speechService.isSupported) {
+      // If user is on field form or report page, do NOT start background wake word!
+      // This leaves the microphone completely free for the TopVoiceFormBanner.
+      if (isFieldPage) {
+        setSessionState('idle');
+        speechService.stop();
+      } else if (speechService.isSupported) {
+        // Web: check permissions and start wake word listening
         speechService.checkPermissions().then((isGranted) => {
-          if (isGranted && mountedRef.current) {
+          if (isGranted && mountedRef.current && !isFieldPage) {
             console.log('[VoiceUI] Web: mic granted, starting wake word');
             beginWakeWordListening();
           }
@@ -174,9 +191,21 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     }
   }, []);
 
+  // Stop background speech listening immediately whenever on field form page
+  useEffect(() => {
+    if (isFieldPage) {
+      speechService.stop();
+      setSessionState('idle');
+    }
+  }, [isFieldPage]);
 
     // ── Manual button click → skip wake word, go directly to active listening ──
     const handleManualActivate = useCallback(() => {
+      if (isFieldPage) {
+        window.dispatchEvent(new CustomEvent('sevasetu:activate-voice-form'));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
       setSessionState('speaking');
       setTranscript('');
       hasTriggeredRef.current = false;
@@ -369,14 +398,14 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           }}>
           <button
             onClick={handleManualActivate}
-            aria-label="Activate Voice SOS"
+            aria-label={isFieldPage ? "Voice Auto-Fill Form" : "Activate Voice SOS"}
             style={{
-              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              background: isFieldPage ? 'linear-gradient(135deg, #059669, #047857)' : 'linear-gradient(135deg, #ef4444, #dc2626)',
               color: '#fff', border: 'none', borderRadius: '50%',
               width: '42px', height: '42px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(239, 68, 68, 0.5)',
+              boxShadow: isFieldPage ? '0 4px 20px rgba(5, 150, 105, 0.4)' : '0 4px 20px rgba(239, 68, 68, 0.5)',
               transition: 'transform 0.2s ease',
             }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; }}
@@ -385,11 +414,12 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             <Mic size={18} />
           </button>
           <span style={{
-            fontSize: '0.6rem', color: '#94a3b8',
+            fontSize: '0.6rem', color: isFieldPage ? '#059669' : '#94a3b8',
+            fontWeight: isFieldPage ? 700 : 400,
             background: '#fff', padding: '0.25rem 0.5rem',
             borderRadius: '6px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
           }}>
-            Tap or say "Hey Seva Setu"
+            {isFieldPage ? "Voice Form Fill" : "Tap or say \"Hey Seva Setu\""}
           </span>
           </div>
         </>
@@ -411,20 +441,20 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           <div style={{ position: 'relative' }}>
             <div style={{
               position: 'absolute', inset: '-5px', borderRadius: '50%',
-              border: '2px solid #22c55e',
+              border: `2px solid ${isFieldPage ? '#059669' : '#22c55e'}`,
               animation: 'breathe 2s ease-in-out infinite',
             }} />
             <button
               onClick={handleManualActivate}
-              aria-label="Speak emergency now"
+              aria-label={isFieldPage ? "Voice Auto-Fill Form" : "Speak emergency now"}
               style={{
                 position: 'relative',
-                background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                background: isFieldPage ? 'linear-gradient(135deg, #059669, #047857)' : 'linear-gradient(135deg, #dc2626, #b91c1c)',
                 color: '#fff', border: 'none', borderRadius: '50%',
                 width: '42px', height: '42px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer',
-                boxShadow: '0 4px 24px rgba(239, 68, 68, 0.6)',
+                boxShadow: isFieldPage ? '0 4px 24px rgba(5, 150, 105, 0.4)' : '0 4px 24px rgba(239, 68, 68, 0.6)',
                 transition: 'transform 0.2s ease',
               }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; }}
@@ -434,16 +464,16 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             </button>
           </div>
           <span style={{
-            fontSize: '0.6rem', color: '#22c55e', fontWeight: 600,
+            fontSize: '0.6rem', color: isFieldPage ? '#059669' : '#22c55e', fontWeight: 600,
             background: '#fff', padding: '0.3rem 0.6rem',
             borderRadius: '6px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
             display: 'flex', alignItems: 'center', gap: '0.35rem',
           }}>
             <span style={{
-              width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e',
+              width: '6px', height: '6px', borderRadius: '50%', background: isFieldPage ? '#059669' : '#22c55e',
               animation: 'breathe 2s ease-in-out infinite',
             }} />
-            Say "Hey Seva Setu"
+            {isFieldPage ? "Voice Form Active" : "Say \"Hey Seva Setu\""}
           </span>
 
           <style>{`
@@ -455,6 +485,11 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         </div>
         </>
       );
+    }
+
+    // If on field form page, never render the full-screen modal!
+    if (isFieldPage) {
+      return null;
     }
 
     // ══════════════════════════════════════════════════
@@ -503,7 +538,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   marginTop: '0.75rem', width: '100%', textAlign: 'left',
                 }}>
                   <p style={{ color: '#93c5fd', fontSize: '0.85rem', margin: 0, fontWeight: 500 }}>
-                    🔊 SevaSetu: "{systemReply}"
+                    SevaSetu: "{systemReply}"
                   </p>
                 </div>
               )}
@@ -514,7 +549,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   marginTop: '0.5rem', width: '100%', textAlign: 'left',
                 }}>
                   <p style={{ color: '#fca5a5', fontSize: '0.85rem', margin: 0, fontWeight: 500 }}>
-                    🎤 You: "{transcript}"
+                    You: "{transcript}"
                   </p>
                 </div>
               )}
@@ -555,7 +590,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   marginTop: '0.75rem', width: '100%', textAlign: 'left',
                 }}>
                   <p style={{ color: '#93c5fd', fontSize: '0.85rem', margin: 0, fontWeight: 500 }}>
-                    🔊 SevaSetu: "{systemReply}"
+                    SevaSetu: "{systemReply}"
                   </p>
                 </div>
               )}
@@ -589,13 +624,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>🎤 You: "{transcript}"</p>
+                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>You: "{transcript}"</p>
                 </div>
                 <div style={{
                   background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#93c5fd', fontSize: '0.8rem', margin: 0 }}>🔊 SevaSetu: "{systemReply}"</p>
+                  <p style={{ color: '#93c5fd', fontSize: '0.8rem', margin: 0 }}>SevaSetu: "{systemReply}"</p>
                 </div>
               </div>
               <p style={{ color: '#52525b', fontSize: '0.7rem', marginTop: '1rem' }}>
@@ -621,13 +656,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>🎤 You: "{transcript}"</p>
+                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>You: "{transcript}"</p>
                 </div>
                 <div style={{
                   background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#86efac', fontSize: '0.8rem', margin: 0 }}>🔊 SevaSetu: "{systemReply}"</p>
+                  <p style={{ color: '#86efac', fontSize: '0.8rem', margin: 0 }}>SevaSetu: "{systemReply}"</p>
                 </div>
               </div>
               <button onClick={handleClose} style={{

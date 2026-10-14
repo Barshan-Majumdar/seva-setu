@@ -393,12 +393,12 @@ export function getShelterNeeds(shelter) {
   });
 }
 
-/** Emoji icons for resource categories */
+/** Icons/labels for resource categories */
 export const RESOURCE_ICONS = {
-  food: '🍚',
-  water: '🚰',
-  medical: '🩹',
-  bedding: '🛏️',
+  food: '',
+  water: '',
+  medical: '',
+  bedding: '',
 };
 
 /**

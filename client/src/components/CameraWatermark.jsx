@@ -1,10 +1,29 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, SwitchCamera, X, Check, Loader2, ChevronLeft, MapPin, AlertTriangle } from 'lucide-react';
+import {
+  Camera, SwitchCamera, X, Check, Loader2, ChevronLeft, MapPin, AlertTriangle,
+  Mic, Send, CheckCircle2, RotateCcw
+} from 'lucide-react';
+import { VoiceFeedback } from '../services/VoiceFeedback';
 
-const CameraWatermark = ({ onCapture, onCancel }) => {
+/**
+ * CameraWatermark & Voice Submit Container
+ * Opens an interactive div modal where the entire flow continues:
+ * 1. Capture live GPS-watermarked photo
+ * 2. Review photo preview
+ * 3. Listen for user saying "Submit" (or clicking submit)
+ * 4. Automatic submission and progress
+ */
+const CameraWatermark = ({
+  onCapture,
+  onCancel,
+  onSubmit,
+  isSubmitting = false,
+  submitSuccess = false,
+  submitError = ''
+}) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const streamRef = useRef(null); // Use ref so we always have fresh handle
+  const streamRef = useRef(null);
 
   const [facingMode, setFacingMode] = useState('environment');
   const [location, setLocation] = useState(null);
@@ -27,14 +46,18 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
   useEffect(() => {
     if (!('geolocation' in navigator)) { setLocError('Not supported'); return; }
     const id = navigator.geolocation.watchPosition(
-      (pos) => setLocation({ lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6), accuracy: pos.coords.accuracy.toFixed(1) }),
+      (pos) => setLocation({
+        lat: pos.coords.latitude.toFixed(6),
+        lng: pos.coords.longitude.toFixed(6),
+        accuracy: pos.coords.accuracy.toFixed(1)
+      }),
       (err) => setLocError(err.message),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // 3. Camera — hard kill / start via ref
+  // 3. Camera — hardware control
   const killCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
@@ -57,14 +80,13 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
     }
   }, [killCamera]);
 
-  // Open camera when viewfinder active, kill when photo captured
   useEffect(() => {
     if (!capturedImage) {
       openCamera(facingMode);
     } else {
       killCamera();
     }
-    return () => killCamera(); // always cleanup on unmount
+    return () => killCamera();
   }, [facingMode, !!capturedImage, openCamera, killCamera]);
 
   const toggleCamera = () => {
@@ -85,9 +107,7 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Hidden EXIF metadata injection — NO visual text on the image
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    let gpsInjected = false;
 
     try {
       if (location) {
@@ -127,13 +147,15 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
         const blob = new Blob([ab], { type: mimeString });
         const file = new File([blob], `sevasetu_geotagged_${Date.now()}.jpg`, { type: 'image/jpeg' });
 
-        console.log('[Camera] Geotag injected successfully into EXIF.');
-        gpsInjected = true;
         setCapturedImage({ file, hasGps: true });
         setIsCapturing(false);
+
+        // Notify parent immediately with file and location
+        if (onCapture) {
+          onCapture(file, true, location);
+        }
         return;
       }
-      // No location available — capture without GPS
       throw new Error('No GPS location available');
     } catch (err) {
       console.warn('[Camera] Capturing without GPS:', err.message);
@@ -141,20 +163,95 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
         const file = new File([blob], `sevasetu_capture_${Date.now()}.jpg`, { type: 'image/jpeg' });
         setCapturedImage({ file, hasGps: false });
         setIsCapturing(false);
+
+        if (onCapture) {
+          onCapture(file, false, location);
+        }
       }, 'image/jpeg', 0.9);
     }
   };
 
   const confirmCapture = () => {
-    if (capturedImage) {
-      // Pass the file and GPS status to the parent
-      onCapture(capturedImage.file, capturedImage.hasGps);
+    if (capturedImage && onCapture) {
+      onCapture(capturedImage.file, capturedImage.hasGps, location);
+    }
+    if (onCancel) {
+      onCancel();
     }
   };
 
   const retryCapture = () => {
     setCapturedImage(null);
   };
+
+  // ── Speech Recognition: Listen for "Submit" when photo is captured ──
+  useEffect(() => {
+    if (!capturedImage || !onSubmit || isSubmitting || submitSuccess) return;
+
+    VoiceFeedback.speak("Photo captured! Say 'Submit' to submit your report.");
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) return;
+
+    let recognition;
+    let isCancelled = false;
+
+    try {
+      recognition = new SpeechRec();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-IN';
+
+      recognition.onresult = (event) => {
+        let text = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          text += event.results[i][0].transcript;
+        }
+        const lower = text.toLowerCase().trim();
+        console.log('[CameraModal:VoiceSubmit] Heard:', lower);
+
+        // Match English, Hindi, Bengali submit keywords
+        if (/\b(submit|jama|bhejo|bhej|pathao|confirm|send)\b/i.test(lower) && !isCancelled) {
+          isCancelled = true;
+          try { recognition.stop(); } catch (_) {}
+          VoiceFeedback.speak('Submitting report now...');
+          onSubmit();
+        }
+      };
+
+      recognition.onerror = (err) => {
+        console.warn('[CameraModal:VoiceSubmit] Error:', err?.error);
+      };
+
+      recognition.onend = () => {
+        if (!isCancelled && !isSubmitting && !submitSuccess) {
+          try { recognition.start(); } catch (_) {}
+        }
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.warn('[CameraModal:VoiceSubmit] Start error:', err);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (recognition) {
+        try { recognition.stop(); } catch (_) {}
+      }
+    };
+  }, [!!capturedImage, onSubmit, isSubmitting, submitSuccess]);
+
+  // When submit succeeds, announce and auto-close after 1.5s
+  useEffect(() => {
+    if (submitSuccess) {
+      VoiceFeedback.speak('Report submitted successfully.');
+      const t = setTimeout(() => {
+        if (onCancel) onCancel();
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [submitSuccess, onCancel]);
 
   const showSwitchBtn = cameraCount >= 2 && !capturedImage;
 
@@ -163,246 +260,432 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
       position: 'fixed',
       inset: 0,
       zIndex: 99999,
-      backgroundColor: '#000',
       display: 'flex',
-      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'rgba(15, 23, 42, 0.72)',
+      backdropFilter: 'blur(8px)',
+      padding: '1rem',
     }}>
-      {/* ── Top Bar: Back button (left) + Switch Camera (right, mobile only) ── */}
       <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        padding: '16px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        zIndex: 20,
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)',
-      }}>
-        {/* Close / Back — always visible, far from any capture controls */}
-        <button
-          onClick={onCancel}
-          style={{
-            padding: '12px',
-            background: 'rgba(255,255,255,0.1)',
-            borderRadius: '50%',
-            color: '#fff',
-            border: 'none',
-            cursor: 'pointer',
-            backdropFilter: 'blur(12px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <ChevronLeft style={{ width: 24, height: 24 }} />
-        </button>
-
-        {/* Switch Camera — only shown on devices with 2+ cameras, hidden on laptops */}
-        {showSwitchBtn && (
-          <button
-            onClick={toggleCamera}
-            style={{
-              padding: '12px',
-              background: 'rgba(255,255,255,0.1)',
-              borderRadius: '50%',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-              backdropFilter: 'blur(12px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <SwitchCamera style={{ width: 24, height: 24 }} />
-          </button>
-        )}
-      </div>
-
-      {/* ── Viewfinder ── */}
-      <div style={{
-        flex: 1,
-        position: 'relative',
+        background: '#ffffff',
+        borderRadius: '1.25rem',
+        width: '100%',
+        maxWidth: '35rem',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+        border: '1px solid rgba(226, 232, 240, 0.8)',
         overflow: 'hidden',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        flexDirection: 'column',
+        maxHeight: '92vh',
       }}>
-        {capturedImage ? (
-          <>
-            <img
-              src={URL.createObjectURL(capturedImage.file)}
-              alt="Captured"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
-
-            {/* GPS VERIFIED / NO GPS tag — Top Left */}
+        {/* ── Modal Header ── */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.9rem 1.25rem',
+          borderBottom: '1px solid #f1f5f9',
+          background: '#f8fafc',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <div style={{
-              position: 'absolute',
-              top: '16px',
-              left: '16px',
-              zIndex: 25,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '12px',
-              backdropFilter: 'blur(12px)',
-              background: capturedImage.hasGps ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)',
-              border: capturedImage.hasGps ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(239,68,68,0.5)',
-              fontFamily: 'monospace',
-              fontSize: '11px',
-              fontWeight: 'bold',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: capturedImage.hasGps ? '#34d399' : '#f87171',
-            }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                {capturedImage.hasGps
-                  ? <MapPin style={{ width: 13, height: 13 }} />
-                  : <AlertTriangle style={{ width: 13, height: 13 }} />}
-                {capturedImage.hasGps ? 'GPS VERIFIED' : 'NO GPS'}
-              </span>
-            </div>
-
-            {/* Close / Discard button — Top Right */}
-            <button
-              onClick={retryCapture}
-              style={{
-                position: 'absolute',
-                top: '16px',
-                right: '16px',
-                zIndex: 25,
-                width: '44px',
-                height: '44px',
-                borderRadius: '50%',
-                background: 'rgba(0,0,0,0.6)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-            >
-              <X style={{ width: 22, height: 22 }} />
-            </button>
-          </>
-        ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        )}
-
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-        {/* GPS Lock Info — only shown while viewfinder is active */}
-        {!capturedImage && (
-          <div style={{
-            position: 'absolute',
-            bottom: '140px',
-            left: '16px',
-            right: '16px',
-            background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(12px)',
-            borderRadius: '12px',
-            padding: '16px',
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}>
-            {location ? (
-              <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#34d399' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>● GPS LOCK ACQUIRED</div>
-                <div style={{ color: '#fff' }}>LAT: {location.lat}</div>
-                <div style={{ color: '#fff' }}>LNG: {location.lng}</div>
-              </div>
-            ) : (
-              <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#fbbf24' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold', marginBottom: '4px' }}>
-                  <AlertTriangle style={{ width: 13, height: 13 }} /> NO GPS SIGNAL
-                </div>
-                <div style={{ color: '#fff' }}>Capture photo anyway — app will attempt to geotag from file metadata.</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── Bottom Controls ── */}
-      <div style={{
-        height: '140px',
-        backgroundColor: '#000',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingBottom: '24px',
-        zIndex: 20,
-      }}>
-        {capturedImage ? (
-          <div style={{ display: 'flex', gap: '32px' }}>
-            <button
-              onClick={retryCapture}
-              style={{
-                padding: '14px 28px',
-                borderRadius: '9999px',
-                background: '#1e293b',
-                color: '#fff',
-                fontWeight: 'bold',
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                fontSize: '14px',
-                border: '1px solid #334155',
-                cursor: 'pointer',
-              }}
-            >
-              Retake
-            </button>
-            <button
-              onClick={confirmCapture}
-              style={{
-                padding: '14px 28px',
-                borderRadius: '9999px',
-                background: '#10b981',
-                color: '#fff',
-                fontWeight: 'bold',
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                fontSize: '14px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              <Check style={{ width: 20, height: 20 }} /> Use Photo
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={capturePhoto}
-            disabled={isCapturing}
-            style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
-              border: '4px solid #10b981',
-              background: 'rgba(16,185,129,0.2)',
+              width: 32,
+              height: 32,
+              borderRadius: '8px',
+              background: 'rgba(5, 150, 105, 0.1)',
+              color: '#059669',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+            }}>
+              <Camera style={{ width: 17, height: 17 }} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                {capturedImage ? 'Live Photo Verified & Ready' : 'Capture Live Photo'}
+              </h3>
+              <p style={{ fontSize: '0.72rem', color: '#64748b', margin: 0 }}>
+                {capturedImage
+                  ? onSubmit ? 'Step 2: Say "Submit" to send your report' : 'Photo captured with GPS'
+                  : 'Real-time GPS camera evidence'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              background: 'transparent',
+              border: 'none',
               cursor: 'pointer',
-              transition: 'all 0.2s',
+              color: '#94a3b8',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; }}
+            title="Close camera"
           >
-            <Camera style={{ width: 32, height: 32, color: '#34d399' }} />
+            <X style={{ width: 20, height: 20 }} />
           </button>
-        )}
+        </div>
+
+        {/* ── Viewfinder / Photo Area ── */}
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          height: '310px',
+          background: '#090d16',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          {capturedImage ? (
+            <>
+              <img
+                src={URL.createObjectURL(capturedImage.file)}
+                alt="Captured"
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+
+              {/* GPS VERIFIED / NO GPS tag */}
+              <div style={{
+                position: 'absolute',
+                top: '12px',
+                left: '12px',
+                zIndex: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backdropFilter: 'blur(10px)',
+                background: capturedImage.hasGps ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
+                border: capturedImage.hasGps ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(239,68,68,0.5)',
+                fontFamily: 'monospace',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: capturedImage.hasGps ? '#34d399' : '#f87171',
+              }}>
+                {capturedImage.hasGps ? <MapPin style={{ width: 12, height: 12 }} /> : <AlertTriangle style={{ width: 12, height: 12 }} />}
+                {capturedImage.hasGps ? 'GPS VERIFIED' : 'NO GPS'}
+              </div>
+            </>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+
+              {/* GPS Lock Info */}
+              <div style={{
+                position: 'absolute',
+                top: '12px',
+                left: '12px',
+                zIndex: 10,
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backdropFilter: 'blur(10px)',
+                background: location ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)',
+                border: location ? '1px solid rgba(16,185,129,0.5)' : '1px solid rgba(245,158,11,0.5)',
+                fontFamily: 'monospace',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                color: location ? '#34d399' : '#fbbf24',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}>
+                <MapPin style={{ width: 12, height: 12 }} />
+                {location ? `GPS LOCKED: ${location.lat}, ${location.lng}` : 'ACQUIRING GPS...'}
+              </div>
+
+              {showSwitchBtn && (
+                <button
+                  type="button"
+                  onClick={toggleCamera}
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    right: '12px',
+                    zIndex: 10,
+                    padding: '8px',
+                    borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(8px)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    cursor: 'pointer',
+                  }}
+                  title="Switch camera"
+                >
+                  <SwitchCamera style={{ width: 18, height: 18 }} />
+                </button>
+              )}
+            </>
+          )}
+
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </div>
+
+        {/* ── Controls / Voice Submit Flow Inside the SAME div ── */}
+        <div style={{ padding: '1.25rem 1.5rem', background: '#ffffff' }}>
+          {!capturedImage ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                disabled={isCapturing}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem 2.25rem',
+                  background: '#059669',
+                  color: '#ffffff',
+                  borderRadius: '9999px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                  transition: 'transform 0.15s ease',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                {isCapturing ? (
+                  <>
+                    <Loader2 style={{ width: 18, height: 18, animation: 'spin 1s linear infinite' }} />
+                    <span>Processing GPS...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera style={{ width: 18, height: 18 }} />
+                    <span>Capture Live Photo</span>
+                  </>
+                )}
+              </button>
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                Tap to snap photo with real-time GPS verification
+              </span>
+            </div>
+          ) : onSubmit ? (
+            /* ── The entire submit process continues through this SAME div ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0.85rem 1.1rem',
+                borderRadius: '12px',
+                background: isSubmitting
+                  ? 'rgba(5, 150, 105, 0.08)'
+                  : 'linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.18))',
+                border: '1.5px solid #059669',
+                gap: '0.85rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: '50%',
+                    background: '#059669',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 0 0 5px rgba(5, 150, 105, 0.22)',
+                    animation: isSubmitting ? 'none' : 'pulse 1.5s infinite',
+                  }}>
+                    {isSubmitting ? (
+                      <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Mic style={{ width: 22, height: 22 }} />
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#065f46' }}>
+                        {isSubmitting ? 'Submitting Report...' : 'Say "Submit" to Send Form'}
+                      </h4>
+                      <span style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        background: '#059669',
+                        color: '#fff',
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                      }}>
+                        {isSubmitting ? 'Sending' : 'Voice Active'}
+                      </span>
+                    </div>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.76rem', color: '#334155' }}>
+                      {isSubmitting
+                        ? 'Transmitting verified incident report to emergency teams...'
+                        : 'Photo attached! Say "Submit" aloud into your microphone, or tap Submit below.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {submitSuccess && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#059669',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  background: 'rgba(5, 150, 105, 0.1)',
+                  padding: '0.65rem 1rem',
+                  borderRadius: '8px',
+                }}>
+                  <CheckCircle2 style={{ width: 18, height: 18 }} />
+                  <span>Report Successfully Submitted!</span>
+                </div>
+              )}
+
+              {submitError && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#dc2626',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  padding: '0.6rem 0.9rem',
+                  borderRadius: '8px',
+                }}>
+                  <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0 }} />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={retryCapture}
+                  disabled={isSubmitting}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.6rem 1rem',
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <RotateCcw style={{ width: 14, height: 14 }} />
+                  Retake Photo
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmCapture}
+                  disabled={isSubmitting}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.6rem 1.15rem',
+                    background: '#f8fafc',
+                    color: '#0f172a',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Check style={{ width: 14, height: 14, color: '#059669' }} />
+                  Attach & Continue Form
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={isSubmitting}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.65rem 1.4rem',
+                    background: '#059669',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 3px 10px rgba(5, 150, 105, 0.3)',
+                    transition: 'transform 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  <Send style={{ width: 14, height: 14 }} />
+                  Submit Report Now
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Fallback when onSubmit is not provided */
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={retryCapture}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  background: '#f8fafc',
+                  color: '#64748b',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Retake
+              </button>
+              <button
+                type="button"
+                onClick={confirmCapture}
+                style={{
+                  padding: '0.6rem 1.4rem',
+                  background: '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Use Photo
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

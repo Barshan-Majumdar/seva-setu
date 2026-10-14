@@ -1,26 +1,137 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   MapPin, Send, Users, AlertTriangle,
   CheckCircle2, Crosshair, Loader2, Clock3, Camera, X,
   Navigation, ShieldCheck, Heart, Utensils, Home, Anchor, Package, Upload,
-  MessageCircle, Copy, Check, ExternalLink, Phone
+  MessageCircle, Copy, Check, ExternalLink, Phone, Sparkles, Mic
 } from 'lucide-react';
 import { useFieldForm } from '../hooks/useFieldForm';
 import MainLayout from '../layouts/MainLayout';
 import CameraWatermark from '../components/CameraWatermark';
+import VoiceVideoAssistantModal from '../components/voice/VoiceVideoAssistantModal';
+import { VoiceFeedback } from '../services/VoiceFeedback';
 
 const TWILIO_WHATSAPP_NUMBER = import.meta.env.VITE_TWILIO_WHATSAPP_NUMBER ;
 const TWILIO_SANDBOX_CODE = import.meta.env.VITE_TWILIO_SANDBOX_CODE ;
 
 const FieldForm = () => {
   const [showCamera, setShowCamera] = useState(false);
+  const [showVoiceAssistantModal, setShowVoiceAssistantModal] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  const [voiceMatches, setVoiceMatches] = useState({});
+  const [isLiveFilling, setIsLiveFilling] = useState(false);
   const galleryInputRef = useRef(null);
+
+  // Open dedicated voice assistant modal on trigger (e.g. from bottom mic button or wake word)
+  useEffect(() => {
+    const handleVoiceTrigger = () => {
+      setShowVoiceAssistantModal(true);
+    };
+    window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+    return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+  }, []);
+
   const {
     formData, loading, locLoading, success, successMessage,
     error, verificationResult, isOnline, queuedCount, syncingQueue, urgencyPreview,
-    updateField, resetForm, getLocation, setManualLocation, submitForm,
+    updateField, updateMultipleFields, resetForm, getLocation, setManualLocation, submitForm,
   } = useFieldForm();
+
+  const handleApplyVoiceData = (fields, photoFile, loc) => {
+    if (fields && Object.keys(fields).length > 0) {
+      updateMultipleFields(fields);
+    }
+    if (photoFile) {
+      updateField('imageFile', photoFile);
+    }
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+  };
+
+  const handlePhotoCaptured = (file, loc) => {
+    updateField('imageFile', file);
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+    setShowCamera(false);
+  };
+
+  const clearVoiceBadge = (fieldKey) => {
+    setVoiceMatches((prev) => {
+      const next = { ...prev };
+      delete next[fieldKey];
+      return next;
+    });
+  };
+
+  const renderVoiceBadge = (fieldKey) => {
+    const match = voiceMatches[fieldKey];
+    if (!match || !match.matched_text) return null;
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.35rem',
+        marginTop: '0.35rem',
+        padding: '2px 8px',
+        borderRadius: '5px',
+        fontSize: '0.68rem',
+        fontWeight: 600,
+        background: isLiveFilling ? 'rgba(5, 150, 105, 0.14)' : 'rgba(5, 150, 105, 0.08)',
+        color: '#065f46',
+        border: isLiveFilling ? '1px solid #059669' : '1px solid rgba(5, 150, 105, 0.22)',
+        boxShadow: isLiveFilling ? '0 0 8px rgba(5, 150, 105, 0.25)' : 'none',
+        transition: 'all 0.2s ease'
+      }}>
+        {isLiveFilling ? (
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%', background: '#059669',
+            animation: 'pulse 1s infinite', flexShrink: 0
+          }} />
+        ) : (
+          <Sparkles style={{ width: 11, height: 11, color: '#059669', flexShrink: 0 }} />
+        )}
+        <span>{isLiveFilling ? 'Live Word:' : 'Spoken:'} "{match.matched_text}"</span>
+        <button
+          type="button"
+          onClick={() => clearVoiceBadge(fieldKey)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            marginLeft: '4px',
+            color: '#059669',
+            display: 'inline-flex',
+            alignItems: 'center'
+          }}
+          title="Dismiss badge"
+        >
+          <X style={{ width: 10, height: 10 }} />
+        </button>
+      </div>
+    );
+  };
+
+  const getDynamicFieldStyle = (fieldKey, baseStyle) => {
+    if (voiceMatches[fieldKey]?.matched_text) {
+      return {
+        ...baseStyle,
+        border: '1.5px solid #059669',
+        background: isLiveFilling ? 'rgba(5, 150, 105, 0.06)' : 'rgba(5, 150, 105, 0.03)',
+        boxShadow: isLiveFilling ? '0 0 0 4px rgba(5, 150, 105, 0.22)' : '0 0 0 3px rgba(5, 150, 105, 0.12)',
+        transition: 'all 0.25s ease'
+      };
+    }
+    return baseStyle;
+  };
 
   /* ── Success screen ─────────────────────────────────────── */
   if (success) {
@@ -176,14 +287,42 @@ const FieldForm = () => {
 
             {/* ── Core details card ───────────────────── */}
             <div className="card" style={{ padding: '1.5rem' }}>
-              <h2 style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ width: 4, height: 16, background: '#2d6148', borderRadius: 9999, display: 'inline-block' }} />
-                Incident Details
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.6rem' }}>
+                <h2 style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748b', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ width: 4, height: 16, background: '#2d6148', borderRadius: 9999, display: 'inline-block' }} />
+                  Incident Details
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={() => setShowVoiceAssistantModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.42rem 0.85rem',
+                    borderRadius: '8px',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: 'rgba(5, 150, 105, 0.08)',
+                    border: '1px solid rgba(5, 150, 105, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.15)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.08)'; }}
+                >
+                  <Mic style={{ width: 14, height: 14 }} />
+                  Voice & Video Assistant
+                </button>
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-              <div>
-                  <label style={labelStyle}>Need Classification</label>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={labelStyle}>Need Classification</label>
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                     {[
                       { value: 'medical',    label: 'Medical',   Icon: Heart },
@@ -216,6 +355,7 @@ const FieldForm = () => {
                       );
                     })}
                   </div>
+                  {renderVoiceBadge('need_type')}
                 </div>
 
                 <div>
@@ -224,12 +364,13 @@ const FieldForm = () => {
                     <Users style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} />
                     <input
                       type="number"
-                      style={fieldIconStyle}
+                      style={getDynamicFieldStyle('people_affected', fieldIconStyle)}
                       placeholder="Estimated headcount"
                       value={formData.people_affected}
                       onChange={(e) => updateField('people_affected', e.target.value)}
                     />
                   </div>
+                  {renderVoiceBadge('people_affected')}
                 </div>
               </div>
 
@@ -240,12 +381,13 @@ const FieldForm = () => {
                     <MapPin style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} />
                     <input
                       required
-                      style={fieldIconStyle}
+                      style={getDynamicFieldStyle('district', fieldIconStyle)}
                       placeholder="e.g. South 24 Parganas"
                       value={formData.district}
                       onChange={(e) => updateField('district', e.target.value)}
                     />
                   </div>
+                  {renderVoiceBadge('district')}
                 </div>
 
                 <div>
@@ -254,12 +396,13 @@ const FieldForm = () => {
                     <Navigation style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} />
                     <input
                       required
-                      style={fieldIconStyle}
+                      style={getDynamicFieldStyle('ward', fieldIconStyle)}
                       placeholder="e.g. Ward 102"
                       value={formData.ward}
                       onChange={(e) => updateField('ward', e.target.value)}
                     />
                   </div>
+                  {renderVoiceBadge('ward')}
                 </div>
               </div>
 
@@ -267,32 +410,35 @@ const FieldForm = () => {
                 <label style={labelStyle}>Contact Number (WhatsApp / Call)</label>
                 <input
                   type="tel"
-                  style={fieldStyle}
+                  style={getDynamicFieldStyle('contact_number', fieldStyle)}
                   placeholder="+91 9876543210"
                   value={formData.contact_number || ''}
                   onChange={(e) => updateField('contact_number', e.target.value)}
                 />
+                {renderVoiceBadge('contact_number')}
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Headline *</label>
                 <input
                   required
-                  style={fieldStyle}
+                  style={getDynamicFieldStyle('title', fieldStyle)}
                   placeholder="Briefly describe the crisis"
                   value={formData.title}
                   onChange={(e) => updateField('title', e.target.value)}
                 />
+                {renderVoiceBadge('title')}
               </div>
 
               <div style={{ marginBottom: '1.25rem' }}>
                 <label style={labelStyle}>Details</label>
                 <textarea
-                  style={{ ...fieldStyle, height: 120, resize: 'vertical' }}
+                  style={getDynamicFieldStyle('description', { ...fieldStyle, height: 120, resize: 'vertical' })}
                   placeholder="Provide specific context for rapid response..."
                   value={formData.description}
                   onChange={(e) => updateField('description', e.target.value)}
                 />
+                {renderVoiceBadge('description')}
               </div>
 
               {/* Priority + Disaster mode */}
@@ -305,20 +451,24 @@ const FieldForm = () => {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => updateField('is_disaster_zone', !formData.is_disaster_zone)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-                    gap: '0.35rem', borderRadius: 12, cursor: 'pointer', transition: 'all 0.25s',
-                    background: formData.is_disaster_zone ? 'rgba(195, 93, 81, 0.08)' : '#f8fafc',
-                    border: `1px solid ${formData.is_disaster_zone ? 'rgba(195, 93, 81, 0.3)' : 'rgba(15, 23, 29, 0.1)'}`,
-                    color: formData.is_disaster_zone ? '#c35d51' : '#94a3b8',
-                  }}
-                >
-                  <AlertTriangle style={{ width: 20, height: 20 }} />
-                  <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Disaster Mode</span>
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <button
+                    type="button"
+                    onClick={() => updateField('is_disaster_zone', !formData.is_disaster_zone)}
+                    style={{
+                      display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                      gap: '0.35rem', borderRadius: 12, cursor: 'pointer', transition: 'all 0.25s', flex: 1,
+                      background: formData.is_disaster_zone ? 'rgba(195, 93, 81, 0.08)' : '#f8fafc',
+                      border: `1px solid ${formData.is_disaster_zone ? 'rgba(195, 93, 81, 0.3)' : 'rgba(15, 23, 29, 0.1)'}`,
+                      color: formData.is_disaster_zone ? '#c35d51' : '#94a3b8',
+                      boxShadow: voiceMatches?.is_disaster_zone?.matched_text ? '0 0 0 2px rgba(195, 93, 81, 0.2)' : 'none',
+                    }}
+                  >
+                    <AlertTriangle style={{ width: 20, height: 20 }} />
+                    <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Disaster Mode</span>
+                  </button>
+                  {renderVoiceBadge('is_disaster_zone')}
+                </div>
               </div>
             </div>
 
@@ -510,7 +660,14 @@ const FieldForm = () => {
                 background: '#f8fafc', border: '1px solid rgba(15, 23, 29, 0.1)',
                 borderRadius: '0.75rem', padding: '0.65rem 1.15rem',
               }}>
-                <span style={{ fontSize: '1.15rem' }}>🟢</span>
+                <span style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: '#22c55e',
+                  display: 'inline-block',
+                  boxShadow: '0 0 0 3px rgba(34, 197, 94, 0.2)'
+                }} />
                 <span style={{
                   fontSize: '1.05rem', fontWeight: 700, color: '#0f171d',
                   letterSpacing: '0.02em', fontFamily: "'Inter', system-ui, sans-serif",
@@ -666,7 +823,7 @@ const FieldForm = () => {
               fontSize: '0.68rem', color: '#94a3b8', marginTop: '1rem',
               lineHeight: 1.5, fontStyle: 'italic',
             }}>
-              ⚠️ This uses the Twilio Sandbox. You must first send the join code above to activate the WhatsApp connection.
+              Note: This uses the Twilio Sandbox. You must first send the join code above to activate the WhatsApp connection.
             </p>
           </div>
 
@@ -712,7 +869,7 @@ const FieldForm = () => {
               fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8',
               textTransform: 'uppercase', letterSpacing: '0.14em',
               margin: '1.25rem 0 0.6rem',
-            }}>🇮🇳 National (India)</p>
+            }}>National (India)</p>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {[
                 { label: 'National Emergency',  number: '112',  desc: 'Police · Fire · Ambulance' },
@@ -768,7 +925,7 @@ const FieldForm = () => {
               fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8',
               textTransform: 'uppercase', letterSpacing: '0.14em',
               margin: '1.4rem 0 0.6rem',
-            }}>📍 West Bengal — State Helplines</p>
+            }}>West Bengal — State Helplines</p>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {[
                 { label: 'WB State Emergency',      number: '1070',       desc: 'State Disaster Management' },
@@ -824,7 +981,7 @@ const FieldForm = () => {
               fontSize: '0.67rem', color: '#94a3b8', marginTop: '1rem',
               lineHeight: 1.5, textAlign: 'center', fontStyle: 'italic',
             }}>
-              📲 Tap any number above to call directly from your device.
+              Tap any number above to call directly from your device.
             </p>
           </div>
 
@@ -833,10 +990,26 @@ const FieldForm = () => {
 
       {showCamera && (
         <CameraWatermark
-          onCapture={(file) => { updateField('imageFile', file); setShowCamera(false); }}
+          onCapture={(file, hasGps, loc) => handlePhotoCaptured(file, loc)}
           onCancel={() => setShowCamera(false)}
+          onSubmit={submitForm}
+          isSubmitting={loading}
+          submitSuccess={success}
+          submitError={error}
         />
       )}
+
+      <VoiceVideoAssistantModal
+        isOpen={showVoiceAssistantModal}
+        onClose={() => setShowVoiceAssistantModal(false)}
+        onApplyData={handleApplyVoiceData}
+        onSubmitForm={submitForm}
+        formData={formData}
+        isOnline={isOnline}
+        isSubmitting={loading}
+        submitSuccess={success}
+        submitError={error}
+      />
     </MainLayout>
   );
 };
