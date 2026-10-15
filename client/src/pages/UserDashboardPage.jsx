@@ -1,18 +1,61 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FileText, Plus, UserCheck, Loader2, Clock, CheckCircle, XCircle, ArrowRight, Home } from 'lucide-react';
+import { FileText, Plus, UserCheck, Loader2, Clock, CheckCircle, XCircle, ArrowRight, Home, Mic } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import ReporterStatusList from '../components/ReporterStatusList';
 import VolunteerApplicationModal from '../components/VolunteerApplicationModal';
+import VoiceVideoAssistantModal from '../components/voice/VoiceVideoAssistantModal';
+import { useFieldForm } from '../hooks/useFieldForm';
 import api from '../services/api';
 import { io } from 'socket.io-client';
 
 const UserDashboardPage = () => {
   const [showApplicationModal, setShowApplicationModal] = useState(false);
+  const [showVoiceAssistantModal, setShowVoiceAssistantModal] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState('loading'); // 'loading' | 'none' | 'pending' | 'approved' | 'rejected'
   const [statusData, setStatusData] = useState(null);
   const navigate = useNavigate();
   const prevStatusRef = useRef(null);
+
+  const {
+    formData,
+    loading: formLoading,
+    locLoading,
+    success: formSuccess,
+    successMessage: formSuccessMessage,
+    error: formError,
+    verificationResult,
+    isOnline,
+    updateField,
+    updateMultipleFields,
+    resetForm,
+    getLocation,
+    submitForm,
+  } = useFieldForm();
+
+  // Open dedicated voice assistant modal on trigger (e.g. from bottom mic button or wake word)
+  useEffect(() => {
+    const handleVoiceTrigger = () => {
+      setShowVoiceAssistantModal(true);
+    };
+    window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+    return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+  }, []);
+
+  const handleApplyVoiceData = (fields, photoFile, loc) => {
+    if (fields && Object.keys(fields).length > 0) {
+      updateMultipleFields(fields);
+    }
+    if (photoFile) {
+      updateField('imageFile', photoFile);
+    }
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+  };
 
   const fetchApplicationStatus = useCallback(async () => {
     try {
@@ -111,6 +154,31 @@ const UserDashboardPage = () => {
               <p className="dashboard-subtitle-premium">
                 You can report community needs and track their status. Want to do more? Apply to become a verified volunteer.
               </p>
+              <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowVoiceAssistantModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.42rem 0.85rem',
+                    borderRadius: '8px',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: 'rgba(5, 150, 105, 0.08)',
+                    border: '1px solid rgba(5, 150, 105, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.15)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.08)'; }}
+                >
+                  <Mic style={{ width: 14, height: 14 }} />
+                  Voice Assistant
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -227,6 +295,21 @@ const UserDashboardPage = () => {
           onSubmitted={handleApplicationSubmitted}
         />
       )}
+
+      <VoiceVideoAssistantModal
+        isOpen={showVoiceAssistantModal}
+        onClose={() => {
+          setShowVoiceAssistantModal(false);
+          resetForm();
+        }}
+        onApplyData={handleApplyVoiceData}
+        onSubmitForm={submitForm}
+        formData={formData}
+        isOnline={isOnline}
+        isSubmitting={formLoading}
+        submitSuccess={formSuccess}
+        submitError={formError}
+      />
     </MainLayout>
   );
 };

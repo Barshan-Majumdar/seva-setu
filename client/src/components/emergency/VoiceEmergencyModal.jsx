@@ -21,8 +21,18 @@ import { Mic, MicOff, CheckCircle2, Volume2 } from 'lucide-react';
 export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handleClose: parentHandleClose }) => {
   const location = useLocation();
   const isFieldPage = Boolean(
-    (location?.pathname && (location.pathname.includes('/field') || location.pathname.includes('/report'))) ||
-    (typeof window !== 'undefined' && (window.location.pathname.includes('/field') || window.location.pathname.includes('/report')))
+    (location?.pathname && (
+      location.pathname.includes('/field') || 
+      location.pathname.includes('/report') ||
+      location.pathname.includes('/dashboard') ||
+      location.pathname.includes('/user-dashboard')
+    )) ||
+    (typeof window !== 'undefined' && (
+      window.location.pathname.includes('/field') || 
+      window.location.pathname.includes('/report') ||
+      window.location.pathname.includes('/dashboard') ||
+      window.location.pathname.includes('/user-dashboard')
+    ))
   );
 
   // idle | listening_for_wake | active_session | processing | completed | error
@@ -202,6 +212,9 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     // ── Manual button click → skip wake word, go directly to active listening ──
     const handleManualActivate = useCallback(() => {
       if (isFieldPage) {
+        if (!Capacitor.isNativePlatform()) {
+          speechService.stop();
+        }
         window.dispatchEvent(new CustomEvent('sevasetu:activate-voice-form'));
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;

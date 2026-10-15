@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Settings, Plus, UserCheck } from 'lucide-react';
+import { Settings, Plus, UserCheck, Mic } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import { useCoordinatorDashboard } from '../hooks/useCoordinatorDashboard';
+import { useFieldForm } from '../hooks/useFieldForm';
+import VoiceVideoAssistantModal from '../components/voice/VoiceVideoAssistantModal';
 import DashboardSummaryCards from '../components/dashboard/DashboardSummaryCards';
 import DashboardFilters from '../components/dashboard/DashboardFilters';
 import NeedsHeatmap from '../components/dashboard/NeedsHeatmap';
@@ -41,6 +43,46 @@ const DashboardPage = () => {
     pendingVolunteerRequests,
   } = useCoordinatorDashboard();
 
+  const [showVoiceAssistantModal, setShowVoiceAssistantModal] = useState(false);
+  const {
+    formData,
+    loading: formLoading,
+    locLoading,
+    success: formSuccess,
+    successMessage: formSuccessMessage,
+    error: formError,
+    verificationResult,
+    isOnline,
+    updateField,
+    updateMultipleFields,
+    resetForm,
+    getLocation,
+    submitForm,
+  } = useFieldForm();
+
+  useEffect(() => {
+    const handleVoiceTrigger = () => {
+      setShowVoiceAssistantModal(true);
+    };
+    window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+    return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+  }, []);
+
+  const handleApplyVoiceData = (fields, photoFile, loc) => {
+    if (fields && Object.keys(fields).length > 0) {
+      updateMultipleFields(fields);
+    }
+    if (photoFile) {
+      updateField('imageFile', photoFile);
+    }
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+  };
+
   console.log("DEBUG DASHBOARD: deleteNeed type is", typeof deleteNeed);
   console.log("DEBUG API: Connecting to", import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
 
@@ -57,6 +99,24 @@ const DashboardPage = () => {
               </p>
             </div>
             <div className="dashboard-hero-actions">
+              <button 
+                type="button"
+                onClick={() => setShowVoiceAssistantModal(true)}
+                className="dashboard-dispatch-btn-premium" 
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  color: '#059669',
+                  borderColor: 'rgba(5, 150, 105, 0.3)',
+                  background: 'rgba(5, 150, 105, 0.06)',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                <Mic size={14} />
+                Voice Assistant
+              </button>
               <Link 
                 to="/field"
                 className="dashboard-dispatch-btn-premium primary" 
@@ -174,6 +234,21 @@ const DashboardPage = () => {
 
         {showManager && <CoordinatorManagerModal onClose={() => setShowManager(false)} />}
       </div>
+
+      <VoiceVideoAssistantModal
+        isOpen={showVoiceAssistantModal}
+        onClose={() => {
+          setShowVoiceAssistantModal(false);
+          resetForm();
+        }}
+        onApplyData={handleApplyVoiceData}
+        onSubmitForm={submitForm}
+        formData={formData}
+        isOnline={isOnline}
+        isSubmitting={formLoading}
+        submitSuccess={formSuccess}
+        submitError={formError}
+      />
     </MainLayout>
   );
 };
