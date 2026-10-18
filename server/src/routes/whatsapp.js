@@ -89,18 +89,27 @@ router.post('/webhook', async (req, res) => {
         const lng = parseFloat(req.body.Longitude);
         const state = session.stateData || {};
         
-        // Calculate dynamic urgency score (0-10)
-        const priorityScore = calculateScore({
-          need_type: state.needType,
-          people_affected: state.peopleAffected,
-          is_verified: true // WhatsApp location sharing is highly trusted
-        });
-
         // WhatsApp title gets auto-generated from description
         const autoTitle = state.description ? state.description.substring(0, 40) + '...' : 'Urgent WhatsApp Report';
 
+        // Calculate dynamic priority and urgency score (0-10)
+        const { calculatePriority } = require('../services/scoringService');
+        const priorityResult = calculatePriority({
+          need_type: state.needType,
+          people_affected: state.peopleAffected,
+          title: autoTitle,
+          description: state.description || '',
+          is_disaster_zone: true,
+          is_verified: true // WhatsApp location sharing is highly trusted
+        });
+        const priorityScore = priorityResult.urgency_score;
+
         const result = await prisma.$queryRaw`
-          INSERT INTO needs (title, description, ward, district, need_type, people_affected, urgency_score, location, is_disaster_zone, status, contact_number, is_verified)
+          INSERT INTO needs (
+            title, description, ward, district, need_type, people_affected, 
+            urgency_score, priority_level, vulnerability_factors, location, 
+            is_disaster_zone, status, contact_number, is_verified
+          )
           VALUES (
             ${'WA: ' + autoTitle}, 
             ${state.description || ''},
@@ -109,6 +118,8 @@ router.post('/webhook', async (req, res) => {
             ${state.needType || 'other'}::"NeedType", 
             ${state.peopleAffected || 1},
             ${priorityScore}, 
+            ${priorityResult.priority_level},
+            ${priorityResult.vulnerability_factors},
             ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), 
             true,
             'open'::"NeedStatus",

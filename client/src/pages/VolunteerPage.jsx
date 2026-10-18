@@ -256,9 +256,30 @@ const VolunteerPage = () => {
 
                 {task.task_status !== 'completed' && (
                   <div className="volunteer-task-meta">
+                    {task.priority_level && (
+                      <span className="task-meta-tag" style={{
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        background: task.priority_level === 'High' ? 'rgba(239, 68, 68, 0.12)' : task.priority_level === 'Medium' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(100, 116, 139, 0.1)',
+                        color: task.priority_level === 'High' ? '#dc2626' : task.priority_level === 'Medium' ? '#d97706' : '#475569',
+                        border: `1px solid ${task.priority_level === 'High' ? 'rgba(239, 68, 68, 0.3)' : task.priority_level === 'Medium' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(100, 116, 139, 0.25)'}`,
+                      }}>
+                        {task.priority_level} Priority
+                      </span>
+                    )}
                     <span className="task-meta-tag capitalize">{task.need_type}</span>
                     <span className="task-meta-tag">{task.ward || 'Zone'}, {task.district || 'City'}</span>
-                    <span className="task-meta-tag">Urgency: {Number(task.urgency_score || 0).toFixed(2)}</span>
+                    <span className="task-meta-tag">Urgency: {Number(task.urgency_score || 0).toFixed(1)}</span>
+                    {Number(task.children_count) > 0 && (
+                      <span className="task-meta-tag" style={{ color: '#dc2626', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        👶 {task.children_count} Children
+                      </span>
+                    )}
+                    {Number(task.pregnant_count) > 0 && (
+                      <span className="task-meta-tag" style={{ color: '#be185d', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', fontWeight: 700 }}>
+                        🤰 {task.pregnant_count} {Number(task.pregnant_count) === 1 ? 'Pregnant Woman' : 'Pregnant Women'}
+                      </span>
+                    )}
                     
                     {/* DISTANCE BADGE: only show if we have real numeric coords */}
                     {(() => {

@@ -50,12 +50,55 @@ const MatchModal = ({
           borderRadius: '10px', border: '1px solid rgba(0, 0, 0, 0.04)',
           marginBottom: '1.25rem',
         }}>
-          <p style={{ fontSize: '0.875rem', fontWeight: 650, color: '#0f172a', margin: 0, marginBottom: '0.2rem' }}>
-            {need.title}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.35rem' }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 650, color: '#0f172a', margin: 0 }}>
+              {need.title}
+            </p>
+            <span style={{
+              fontSize: '0.65rem',
+              fontWeight: 800,
+              padding: '2px 8px',
+              borderRadius: '6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              background: need.priority_level === 'High' ? '#fee2e2' : need.priority_level === 'Medium' ? '#fef3c7' : '#e2e8f0',
+              color: need.priority_level === 'High' ? '#b91c1c' : need.priority_level === 'Medium' ? '#b45309' : '#334155',
+              border: `1px solid ${need.priority_level === 'High' ? '#fca5a5' : need.priority_level === 'Medium' ? '#fcd34d' : '#cbd5e1'}`,
+              whiteSpace: 'nowrap',
+            }}>
+              {need.priority_level || 'Medium'} Priority
+            </span>
+          </div>
+
           <p style={{ fontSize: '0.675rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', margin: 0 }}>
-            {need.ward || 'Unknown'} • {need.district || 'Unspecified'}
+            {need.ward || 'Unknown'} • {need.district || 'Unspecified'} • {need.need_type}
+            {Number(need.urgency_score) > 0 && ` • Urgency: ${Number(need.urgency_score).toFixed(1)}/10`}
           </p>
+
+          {(Number(need.children_count) > 0 || Number(need.adults_count) > 0 || Number(need.pregnant_count) > 0 || (Array.isArray(need.vulnerability_factors) && need.vulnerability_factors.length > 0)) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.5rem' }}>
+              {Number(need.children_count) > 0 && (
+                <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.08)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                  👶 {need.children_count} {Number(need.children_count) === 1 ? 'Child' : 'Children'}
+                </span>
+              )}
+              {Number(need.pregnant_count) > 0 && (
+                <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(244, 63, 94, 0.1)', color: '#be185d', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
+                  🤰 {need.pregnant_count} {Number(need.pregnant_count) === 1 ? 'Pregnant Woman' : 'Pregnant Women'}
+                </span>
+              )}
+              {Number(need.adults_count) > 0 && (
+                <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(71, 85, 105, 0.08)', color: '#475569', border: '1px solid rgba(71, 85, 105, 0.2)' }}>
+                  🧑 {need.adults_count} Adults
+                </span>
+              )}
+              {Array.isArray(need.vulnerability_factors) && need.vulnerability_factors.map((f, i) => (
+                <span key={i} style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                  ⚡ {f}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {Number(need.pending_broadcasts) > 0 && (

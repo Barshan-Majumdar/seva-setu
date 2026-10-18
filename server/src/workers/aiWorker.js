@@ -121,26 +121,42 @@ const aiWorker = new Worker('ai-verification', async (job) => {
       if (!currentNeed) {
         currentNeed = await prisma.need.findUnique({ where: { id } });
       }
-      const newScore = calculateScore({
+      const { calculatePriority } = require('../services/scoringService');
+      const priorityResult = calculatePriority({
         need_type: currentNeed.needType,
         people_affected: currentNeed.peopleAffected,
+        children_count: currentNeed.childrenCount || 0,
+        adults_count: currentNeed.adultsCount || 0,
+        pregnant_count: currentNeed.pregnantCount || 0,
+        title: currentNeed.title || '',
+        description: currentNeed.description || '',
+        is_disaster_zone: currentNeed.isDisasterZone || false,
         is_verified: finalVerified
       });
 
-      await prisma.need.update({
-        where: { id },
-        data: {
-          isVerified: finalVerified,
-          status: finalVerified ? 'open' : 'rejected',
-          urgencyScore: newScore,
-          verificationResult: {
-            verified: finalVerified,
-            errors,
-            geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
-            aiContent: isVerified ? 'PASSED' : 'FAILED'
-          }
-        }
-      });
+      await prisma.$executeRawUnsafe(
+        `UPDATE needs 
+         SET is_verified = $1, 
+             status = $2, 
+             urgency_score = $3, 
+             priority_level = $4, 
+             vulnerability_factors = $5,
+             verification_result = $6::jsonb,
+             updated_at = NOW()
+         WHERE id = $7::uuid`,
+        finalVerified,
+        finalVerified ? 'open' : 'rejected',
+        priorityResult.urgency_score,
+        priorityResult.priority_level,
+        priorityResult.vulnerability_factors,
+        JSON.stringify({
+          verified: finalVerified,
+          errors,
+          geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+          aiContent: isVerified ? 'PASSED' : 'FAILED'
+        }),
+        id
+      );
       await redisService.clearCache('/api/needs').catch(() => {});
       await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 

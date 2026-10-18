@@ -23,6 +23,9 @@ You MUST return ONLY valid JSON matching this schema:
 {
   "need_type": "medical" | "accidental" | "food" | "shelter" | "rescue" | "other",
   "people_affected": number or null,
+  "children_count": number or null,
+  "adults_count": number or null,
+  "pregnant_count": number or null,
   "district": string or null,
   "ward": string or null,
   "contact_number": string or null,
@@ -32,6 +35,9 @@ You MUST return ONLY valid JSON matching this schema:
   "field_matches": {
     "need_type": { "value": string, "matched_text": string, "reason": string },
     "people_affected": { "value": number or null, "matched_text": string },
+    "children_count": { "value": number or null, "matched_text": string },
+    "adults_count": { "value": number or null, "matched_text": string },
+    "pregnant_count": { "value": number or null, "matched_text": string },
     "district": { "value": string or null, "matched_text": string },
     "ward": { "value": string or null, "matched_text": string },
     "contact_number": { "value": string or null, "matched_text": string },
@@ -73,9 +79,24 @@ function fallbackParseTranscript(transcript) {
     need_match = transcript.match(/shelter|roof|homeless|displace|camp/i)?.[0] || 'shelter keywords';
   }
 
+  // Pregnant Women
+  const pregMatch = transcript.match(/(\d+)?\s*(?:pregnant\s*(?:women|woman|lady|mother|mothers)?|expecting\s*mothers?|garbhvati|garbhavati|prasuti|pettik)\b/i);
+  const pregnant_count = pregMatch ? (parseInt(pregMatch[1], 10) || 1) : null;
+  const pregnant_match = pregMatch ? pregMatch[0] : '';
+
+  // Children
+  const childMatch = transcript.match(/(\d+)\s*(?:children|child|kids|kid|babies|baby|infants|infant|minors|minor|bacche|baccha|sishu|shishu)\b/i);
+  const children_count = childMatch ? parseInt(childMatch[1], 10) : null;
+  const children_match = childMatch ? childMatch[0] : '';
+
+  // Adults
+  const adultMatch = transcript.match(/(\d+)\s*(?:adults|adult|grownups|grownup|men|women|elderly|seniors|boroder)\b/i);
+  const adults_count = adultMatch ? parseInt(adultMatch[1], 10) : (pregnant_count ? pregnant_count : null);
+  const adults_match = adultMatch ? adultMatch[0] : '';
+
   // People affected
   const countMatch = transcript.match(/\b(\d+)\s*(?:people|persons|individuals|families|victims|casualties|patients)?\b/i);
-  const people_affected = countMatch ? parseInt(countMatch[1], 10) : null;
+  const people_affected = countMatch ? parseInt(countMatch[1], 10) : ((children_count || 0) + (adults_count || 0) || null);
   const people_match = countMatch ? countMatch[0] : '';
 
   // Phone number
@@ -99,6 +120,9 @@ function fallbackParseTranscript(transcript) {
   return {
     need_type,
     people_affected,
+    children_count,
+    adults_count,
+    pregnant_count,
     district,
     ward,
     contact_number,
@@ -108,6 +132,9 @@ function fallbackParseTranscript(transcript) {
     field_matches: {
       need_type: { value: need_type, matched_text: need_match },
       people_affected: { value: people_affected, matched_text: people_match },
+      children_count: { value: children_count, matched_text: children_match },
+      adults_count: { value: adults_count, matched_text: adults_match },
+      pregnant_count: { value: pregnant_count, matched_text: pregnant_match },
       district: { value: district, matched_text: distMatch?.[0] || '' },
       ward: { value: ward, matched_text: ward_text },
       contact_number: { value: contact_number, matched_text: phone_match },

@@ -33,6 +33,17 @@ const KanbanBoard = ({ needs, tasks, onDispatch, onUpdateTask, onDelete }) => {
     lanes[laneStatus].push({ need, task });
   });
 
+  // Sort each lane so High Priority requests appear first
+  const priorityWeight = { High: 1, Medium: 2, Low: 3 };
+  Object.keys(lanes).forEach((key) => {
+    lanes[key].sort((a, b) => {
+      const pA = priorityWeight[a.need.priority_level] || 2;
+      const pB = priorityWeight[b.need.priority_level] || 2;
+      if (pA !== pB) return pA - pB;
+      return (Number(b.need.urgency_score) || 0) - (Number(a.need.urgency_score) || 0);
+    });
+  });
+
   return (
     <section className="dashboard-card" style={{ padding: '1.5rem' }}>
       <div className="dashboard-card-header" style={{ marginBottom: '1.25rem' }}>
@@ -66,53 +77,106 @@ const KanbanBoard = ({ needs, tasks, onDispatch, onUpdateTask, onDelete }) => {
               </h3>
 
               <div className="dashboard-lane-cards" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {lanes[laneKey].slice(0, 5).map(({ need, task }) => (
-                  <div key={need.id} className="dashboard-task-card" style={{ position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
-                      {need.title?.toLowerCase().includes('whatsapp') && (
+                {lanes[laneKey].slice(0, 5).map(({ need, task }) => {
+                  const pLevel = need.priority_level || 'Medium';
+                  const pNorm = pLevel.toLowerCase();
+
+                  return (
+                    <div key={need.id} className="dashboard-task-card" style={{ position: 'relative' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                        {need.title?.toLowerCase().includes('whatsapp') && (
+                          <span style={{
+                            background: '#25D366', color: 'white', padding: '1px 5px',
+                            borderRadius: '4px', fontSize: '8px', fontWeight: 900,
+                          }}>WA</span>
+                        )}
+                        {task?.is_verified && (
+                          <CheckCircle2 size={13} style={{ color: '#059669', flexShrink: 0 }} title="AI Verified" />
+                        )}
+                        <p style={{
+                          fontSize: '0.8rem', fontWeight: 650, lineHeight: 1.4,
+                          color: '#0f172a', margin: 0,
+                        }}>
+                          {need.title}
+                        </p>
+                      </div>
+
+                      {/* Priority Badge & Urgency Score */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.35rem', gap: '0.4rem', flexWrap: 'wrap' }}>
                         <span style={{
-                          background: '#25D366', color: 'white', padding: '1px 5px',
-                          borderRadius: '4px', fontSize: '8px', fontWeight: 900,
-                        }}>WA</span>
+                          fontSize: '0.62rem',
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          background: pNorm === 'high' ? 'rgba(239, 68, 68, 0.1)' : pNorm === 'medium' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(100, 116, 139, 0.08)',
+                          color: pNorm === 'high' ? '#dc2626' : pNorm === 'medium' ? '#d97706' : '#475569',
+                          border: `1px solid ${pNorm === 'high' ? 'rgba(239, 68, 68, 0.25)' : pNorm === 'medium' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(100, 116, 139, 0.2)'}`,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}>
+                          <span style={{
+                            width: 5, height: 5, borderRadius: '50%',
+                            background: pNorm === 'high' ? '#ef4444' : pNorm === 'medium' ? '#f59e0b' : '#94a3b8',
+                            boxShadow: pNorm === 'high' ? '0 0 4px #ef4444' : 'none',
+                          }} />
+                          {pLevel} Priority
+                        </span>
+                        {Number(need.urgency_score) > 0 && (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b' }}>
+                            {Number(need.urgency_score).toFixed(1)} / 10
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Vulnerability factors mini chips */}
+                      {Array.isArray(need.vulnerability_factors) && need.vulnerability_factors.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '0.3rem' }}>
+                          {need.vulnerability_factors.slice(0, 2).map((factor, idx) => (
+                            <span key={idx} style={{
+                              fontSize: '0.56rem',
+                              fontWeight: 700,
+                              background: 'rgba(239, 68, 68, 0.06)',
+                              color: '#b91c1c',
+                              border: '1px solid rgba(239, 68, 68, 0.15)',
+                              padding: '1px 4px',
+                              borderRadius: '3px'
+                            }}>
+                              ⚡ {factor}
+                            </span>
+                          ))}
+                        </div>
                       )}
-                      {task?.is_verified && (
-                        <CheckCircle2 size={13} style={{ color: '#059669', flexShrink: 0 }} title="AI Verified" />
-                      )}
+
                       <p style={{
-                        fontSize: '0.8rem', fontWeight: 650, lineHeight: 1.4,
-                        color: '#0f172a', margin: 0,
+                        fontSize: '0.675rem', color: '#94a3b8', marginTop: '0.35rem',
+                        fontWeight: 500, margin: 0,
                       }}>
-                        {need.title}
+                        {task?.volunteer_name || 'Unassigned'}
                       </p>
-                    </div>
 
-                    <p style={{
-                      fontSize: '0.675rem', color: '#94a3b8', marginTop: '0.25rem',
-                      fontWeight: 500, margin: 0,
-                    }}>
-                      {task?.volunteer_name || 'Unassigned'}
-                    </p>
+                      <p style={{
+                        fontSize: '0.6rem', color: '#64748b', marginTop: '0.15rem',
+                        fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                        margin: 0,
+                      }}>
+                        {need.ward || 'Unknown'} • {need.district || 'Unspecified'}
+                      </p>
 
-                    <p style={{
-                      fontSize: '0.6rem', color: '#64748b', marginTop: '0.15rem',
-                      fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                      margin: 0,
-                    }}>
-                      {need.ward || 'Unknown'} • {need.district || 'Unspecified'}
-                    </p>
-
-                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                      {laneKey === 'open' && (
-                        <button
-                          type="button"
-                          className="dashboard-pill dashboard-pill-open"
-                          style={{ fontSize: '0.6rem', padding: '3px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                          onClick={() => onDispatch(need)}
-                        >
-                          <PlusCircle size={10} />
-                          Dispatch
-                        </button>
-                      )}
+                      <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {laneKey === 'open' && (
+                          <button
+                            type="button"
+                            className="dashboard-pill dashboard-pill-open"
+                            style={{ fontSize: '0.6rem', padding: '3px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                            onClick={() => onDispatch(need)}
+                          >
+                            <PlusCircle size={10} />
+                            Dispatch
+                          </button>
+                        )}
 
                       {laneKey === 'completed' && task && (
                         <button
@@ -147,7 +211,8 @@ const KanbanBoard = ({ needs, tasks, onDispatch, onUpdateTask, onDelete }) => {
                       )}
                     </div>
                   </div>
-                ))}
+                );
+              })}
 
                 {lanes[laneKey].length > 5 && (
                   <Link

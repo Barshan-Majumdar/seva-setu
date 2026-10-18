@@ -16,6 +16,9 @@ export const useFieldForm = () => {
     ward: '',
     district: '',
     people_affected: '',
+    children_count: '',
+    adults_count: '',
+    pregnant_count: '',
     is_disaster_zone: false,
     lat: null,
     lng: null,
@@ -136,6 +139,9 @@ export const useFieldForm = () => {
       ward: '',
       district: '',
       people_affected: '',
+      children_count: '',
+      adults_count: '',
+      pregnant_count: '',
       is_disaster_zone: false,
       lat: null,
       lng: null,
@@ -229,7 +235,13 @@ export const useFieldForm = () => {
       try {
         if (!navigator.onLine) {
           // Offline mode: queue with image (now supported via IndexedDB Blobs)
-          const payload = { ...formData, people_affected: parseInt(formData.people_affected, 10) || 0 };
+          const payload = {
+            ...formData,
+            people_affected: parseInt(formData.people_affected, 10) || 0,
+            children_count: parseInt(formData.children_count, 10) || 0,
+            adults_count: parseInt(formData.adults_count, 10) || 0,
+            pregnant_count: parseInt(formData.pregnant_count, 10) || 0,
+          };
           await queueNeedSubmission(payload);
           await refreshQueuedCount();
           setSuccess(true);
@@ -286,6 +298,12 @@ export const useFieldForm = () => {
   const urgencyPreview = calculateUrgencyPreview({
     need_type: formData.need_type,
     people_affected: formData.people_affected,
+    children_count: formData.children_count,
+    adults_count: formData.adults_count,
+    pregnant_count: formData.pregnant_count,
+    title: formData.title,
+    description: formData.description,
+    is_disaster_zone: formData.is_disaster_zone,
   });
 
   const setManualLocation = useCallback((lat, lng) => {
