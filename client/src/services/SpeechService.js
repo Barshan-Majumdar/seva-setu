@@ -1,8 +1,8 @@
-import { Capacitor } from '@capacitor/core';
+﻿import { Capacitor } from '@capacitor/core';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 
 /**
- * SpeechService — Speech Recognition wrapper for SevaSetu voice assistant.
+ * SpeechService â€” Speech Recognition wrapper for SevaSetu voice assistant.
  * Uses Capacitor Speech Recognition on mobile, and Web Speech API on browser.
  */
 export class SpeechService {
@@ -21,9 +21,9 @@ export class SpeechService {
 
   async _ensureNativeInitialized() {
     // On native, NativeSpeechBridge is the sole owner of the Android SpeechRecognizer.
-    // SpeechService must NEVER register its own listeners on native — they would
+    // SpeechService must NEVER register its own listeners on native â€” they would
     // conflict with NativeSpeechBridge and permanently kill the microphone.
-    console.warn('[SpeechService] _ensureNativeInitialized blocked — use NativeSpeechBridge on native');
+    console.warn('[SpeechService] _ensureNativeInitialized blocked â€” use NativeSpeechBridge on native');
     return false;
   }
 
@@ -98,7 +98,14 @@ export class SpeechService {
     
     if (!this._wakeWordFired && wakeWordMatch && this._onWakeWord) {
       this._wakeWordFired = true;
-      this._onWakeWord();
+      // Strip the wake phrase and pass any trailing command to _onWakeWord
+      let trailing = transcript.trim();
+      const wakeStripRegex = /^(?:hey|hi|hello|ok|okay)?\s*(seva|sewa|siva|shiva|seba|sayva|save\s*a|say\s*wa)\s*(setu|sethu|setoo|said\s*to|say\s*to|c2)\b[,.]?\s*/i;
+      trailing = trailing.replace(wakeStripRegex, '').trim();
+      ['hey sevasetu', 'hey seva setu', 'hey seva', 'sevasetu', 'sevasethu', 'seva setu', 'seva sethu'].forEach(w => {
+        if (trailing.toLowerCase().startsWith(w)) trailing = trailing.substring(w.length).trim();
+      });
+      this._onWakeWord(trailing || '');
     }
 
     if (transcript.trim()) {

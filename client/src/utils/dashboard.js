@@ -29,8 +29,14 @@ export const disasterColor = (type) => {
     medical: '#f43f5e',   // Rose/Red
     food: '#0ea5e9',      // Sky/Blue
     shelter: '#f59e0b',   // Amber/Orange
+    accidental: '#f97316', // Orange
+    rescue: '#ef4444',    // Red
     education: '#8b5cf6', // Violet/Purple
     other: '#64748b'      // Slate/Gray
   };
-  return colors[type?.toLowerCase()] || colors.other;
+  if (typeof type === 'boolean') {
+    return type ? '#ef4444' : colors.other;
+  }
+  const key = typeof type === 'string' ? type.toLowerCase() : 'other';
+  return colors[key] || colors.other;
 };

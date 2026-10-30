@@ -69,7 +69,7 @@ const KanbanBoard = ({ needs, tasks, onDispatch, onUpdateTask, onDelete }) => {
                 {lanes[laneKey].slice(0, 5).map(({ need, task }) => (
                   <div key={need.id} className="dashboard-task-card" style={{ position: 'relative' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
-                      {need.title?.toLowerCase().includes('whatsapp') && (
+                      {need.title?.toLowerCase()?.includes('whatsapp') && (
                         <span style={{
                           background: '#25D366', color: 'white', padding: '1px 5px',
                           borderRadius: '4px', fontSize: '8px', fontWeight: 900,

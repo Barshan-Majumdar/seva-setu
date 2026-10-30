@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import requests
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
@@ -80,8 +81,11 @@ Schema:
                 print(f"[NLP] LLM REST extraction failed: {e}. Falling back to keyword search.")
 
         # ---- FALLBACK KEYWORD LOGIC ----
-        transcript_lower = transcript.lower()
-        
+        # NOTE: All "contains" checks use whole-word boundaries via regex or
+        # explicit substring guards to avoid false positives.
+        # E.g. "no" must not match inside "cannot", "notice", "another".
+        t = transcript.lower()
+
         facts = {
             "emergencyType": "UNKNOWN",
             "severitySignals": [],
@@ -92,51 +96,118 @@ Schema:
             "hazards": [],
             "confidenceByField": {}
         }
-        
+
         confidence = {}
 
-        if "accident" in transcript_lower or "crash" in transcript_lower:
+        def has_word(word, text):
+            """Whole-word match — prevents 'cannot' matching 'no'."""
+            return bool(re.search(r'\b' + re.escape(word) + r'\b', text))
+
+        def has_any(words, text):
+            return any(has_word(w, text) for w in words)
+
+        # ── Accident / Crash ──────────────────────────────────────────────
+        ACCIDENT_WORDS = [
+            "accident", "crash", "collision", "car crash", "vehicle accident",
+            "road accident", "bike accident", "hit and run", "rollover",
+        ]
+        if has_any(ACCIDENT_WORDS, t):
             facts["emergencyType"] = "ACCIDENT"
             confidence["emergencyType"] = 0.95
-            
-        if "fire" in transcript_lower or "burning" in transcript_lower:
+
+        # ── Fire ─────────────────────────────────────────────────────────
+        FIRE_WORDS = [
+            "fire", "burning", "smoke", "flames", "ablaze", "on fire",
+            "house fire", "forest fire", "gas fire", "cylinder blast",
+            "aag", "aag lagi", "jalraha",  # Hindi phonetics
+        ]
+        if has_any(FIRE_WORDS, t):
             facts["fire"] = True
             facts["emergencyType"] = "FIRE"
             facts["severitySignals"].append("fire")
             confidence["fire"] = 0.98
 
-        if "injured" in transcript_lower or "hurt" in transcript_lower or "bleeding" in transcript_lower:
-            facts["severitySignals"].append("injury")
+        # ── Medical Emergency ─────────────────────────────────────────────
+        MEDICAL_WORDS = [
+            "injured", "hurt", "bleeding", "blood", "heart attack", "chest pain",
+            "breathing", "cannot breathe", "can't breathe", "not breathing",
+            "unconscious", "fainted", "seizure", "stroke", "paralyzed",
+            "poison", "poisoned", "overdose", "bite", "snake bite",
+            "ambulance", "hospital", "doctor", "medical", "electric shock",
+            "choking", "vomiting blood", "severe pain",
+            "dard", "chot", "behosh",  # Hindi phonetics
+        ]
+        if has_any(MEDICAL_WORDS, t):
+            if "injury" not in facts["severitySignals"]:
+                facts["severitySignals"].append("injury")
+            if facts["emergencyType"] == "UNKNOWN":
+                facts["emergencyType"] = "MEDICAL"
             confidence["injuredCount"] = 0.85
 
-        if "trapped" in transcript_lower or "stuck" in transcript_lower:
+        # ── Trapped / Collapsed ───────────────────────────────────────────
+        TRAPPED_WORDS = [
+            "trapped", "stuck", "buried", "collapsed", "under debris",
+            "building collapsed", "wall fell", "roof fell", "cannot get out",
+            "locked inside", "fallen building",
+        ]
+        if has_any(TRAPPED_WORDS, t):
             facts["trapped"] = True
-            facts["severitySignals"].append("trapped")
+            if "trapped" not in facts["severitySignals"]:
+                facts["severitySignals"].append("trapped")
+            if facts["emergencyType"] == "UNKNOWN":
+                facts["emergencyType"] = "GENERAL_EMERGENCY"
             confidence["trapped"] = 0.96
-            
-        if "help" in transcript_lower or "save" in transcript_lower or "emergency" in transcript_lower or "sos" in transcript_lower:
+
+        # ── Natural Disaster ──────────────────────────────────────────────
+        DISASTER_WORDS = [
+            "flood", "flooding", "drowning", "drowned", "underwater",
+            "water rising", "swept away", "cyclone", "storm", "hurricane",
+            "earthquake", "landslide", "tsunami", "volcano",
+            "baadh", "tufan", "bhukamp",  # Hindi phonetics
+        ]
+        if has_any(DISASTER_WORDS, t):
+            if facts["emergencyType"] == "UNKNOWN":
+                facts["emergencyType"] = "GENERAL_EMERGENCY"
+            if "disaster" not in facts["severitySignals"]:
+                facts["severitySignals"].append("disaster")
+            confidence["emergencyType"] = 0.9
+
+        # ── General Distress ──────────────────────────────────────────────
+        DISTRESS_WORDS = [
+            "help", "save me", "save us", "emergency", "sos", "mayday",
+            "danger", "attack", "assault", "robbery", "shooting", "stabbing",
+            "dying", "about to die", "going to die", "critical",
+            "bachao", "madad", "bachao mujhe",  # Hindi phonetics
+        ]
+        if has_any(DISTRESS_WORDS, t):
             if facts["emergencyType"] == "UNKNOWN":
                 facts["emergencyType"] = "GENERAL_EMERGENCY"
             confidence["emergencyType"] = 0.8
 
         facts["confidenceByField"] = confidence
-        
+
         is_emergency = facts["emergencyType"] != "UNKNOWN" or len(facts["severitySignals"]) > 0
-        
+
         reply = ""
         intent_override = facts["emergencyType"]
-        
+
         if not is_emergency:
-            if "listen" in transcript_lower or "hear" in transcript_lower or "hello" in transcript_lower or "hi" in transcript_lower:
+            if has_any(["listen", "hello", "hi there", "are you there", "seva setu"], t):
                 reply = "Yes, I am listening. Please state your emergency."
-            elif "who are you" in transcript_lower or "what are you" in transcript_lower:
+            elif "who are you" in t or "what are you" in t or "how does this work" in t:
                 reply = "I am Seva Setu, your emergency assistant. How can I help?"
-            elif "yes" in transcript_lower or "fine" in transcript_lower or "safe" in transcript_lower or "okay" in transcript_lower or "good" in transcript_lower:
+            # CRITICAL FIX: Use whole-word check for "safe", "fine", "okay" (positive signals)
+            elif has_any(["i am safe", "i am fine", "i am okay", "no emergency", "false alarm", "everything is fine", "all good"], t):
                 reply = "Glad to hear you are safe. Closing the emergency assistant."
                 intent_override = "SAFE"
-            elif "no" in transcript_lower or "cancel" in transcript_lower or "stop" in transcript_lower:
-                reply = "Okay, cancelling emergency request."
-                intent_override = "CANCEL"
+            # CRITICAL FIX: Use strict whole-word regex for cancel — NOT substring.
+            # "cannot" must NOT trigger this branch.
+            elif has_any(["cancel", "stop", "nevermind", "never mind", "abort", "close session"], t) or \
+                 re.search(r'\bno\b', t) is not None:
+                # Extra guard: if transcript also contains emergency signals, do NOT cancel
+                if not is_emergency:
+                    reply = "Okay, cancelling emergency request."
+                    intent_override = "CANCEL"
             else:
                 reply = "I didn't detect an emergency. Are you safe?"
 

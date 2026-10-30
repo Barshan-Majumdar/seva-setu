@@ -276,7 +276,7 @@ export const useFieldForm = () => {
         setLoading(false);
       }
     },
-    [formData, refreshQueuedCount]
+    [formData, refreshQueuedCount, isOnline]
   );
 
   const urgencyPreview = calculateUrgencyPreview({

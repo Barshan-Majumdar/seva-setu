@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { useAuth } from '../hooks/useAuth';
@@ -6,9 +6,9 @@ import {
   ChevronDown, Send, LogOut, Menu, X,
   LayoutDashboard, FileText, Users, MapPin, ClipboardCheck, Building2
 } from 'lucide-react';
-import { VoiceEmergencyModal } from '../components/emergency/VoiceEmergencyModal';
+// VoiceEmergencyModal is managed at App root level only.
 
-/* ── Role-based nav definitions ─────────────────────────────── */
+/* â”€â”€ Role-based nav definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const NAV_BY_ROLE = {
   coordinator: [
     { to: '/dashboard',            label: 'Dashboard',  Icon: LayoutDashboard },
@@ -69,7 +69,7 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
     logout();
   };
 
-  // ── Authenticated SaaS Layout ──────────────────────────────
+  // â”€â”€ Authenticated SaaS Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (isAuthenticated) {
     return (
       <div className="saas-layout-root">
@@ -174,17 +174,16 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
           <main className="saas-main-content">
             {children}
           </main>
-          <VoiceEmergencyModal />
         </div>
       </div>
     );
   }
 
-  // ── Unauthenticated Landing Page Layout ──────────────────────
+  // â”€â”€ Unauthenticated Landing Page Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="layout-root">
 
-      {/* ── Navbar ─────────────────────────────────────────────── */}
+      {/* â”€â”€ Navbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {!hideHeader && (
         <header className="site-header">
         <nav className="container-lg nav-bar">
@@ -208,12 +207,12 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
             </div>
           </div>
 
-          {/* Right side — desktop */}
+          {/* Right side â€” desktop */}
           <div className="nav-actions">
             <Link to="/login" className="nav-link">Sign in</Link>
             <Link to="/register" className="btn-primary nav-cta">Join the Mission</Link>
 
-            {/* Hamburger — mobile only */}
+            {/* Hamburger â€” mobile only */}
             <button
               className="nav-hamburger"
               onClick={() => setMenuOpen(o => !o)}
@@ -227,7 +226,7 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
         </header>
       )}
 
-      {/* ── Mobile slide-down menu ─────────────────────────────── */}
+      {/* â”€â”€ Mobile slide-down menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {!hideHeader && (
         <div className={`nav-mobile-menu${menuOpen ? ' is-open' : ''}`} role="navigation">
         {LANDING_NAV.map(({ href, label }) => (
@@ -239,7 +238,7 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
         </div>
       )}
 
-      {/* Overlay — closes menu when tapping outside */}
+      {/* Overlay â€” closes menu when tapping outside */}
       {!hideHeader && menuOpen && (
         <div
           onClick={closeMenu}
@@ -251,14 +250,13 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
         />
       )}
 
-      {/* ── Page Content ──────────────────────────────────────── */}
+      {/* â”€â”€ Page Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <main className="layout-main">
         {children}
       </main>
 
-      <VoiceEmergencyModal />
 
-      {/* ── Footer ────────────────────────────────────────────── */}
+      {/* â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {!hideFooter && (
         <footer className="site-footer">
           <div className="container-lg">
@@ -305,7 +303,7 @@ const MainLayout = ({ children, hideFooter = false, hideHeader = false }) => {
 
             <div className="footer-bottom">
               <p className="footer-copy">
-                © 2026 SevaSetu Open Initiative — Community resilience, powered by AI.
+                Â© 2026 SevaSetu Open Initiative â€” Community resilience, powered by AI.
               </p>
               <div className="footer-legal">
                 <a href="#">Privacy</a>

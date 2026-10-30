@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
+﻿import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ClerkProvider, SignIn, SignUp } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
@@ -56,7 +56,7 @@ const PageLoader = ({ text = 'Synchronizing' }) => (
 );
 
 /**
- * ClerkProviderWithRouter — Wraps Clerk around our React Router.
+ * ClerkProviderWithRouter â€” Wraps Clerk around our React Router.
  */
 function ClerkProviderWithRouter({ children }) {
   const navigate = useNavigate();
@@ -91,7 +91,7 @@ function ClerkProviderWithRouter({ children }) {
 }
 
 /**
- * MainContent — rendered INSIDE Router so all hooks have full context.
+ * MainContent â€” rendered INSIDE Router so all hooks have full context.
  */
 function MainContent() {
   const { isAuthenticated } = useAuth();
@@ -104,6 +104,7 @@ function MainContent() {
 
   const [showVoiceEmergency, setShowVoiceEmergency] = useState(false);
   const bgVoiceInitialized = useRef(false);
+  const [autoActivateEmergency, setAutoActivateEmergency] = useState(false);
 
   // Request all native permissions on first launch
   useEffect(() => {
@@ -127,7 +128,7 @@ function MainContent() {
       if (Capacitor.isNativePlatform()) {
         backgroundVoiceService.init((transcript) => {
           console.log('[App] Wake word detected via BackgroundVoiceService!');
-          autoActivateEmergency.current = true;
+          setAutoActivateEmergency(true);
           setShowVoiceEmergency(true);
         }).then((ok) => {
           if (ok) {
@@ -145,7 +146,7 @@ function MainContent() {
   // Pause background voice when emergency modal is open, resume when closed
   const handleVoiceEmergencyClose = useCallback(() => {
     setShowVoiceEmergency(false);
-    autoActivateEmergency.current = false;
+    setAutoActivateEmergency(false);
     // Resume wake word listening after a delay for audio to settle
     if (Capacitor.isNativePlatform()) {
       setTimeout(() => {
@@ -329,16 +330,13 @@ function MainContent() {
           </Routes>
           {isAuthenticated && <ChatWidget />}
 
-          {/* Voice Emergency Modal — triggered by wake word or manual activation */}
-          {showVoiceEmergency && (
-            <Suspense fallback={null}>
-              <VoiceEmergencyModal 
-                open={showVoiceEmergency} 
-                autoActivate={autoActivateEmergency.current}
-                handleClose={handleVoiceEmergencyClose} 
-              />
-            </Suspense>
-          )}
+          {/* Voice Emergency Modal â€” triggered by wake word or manual activation */}
+          <Suspense fallback={null}>
+            <VoiceEmergencyModal 
+              autoActivate={autoActivateEmergency}
+              handleClose={handleVoiceEmergencyClose} 
+            />
+          </Suspense>
         </Suspense>
       )}
     </>

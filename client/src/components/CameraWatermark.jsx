@@ -65,7 +65,7 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
       killCamera();
     }
     return () => killCamera(); // always cleanup on unmount
-  }, [facingMode, !!capturedImage, openCamera, killCamera]);
+  }, [facingMode, capturedImage, openCamera, killCamera]);
 
   const toggleCamera = () => {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');

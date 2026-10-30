@@ -17,8 +17,8 @@ const activeEmergencyStore = localforage.createInstance({
 // Internal state — not on the exported object to avoid `this` confusion
 let _retryInterval = null;
 
-const API_URL = import.meta.env.DEV ? 'http://localhost:5000' : (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000');
-const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.154.209.193:8000' : 'http://localhost:8000');
+const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
+const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.103.7.193:8000' : 'http://localhost:8000');
 
 /**
  * Ensure deviceId exists in localStorage (generated once, persisted forever).

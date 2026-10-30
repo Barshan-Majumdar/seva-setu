@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { speechService } from '../../services/SpeechService';
 import { nativeSpeechBridge } from '../../services/NativeSpeechBridge';
@@ -7,16 +7,37 @@ import { VoiceFeedback } from '../../services/VoiceFeedback';
 import { Mic, MicOff, CheckCircle2, Volume2 } from 'lucide-react';
 
 /**
- * VoiceEmergencyModal — SevaSetu Voice Assistant UI
+ * VoiceEmergencyModal â€” SevaSetu Voice Assistant UI
  * 
  * Behavior:
- *   1. On page load → checks if mic permission already granted
- *      - If YES → silently starts listening for "Hey Seva Setu" (no click needed)
- *      - If NO  → shows mic button. User clicks ONCE to grant permission.
- *   2. User says "Hey Seva Setu" OR clicks button → NLP modal opens
+ *   1. On page load â†’ checks if mic permission already granted
+ *      - If YES â†’ silently starts listening for "Hey Seva Setu" (no click needed)
+ *      - If NO  â†’ shows mic button. User clicks ONCE to grant permission.
+ *   2. User says "Hey Seva Setu" OR clicks button â†’ NLP modal opens
  *   3. SevaSetu speaks back, user describes emergency, SOS is created
- *   4. After close → returns to passive wake word listening
+ *   4. After close â†’ returns to passive wake word listening
  */
+const DebugPanel = ({ sessionState, debugLogs }) => {
+  if (!Capacitor.isNativePlatform()) return null;
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0,
+      background: 'rgba(0,0,0,0.9)', color: '#0f0',
+      fontFamily: 'monospace', fontSize: '10px',
+      padding: '4px', zIndex: 99999,
+      maxHeight: '35vh', overflowY: 'auto',
+      lineHeight: '1.3'
+    }}>
+      <div style={{color: '#ff0', fontWeight: 'bold', marginBottom: '2px'}}>
+        STATE: {sessionState} | Bridge: {nativeSpeechBridge.statusText}
+      </div>
+      {debugLogs.map((line, i) => (
+        <div key={i}>{line}</div>
+      ))}
+    </div>
+  );
+};
+
 export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handleClose: parentHandleClose }) => {
   // idle | listening_for_wake | active_session | processing | completed | error
   const [sessionState, setSessionState] = useState('idle');
@@ -27,7 +48,151 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
   const hasTriggeredRef = useRef(false);
   const mountedRef = useRef(true);
 
-  // ── Start capturing emergency description (called after system finishes speaking) ──
+  // â”€â”€â”€ Local helper: does transcript look like a genuine emergency? â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Used in the catch block to avoid firing false SOS when AI service is down.
+  const _looksLikeEmergency = (t) => {
+    const s = t.toLowerCase();
+    const EMERGENCY_SIGNALS = [
+      'fire','burning','flood','drowning','collapse','collapsed','trapped','stuck',
+      'injured','hurt','bleeding','blood','unconscious','fainted','heart attack',
+      'chest pain','cannot breathe',"can't breathe",'not breathing','seizure',
+      'stroke','ambulance','medical','accident','crash','help','save','sos',
+      'mayday','emergency','danger','attack','dying','bachao','madad','aag',
+    ];
+    return EMERGENCY_SIGNALS.some(w => s.includes(w));
+  };
+
+  // â”€â”€â”€ Handle emergency SOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const handleEmergencyTrigger = async (text) => {
+      setSessionState('processing');
+      if (Capacitor.isNativePlatform()) {
+        nativeSpeechBridge.pause();
+      } else {
+        speechService.stop();
+      }
+
+      try {
+        // 1. Ask NLP about intent BEFORE triggering SOS
+        //    AbortController enforces a strict 6-second timeout â€” prevents UI hanging
+        //    if the AI endpoint is asleep or unreachable.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+        const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.103.7.193:8000' : 'http://localhost:8000');
+        const aiResponse = await fetch(`${AI_URL}/extract-facts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript: text, language: 'en-IN' }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!aiResponse.ok) {
+          throw new Error(`AI returned ${aiResponse.status}`);
+        }
+
+        const nlpData = await aiResponse.json();
+
+        if (nlpData.isEmergency) {
+          const intentName = nlpData.intent !== 'UNKNOWN' ? nlpData.intent.toLowerCase().replace('_', ' ') : 'emergency';
+          const ackReply = nlpData.reply || `Got it. Sending SOS now for: ${intentName}. Help is on the way to your location.`;
+          setSystemReply(ackReply);
+          VoiceFeedback.speak(ackReply); // Fire-and-forget (SOS is non-blocking)
+
+          const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
+          setEmergencyData(emergency);
+
+          // Push the facts we already gathered to the server
+          const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
+
+          // Push facts with retry logic to avoid race condition with non-blocking SOS trigger
+          const pushFacts = async (retries = 3) => {
+            try {
+              const res = await fetch(`${API_URL}/api/emergency/${emergency.clientEventId}/facts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(nlpData)
+              });
+              if (res.status === 404 && retries > 0) {
+                console.log('Incident not found yet, retrying facts push...');
+                setTimeout(() => pushFacts(retries - 1), 1000);
+              } else if (!res.ok) {
+                console.warn('Facts push failed:', res.status);
+              } else {
+                console.log('Facts pushed successfully!');
+              }
+            } catch (err) {
+              if (retries > 0) setTimeout(() => pushFacts(retries - 1), 1000);
+              else console.warn('Facts push error:', err);
+            }
+          };
+          pushFacts();
+
+          if (mountedRef.current) {
+            setSessionState('completed');
+            // Auto-close 5 seconds after SOS is confirmed
+            setTimeout(() => {
+              if (mountedRef.current) handleClose();
+            }, 5000);
+          }
+        } else {
+          // Conversational interaction (not an emergency yet)
+          const reply = nlpData.reply || "I'm here to help. How can I assist you?";
+          setSystemReply(reply);
+
+          if (nlpData.intent === 'SAFE' || nlpData.intent === 'CANCEL' || nlpData.intent === 'CLOSE_SESSION') {
+            setSessionState('speaking');
+            // Use onEnd callback so modal closes AFTER TTS finishes
+            VoiceFeedback.speak(reply, () => {
+              if (mountedRef.current) handleClose();
+            });
+          } else {
+            setSessionState('speaking');
+            // Use onEnd callback so mic resumes AFTER TTS finishes (no echo)
+            VoiceFeedback.speak(reply, () => {
+              if (mountedRef.current) startCapturing();
+            });
+          }
+        }
+      } catch (e) {
+        const wasAborted = e.name === 'AbortError';
+        console.error('[VoiceUI] NLP check failed' + (wasAborted ? ' (timeout)' : '') + ', evaluating locally:', e);
+
+        // SAFETY GUARD: Only trigger SOS if the transcript has genuine emergency signals.
+        // This prevents a false SOS when the user says "hello" or "cancel" but AI is down.
+        if (!_looksLikeEmergency(text)) {
+          console.warn('[VoiceUI] Transcript does not look like an emergency â€” not triggering SOS. Closing session.');
+          setSystemReply("I'm sorry, I had trouble understanding that. If you have an emergency, please try again or call 112.");
+          setSessionState('error');
+          setTimeout(() => {
+            if (mountedRef.current) handleClose();
+          }, 4000);
+          return;
+        }
+
+        const ackReply = 'Got it. Sending SOS now.';
+        setSystemReply(ackReply);
+        VoiceFeedback.speak(ackReply); // Fire and forget
+
+        const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
+        setEmergencyData(emergency);
+        EmergencyManager.enrichEmergencyWithVoice(emergency.clientEventId, text);
+
+        const doneReply = 'Help request started. Your SOS has been transmitted. Stay safe.';
+        setSystemReply(doneReply);
+        VoiceFeedback.speak(doneReply); // Fire and forget
+
+        if (mountedRef.current) {
+          setSessionState('completed');
+          setTimeout(() => {
+            if (mountedRef.current) handleClose();
+          }, 5000);
+        }
+      }
+    };
+
+    
+  // â”€â”€ Start capturing emergency description (called after system finishes speaking) â”€â”€
   const startCapturing = useCallback(() => {
     if (!mountedRef.current) return;
     hasTriggeredRef.current = false;
@@ -76,9 +241,10 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         );
       }, 200);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Start passive wake word listening (WEB ONLY — native uses BackgroundVoiceService) ──
+  // â”€â”€ Start passive wake word listening (WEB ONLY â€” native uses BackgroundVoiceService) â”€â”€
   const beginWakeWordListening = useCallback(() => {
     if (Capacitor.isNativePlatform()) {
       // On native, wake word is handled by BackgroundVoiceService via NativeSpeechBridge.
@@ -98,17 +264,25 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     setTimeout(() => {
       if (!mountedRef.current) return;
       speechService.start(
-        () => {
-          console.log('[VoiceUI] Wake word detected (web)');
+        (trailingCommand) => {
+          // trailingCommand: text spoken after wake word in same breath
+          console.log('[VoiceUI] Wake word detected (web). Trailing:', trailingCommand);
           speechService.stop();
           if (mountedRef.current) {
             setSessionState('speaking');
             setTranscript('');
-            const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
-            setSystemReply(reply);
-            VoiceFeedback.speak(reply, () => {
-              if (mountedRef.current) startCapturing();
-            });
+            if (trailingCommand && trailingCommand.trim().length > 3) {
+              // One-breath command: skip re-prompting, process directly
+              console.log('[VoiceUI] One-breath command preserved:', trailingCommand);
+              handleEmergencyTrigger(trailingCommand.trim());
+            } else {
+              const reply = 'Are you experiencing an emergency? Please state the nature of your emergency.';
+              setSystemReply(reply);
+              // Use onEnd callback to prevent audio echo
+              VoiceFeedback.speak(reply, () => {
+                if (mountedRef.current) startCapturing();
+              });
+            }
           }
         },
         () => {},
@@ -119,9 +293,10 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
         }
       );
     }, 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startCapturing]);
 
-  // ── On mount: auto-activate or start wake word ──
+  // â”€â”€ On mount: auto-activate or start wake word â”€â”€
   useEffect(() => {
     mountedRef.current = true;
 
@@ -132,11 +307,10 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       setTranscript('');
       const reply = "Are you experiencing an emergency? Please state the nature of your emergency.";
       setSystemReply(reply);
-      VoiceFeedback.speak(reply); // Fire and forget
-      // Start capturing after TTS finishes (~4s for this longer sentence)
-      setTimeout(() => {
+      // Use onEnd callback so mic opens AFTER TTS finishes — prevents audio echo
+      VoiceFeedback.speak(reply, () => {
         if (mountedRef.current) startCapturing();
-      }, 4000);
+      });
     } else if (!Capacitor.isNativePlatform()) {
       // Web: check permissions and start wake word listening
       if (speechService.isSupported) {
@@ -175,7 +349,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
   }, []);
 
 
-    // ── Manual button click → skip wake word, go directly to active listening ──
+    // â”€â”€ Manual button click â†’ skip wake word, go directly to active listening â”€â”€
     const handleManualActivate = useCallback(() => {
       setSessionState('speaking');
       setTranscript('');
@@ -190,129 +364,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
 
       const reply = "I'm listening. What's the emergency?";
       setSystemReply(reply);
-      VoiceFeedback.speak(reply); // Fire and forget
-      // Start capturing after TTS finishes (~2.5s for this short sentence)
-      setTimeout(() => {
+      // Use onEnd callback so mic opens AFTER TTS finishes — prevents audio echo
+      VoiceFeedback.speak(reply, () => {
         if (mountedRef.current) startCapturing();
-      }, 2500);
+      });
     }, [startCapturing]);
 
-    // ── Handle emergency SOS ──
-    const handleEmergencyTrigger = async (text) => {
-      setSessionState('processing');
-      if (Capacitor.isNativePlatform()) {
-        nativeSpeechBridge.pause();
-      } else {
-        speechService.stop();
-      }
-
-      try {
-        // 1. Ask NLP about intent BEFORE triggering SOS
-        const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.154.209.193:8000' : 'http://localhost:8000');
-        const aiResponse = await fetch(`${AI_URL}/extract-facts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript: text, language: 'en-IN' })
-        });
-      
-        if (!aiResponse.ok) {
-          throw new Error(`AI returned ${aiResponse.status}`);
-        }
-
-        const nlpData = await aiResponse.json();
-      
-        if (nlpData.isEmergency) {
-          const intentName = nlpData.intent !== 'UNKNOWN' ? nlpData.intent.toLowerCase().replace('_', ' ') : 'emergency';
-          const ackReply = nlpData.reply || `Got it. Sending SOS now for: ${intentName}. Help is on the way to your location.`;
-          setSystemReply(ackReply);
-          VoiceFeedback.speak(ackReply); // Fire and forget - don't depend on callback
-
-          const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
-          setEmergencyData(emergency);
-        
-          // Push the facts we already gathered to the server
-          const API_URL = import.meta.env.DEV ? 'http://localhost:5000' : (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000');
-        
-          // Push facts with retry logic to avoid race condition with non-blocking SOS trigger
-          const pushFacts = async (retries = 3) => {
-            try {
-              const res = await fetch(`${API_URL}/api/emergency/${emergency.clientEventId}/facts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(nlpData)
-              });
-              if (res.status === 404 && retries > 0) {
-                console.log('Incident not found yet, retrying facts push...');
-                setTimeout(() => pushFacts(retries - 1), 1000);
-              } else if (!res.ok) {
-                console.warn('Facts push failed:', res.status);
-              } else {
-                console.log('Facts pushed successfully!');
-              }
-            } catch (err) {
-              if (retries > 0) setTimeout(() => pushFacts(retries - 1), 1000);
-              else console.warn('Facts push error:', err);
-            }
-          };
-          pushFacts();
-
-          if (mountedRef.current) {
-            setSessionState('completed');
-            // BULLETPROOF AUTO-CLOSE: 5 seconds after completed, close no matter what
-            setTimeout(() => {
-              if (mountedRef.current) handleClose();
-            }, 5000);
-          }
-        } else {
-          // Conversational interaction (not an emergency yet)
-          const reply = nlpData.reply || "I'm here to talk. How can I help you?";
-          setSystemReply(reply);
-        
-          if (nlpData.intent === 'SAFE' || nlpData.intent === 'CANCEL' || nlpData.intent === 'CLOSE_SESSION') {
-            setSessionState('speaking');
-            VoiceFeedback.speak(reply); // Fire and forget
-            // Close after TTS finishes (estimate ~3s for short reply)
-            setTimeout(() => {
-              if (mountedRef.current) handleClose();
-            }, 3000);
-          } else {
-            setSessionState('speaking');
-            VoiceFeedback.speak(reply); // Fire and forget
-            // Resume listening after TTS finishes (estimate based on text length)
-            const estimatedMs = Math.max(2000, (reply.length / 12) * 1000 + 1000);
-            setTimeout(() => {
-              if (mountedRef.current) {
-                startCapturing();
-              }
-            }, estimatedMs);
-          }
-        }
-      } catch (e) {
-        console.error('[VoiceUI] NLP check failed, falling back to offline SOS:', e);
-      
-        const ackReply = `Got it. Sending SOS now.`;
-        setSystemReply(ackReply);
-        VoiceFeedback.speak(ackReply); // Fire and forget
-
-        const emergency = await EmergencyManager.triggerEmergency('VOICE', null);
-        setEmergencyData(emergency);
-        EmergencyManager.enrichEmergencyWithVoice(emergency.clientEventId, text);
-
-        const doneReply = 'Help request started. Your SOS has been transmitted. Stay safe.';
-        setSystemReply(doneReply);
-        VoiceFeedback.speak(doneReply); // Fire and forget
-
-        if (mountedRef.current) {
-          setSessionState('completed');
-          // BULLETPROOF AUTO-CLOSE: 5 seconds after completed, close no matter what
-          setTimeout(() => {
-            if (mountedRef.current) handleClose();
-          }, 5000);
-        }
-      }
-    };
-
-    // ── Close → go back to passive wake word listening OR close entirely ──
+    // â”€â”€ Close â†’ go back to passive wake word listening OR close entirely â”€â”€
   const handleClose = () => {
     if (Capacitor.isNativePlatform()) {
       nativeSpeechBridge.pause();
@@ -325,43 +383,33 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
     setEmergencyData(null);
     hasTriggeredRef.current = false;
     
-    if (parentHandleClose) {
-      parentHandleClose();
-    } else if (!Capacitor.isNativePlatform()) {
+    // Always reset session state back to passive listening
+    if (Capacitor.isNativePlatform()) {
+      setSessionState('listening_for_wake');
+    } else {
+      setSessionState('idle');
       setTimeout(() => {
         if (mountedRef.current) beginWakeWordListening();
       }, 300);
     }
+
+    if (parentHandleClose) {
+      parentHandleClose();
+    }
   };
 
-    // ══════════════════════════════════════════════════
-    // DEBUG PANEL (native only — remove after debugging)
-    // ══════════════════════════════════════════════════
-    const DebugPanel = Capacitor.isNativePlatform() ? () => (
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0,
-        background: 'rgba(0,0,0,0.9)', color: '#0f0',
-        fontFamily: 'monospace', fontSize: '10px',
-        padding: '4px', zIndex: 99999,
-        maxHeight: '35vh', overflowY: 'auto',
-        lineHeight: '1.3'
-      }}>
-        <div style={{color: '#ff0', fontWeight: 'bold', marginBottom: '2px'}}>
-          STATE: {sessionState} | Bridge: {nativeSpeechBridge.statusText}
-        </div>
-        {debugLogs.map((line, i) => (
-          <div key={i}>{line}</div>
-        ))}
-      </div>
-    ) : () => null;
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // DEBUG PANEL (native only â€” remove after debugging)
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // DebugPanel moved to top level
 
-    // ══════════════════════════════════════════════════
-    // RENDER: Idle — Permission not yet granted, show button
-    // ══════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // RENDER: Idle â€” Permission not yet granted, show button
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     if (sessionState === 'idle') {
       return (
         <>
-          <DebugPanel />
+          <DebugPanel sessionState={sessionState} debugLogs={debugLogs} />
           <div style={{
             position: 'fixed', bottom: '1.5rem', right: '1.5rem',
             display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
@@ -396,13 +444,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       );
     }
 
-    // ══════════════════════════════════════════════════
-    // RENDER: Wake Word Listening — Passively listening for "Hey Seva Setu"
-    // ══════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // RENDER: Wake Word Listening â€” Passively listening for "Hey Seva Setu"
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     if (sessionState === 'listening_for_wake') {
       return (
         <>
-          <DebugPanel />
+          <DebugPanel sessionState={sessionState} debugLogs={debugLogs} />
           <div style={{
             position: 'fixed', bottom: '1.5rem', right: '1.5rem',
           display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
@@ -457,12 +505,12 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       );
     }
 
-    // ══════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // RENDER: Full-screen Modal
-    // ══════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     return (
       <>
-        <DebugPanel />
+        <DebugPanel sessionState={sessionState} debugLogs={debugLogs} />
         <div style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
         backdropFilter: 'blur(8px)', zIndex: 10000,
@@ -477,7 +525,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
           display: 'flex', flexDirection: 'column', alignItems: 'center',
         }}>
 
-          {/* ── Active Listening ── */}
+          {/* â”€â”€ Active Listening â”€â”€ */}
           {sessionState === 'active_session' && (
             <>
               <div style={{ position: 'relative', width: '96px', height: '96px', marginBottom: '1.5rem' }}>
@@ -494,7 +542,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                 </div>
               </div>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff', margin: '0 0 0.5rem' }}>
-                NLP Activated — Listening...
+                NLP Activated â€” Listening...
               </h2>
               {systemReply && (
                 <div style={{
@@ -503,7 +551,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   marginTop: '0.75rem', width: '100%', textAlign: 'left',
                 }}>
                   <p style={{ color: '#93c5fd', fontSize: '0.85rem', margin: 0, fontWeight: 500 }}>
-                    🔊 SevaSetu: "{systemReply}"
+                    ðŸ”Š SevaSetu: "{systemReply}"
                   </p>
                 </div>
               )}
@@ -514,7 +562,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   marginTop: '0.5rem', width: '100%', textAlign: 'left',
                 }}>
                   <p style={{ color: '#fca5a5', fontSize: '0.85rem', margin: 0, fontWeight: 500 }}>
-                    🎤 You: "{transcript}"
+                    ðŸŽ¤ You: "{transcript}"
                   </p>
                 </div>
               )}
@@ -532,7 +580,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             </>
           )}
 
-          {/* ── Speaking ── */}
+          {/* â”€â”€ Speaking â”€â”€ */}
           {sessionState === 'speaking' && (
             <>
               <div style={{ position: 'relative', width: '96px', height: '96px', marginBottom: '1.5rem' }}>
@@ -555,7 +603,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   marginTop: '0.75rem', width: '100%', textAlign: 'left',
                 }}>
                   <p style={{ color: '#93c5fd', fontSize: '0.85rem', margin: 0, fontWeight: 500 }}>
-                    🔊 SevaSetu: "{systemReply}"
+                    ðŸ”Š SevaSetu: "{systemReply}"
                   </p>
                 </div>
               )}
@@ -573,7 +621,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             </>
           )}
 
-          {/* ── Processing ── */}
+          {/* â”€â”€ Processing â”€â”€ */}
           {sessionState === 'processing' && (
             <>
               <div style={{
@@ -589,13 +637,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>🎤 You: "{transcript}"</p>
+                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>ðŸŽ¤ You: "{transcript}"</p>
                 </div>
                 <div style={{
                   background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#93c5fd', fontSize: '0.8rem', margin: 0 }}>🔊 SevaSetu: "{systemReply}"</p>
+                  <p style={{ color: '#93c5fd', fontSize: '0.8rem', margin: 0 }}>ðŸ”Š SevaSetu: "{systemReply}"</p>
                 </div>
               </div>
               <p style={{ color: '#52525b', fontSize: '0.7rem', marginTop: '1rem' }}>
@@ -604,7 +652,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             </>
           )}
 
-          {/* ── Completed ── */}
+          {/* â”€â”€ Completed â”€â”€ */}
           {sessionState === 'completed' && (
             <>
               <div style={{
@@ -621,13 +669,13 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
                   background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>🎤 You: "{transcript}"</p>
+                  <p style={{ color: '#fca5a5', fontSize: '0.8rem', margin: 0 }}>ðŸŽ¤ You: "{transcript}"</p>
                 </div>
                 <div style={{
                   background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)',
                   borderRadius: '0.75rem', padding: '0.6rem 0.8rem', textAlign: 'left',
                 }}>
-                  <p style={{ color: '#86efac', fontSize: '0.8rem', margin: 0 }}>🔊 SevaSetu: "{systemReply}"</p>
+                  <p style={{ color: '#86efac', fontSize: '0.8rem', margin: 0 }}>ðŸ”Š SevaSetu: "{systemReply}"</p>
                 </div>
               </div>
               <button onClick={handleClose} style={{
@@ -640,7 +688,7 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
             </>
           )}
 
-          {/* ── Error ── */}
+          {/* â”€â”€ Error â”€â”€ */}
           {sessionState === 'error' && (
             <>
               <div style={{
@@ -691,3 +739,4 @@ export const VoiceEmergencyModal = ({ open = false, autoActivate = false, handle
       </>
     );
   };
+export default VoiceEmergencyModal;

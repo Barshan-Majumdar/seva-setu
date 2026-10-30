@@ -2,6 +2,39 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Map, Users as UsersIcon, Be
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const SortButton = ({ columnKey, label, flex, Icon, sortKey, sortDir, onSort }) => {
+  const isActive = sortKey === columnKey;
+  return (
+    <div style={{ flex }}>
+      <motion.button
+        onClick={() => onSort(columnKey)}
+        whileHover={{ backgroundColor: isActive ? '#e2e8f0' : '#f1f5f9', scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        style={{ 
+          display: 'inline-flex', 
+          alignItems: 'center', 
+          gap: '0.4rem', 
+          cursor: 'pointer',
+          padding: '0.4rem 0.75rem',
+          borderRadius: '8px',
+          background: isActive ? '#f1f5f9' : 'transparent',
+          border: 'none',
+          color: isActive ? '#0f172a' : '#64748b',
+          transition: 'color 0.2s'
+        }}
+      >
+        <Icon size={14} color={isActive ? '#3b82f6' : '#94a3b8'} />
+        <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {label}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', width: '14px', opacity: isActive ? 1 : 0.3 }}>
+          {isActive && sortDir === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </div>
+      </motion.button>
+    </div>
+  );
+};
+
 const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
   const [sortKey, setSortKey] = useState('occupancyPercent');
   const [sortDir, setSortDir] = useState('desc');
@@ -23,8 +56,8 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
       valA = (a.isOvercrowded ? 10 : 0) + a.criticalResources.length;
       valB = (b.isOvercrowded ? 10 : 0) + b.criticalResources.length;
     } else if (sortKey === 'name' || sortKey === 'district') {
-      valA = valA.toLowerCase();
-      valB = valB.toLowerCase();
+      valA = (valA || '').toString().toLowerCase();
+      valB = (valB || '').toString().toLowerCase();
     }
 
     if (valA < valB) return sortDir === 'asc' ? -1 : 1;
@@ -52,48 +85,15 @@ const ShelterList = ({ shelters, selectedShelterId, setSelectedShelterId }) => {
     show: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } }
   };
 
-  const SortButton = ({ columnKey, label, flex, Icon }) => {
-    const isActive = sortKey === columnKey;
-    return (
-      <div style={{ flex }}>
-        <motion.button
-          onClick={() => handleSort(columnKey)}
-          whileHover={{ backgroundColor: isActive ? '#e2e8f0' : '#f1f5f9', scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          style={{ 
-            display: 'inline-flex', 
-            alignItems: 'center', 
-            gap: '0.4rem', 
-            cursor: 'pointer',
-            padding: '0.4rem 0.75rem',
-            borderRadius: '8px',
-            background: isActive ? '#f1f5f9' : 'transparent',
-            border: 'none',
-            color: isActive ? '#0f172a' : '#64748b',
-            transition: 'color 0.2s'
-          }}
-        >
-          <Icon size={14} color={isActive ? '#3b82f6' : '#94a3b8'} />
-          <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            {label}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', width: '14px', opacity: isActive ? 1 : 0.3 }}>
-            {isActive && sortDir === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </div>
-        </motion.button>
-      </div>
-    );
-  };
-
   return (
     <div className="dashboard-card" style={{ padding: '0', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', height: 'min(800px, 85vh)' }}>
       
       {/* Premium Header / Sorting Bar */}
       <div style={{ padding: '0.75rem 1.5rem', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '1rem', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
-        <SortButton columnKey="name" label="Shelter / Location" flex="2" Icon={Map} />
-        <SortButton columnKey="occupancyPercent" label="Occupancy" flex="1.5" Icon={UsersIcon} />
+        <SortButton columnKey="name" label="Shelter / Location" flex="2" Icon={Map} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+        <SortButton columnKey="occupancyPercent" label="Occupancy" flex="1.5" Icon={UsersIcon} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
         <div style={{ flex: '1.5', display: 'flex', justifyContent: 'flex-end' }}>
-          <SortButton columnKey="criticality" label="Status & Alerts" flex="none" Icon={Bell} />
+          <SortButton columnKey="criticality" label="Status & Alerts" flex="none" Icon={Bell} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
         </div>
       </div>
 

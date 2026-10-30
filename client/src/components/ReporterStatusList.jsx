@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, AlertCircle, Clock, CheckCircle, XCircle, FileText, WifiOff } from 'lucide-react';
 import api from '../services/api';
@@ -10,25 +10,7 @@ const ReporterStatusList = () => {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
 
-  useEffect(() => {
-    fetchIssues();
-    const socketUrl = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5000';
-    const socket = io(socketUrl);
-
-    const handleRealtimeRefresh = () => {
-      console.log('[SOCKET] Need state change detected. Refreshing submission history silently...');
-      fetchIssues();
-    };
-
-    socket.on('need_created', handleRealtimeRefresh);
-    socket.on('need_updated', handleRealtimeRefresh);
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
-
-  const fetchIssues = async () => {
+  const fetchIssues = useCallback(async () => {
     try {
       setLoading(true);
       let onlineIssues = [];
@@ -54,7 +36,25 @@ const ReporterStatusList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchIssues();
+    const socketUrl = import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace('/api', '') : 'http://localhost:5000';
+    const socket = io(socketUrl);
+
+    const handleRealtimeRefresh = () => {
+      console.log('[SOCKET] Need state change detected. Refreshing submission history silently...');
+      fetchIssues();
+    };
+
+    socket.on('need_created', handleRealtimeRefresh);
+    socket.on('need_updated', handleRealtimeRefresh);
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [fetchIssues]);
 
   const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
 

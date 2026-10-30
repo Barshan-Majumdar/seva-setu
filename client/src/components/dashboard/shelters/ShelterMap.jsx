@@ -37,16 +37,16 @@ const FilterFlyTo = ({ filters }) => {
 
 const RecenterMap = ({ center, selectedShelterId, shelters }) => {
   const map = useMap();
+  const hasSetInitialViewRef = useRef(false);
+  const lastSelectedIdRef = useRef(null);
   
   useEffect(() => {
     // 1. Initial Load: Center on the data cluster
-    if (!map._hasSetInitialView && center) {
+    if (!hasSetInitialViewRef.current && center) {
       map.setView(center, 11);
-      map._hasSetInitialView = true;
+      hasSetInitialViewRef.current = true;
     }
   }, [center, map]);
-
-  const lastSelectedIdRef = useRef(null);
 
   useEffect(() => {
     // 2. Selection Change: Smoothly fly to the selected shelter

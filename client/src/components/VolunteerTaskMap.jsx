@@ -33,7 +33,6 @@ const taskIcon = new L.Icon({
 const RotatingVolunteerMarker = ({ position, heading }) => {
   const lat = safeNum(position?.lat);
   const lng = safeNum(position?.lng);
-  if (lat === null || lng === null) return null;
 
   const icon = useMemo(() => L.divIcon({
     className: 'premium-volunteer-marker',
@@ -44,6 +43,8 @@ const RotatingVolunteerMarker = ({ position, heading }) => {
            </div>`,
     iconSize: [40, 40], iconAnchor: [20, 20]
   }), [heading]);
+
+  if (lat === null || lng === null) return null;
 
   return <Marker position={[lat, lng]} icon={icon} />;
 };
@@ -62,12 +63,10 @@ const MapBoundsHandler = ({ volunteerCoords, taskCoords }) => {
       const vLng = safeNum(volunteerCoords?.lng);
 
       if (vLat !== null && vLng !== null) {
-        // Both points known — fit bounds
-        const bounds = L.latLngBounds([vLat, vLng], [tLat, tLng]);
-        map.fitBounds(bounds, { padding: [50, 50] });
+        const bounds = L.latLngBounds([ [vLat, vLng], [tLat, tLng] ]);
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
       } else {
-        // Only task location known — center on it
-        map.setView([tLat, tLng], 14);
+        map.setView([tLat, tLng], 15);
       }
       hasCentered.current = true;
     }
@@ -76,153 +75,154 @@ const MapBoundsHandler = ({ volunteerCoords, taskCoords }) => {
   return null;
 };
 
-const VolunteerTaskMap = ({ volunteerCoords, taskCoords }) => {
+const VolunteerTaskMap = ({ taskLocation, volunteerLocation, heading = 0 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [routePoints, setRoutePoints] = useState([]);
-  const [heading, setHeading] = useState(0);
-  const [displayDistance, setDisplayDistance] = useState('--');
 
-  const lastValidPos = useRef(null);
-  const smoothedDist = useRef(null);
-  const osrmTimeout = useRef(null);
+  const tLat = safeNum(taskLocation?.lat);
+  const tLng = safeNum(taskLocation?.lng);
+  const vLat = safeNum(volunteerLocation?.lat);
+  const vLng = safeNum(volunteerLocation?.lng);
 
-  // Validate task coords — this is the MINIMUM required to show the map
-  const tLat = safeNum(taskCoords?.lat);
-  const tLng = safeNum(taskCoords?.lng);
-  const hasValidTask = tLat !== null && tLng !== null;
+  const hasTask = tLat !== null && tLng !== null;
+  const hasVol = vLat !== null && vLng !== null;
 
-  // Validate volunteer coords — optional overlay
-  const vLat = safeNum(volunteerCoords?.lat);
-  const vLng = safeNum(volunteerCoords?.lng);
-  const hasValidVol = vLat !== null && vLng !== null;
+  const distance = useMemo(() => {
+    if (!hasTask || !hasVol) return null;
+    return haversineKm({ lat: vLat, lng: vLng }, { lat: tLat, lng: tLng });
+  }, [hasTask, hasVol, vLat, vLng, tLat, tLng]);
 
-  // Map center: use volunteer if available, otherwise center on task
-  const mapCenter = hasValidVol ? [vLat, vLng] : [tLat, tLng];
-
-  // 1. DISTANCE SMOOTHING
-  useEffect(() => {
-    if (!hasValidVol || !hasValidTask) return;
-    const raw = haversineKm({ lat: vLat, lng: vLng }, { lat: tLat, lng: tLng });
-    if (smoothedDist.current === null) {
-      smoothedDist.current = raw;
-    } else {
-      if (Math.abs(raw - smoothedDist.current) > 100) return;
-      smoothedDist.current = smoothedDist.current * 0.8 + raw * 0.2;
-    }
-    setDisplayDistance(smoothedDist.current.toFixed(2));
-  }, [volunteerCoords, taskCoords, hasValidVol, hasValidTask, vLat, vLng, tLat, tLng]);
-
-  // 2. HEADING
-  useEffect(() => {
-    if (!hasValidVol) return;
-    if (volunteerCoords?.heading != null) {
-      setHeading(volunteerCoords.heading);
-    } else if (lastValidPos.current) {
-      const d = haversineKm({ lat: vLat, lng: vLng }, lastValidPos.current);
-      if (d > 0.005) {
-        const dLng = toRad(vLng - lastValidPos.current.lng);
-        const y = Math.sin(dLng) * Math.cos(toRad(vLat));
-        const x = Math.cos(toRad(lastValidPos.current.lat)) * Math.sin(toRad(vLat)) -
-                  Math.sin(toRad(lastValidPos.current.lat)) * Math.cos(toRad(vLat)) * Math.cos(dLng);
-        setHeading(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
-      }
-    }
-    lastValidPos.current = { lat: vLat, lng: vLng };
-  }, [volunteerCoords, hasValidVol, vLat, vLng]);
-
-  // 3. ROUTE FETCHING (only if both points are valid)
-  const fetchRoute = useCallback(async () => {
-    if (!hasValidVol || !hasValidTask) return;
-    try {
-      const res = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${vLng},${vLat};${tLng},${tLat}?overview=full&geometries=geojson`
-      );
-      const data = await res.json();
-      if (data.code === 'Ok') {
-        setRoutePoints(data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]));
-      }
-    } catch {
-      if (hasValidVol) setRoutePoints([[vLat, vLng], [tLat, tLng]]);
-    }
-  }, [hasValidVol, hasValidTask, vLat, vLng, tLat, tLng]);
-
-  useEffect(() => {
-    if (osrmTimeout.current) clearTimeout(osrmTimeout.current);
-    osrmTimeout.current = setTimeout(fetchRoute, 2500);
-    return () => clearTimeout(osrmTimeout.current);
-  }, [fetchRoute]);
-
-  // Guard: task coords are the bare minimum
-  if (!hasValidTask) {
+  if (!hasTask) {
     return (
-      <div style={{ height: 300, borderRadius: 24, background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: '#94a3b8' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid #1e293b', borderTop: '3px solid #3b82f6', animation: 'spin 1s linear infinite' }} />
-        <p style={{ fontWeight: 600 }}>Location Data Unavailable</p>
-        <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.6 }}>No coordinates in mission record</p>
+      <div className="relative w-full h-64 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
+        <span>No location data available for this task</span>
       </div>
     );
   }
 
-  const renderMap = (isFull) => (
-    <MapContainer
-      center={mapCenter}
-      zoom={isFull ? 16 : 14}
-      style={{ height: '100%', width: '100%' }}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
-      {hasValidVol && <RotatingVolunteerMarker position={{ lat: vLat, lng: vLng }} heading={heading} />}
-      <Marker position={[tLat, tLng]} icon={taskIcon} />
-      {routePoints.length > 0 && (
-        <Polyline positions={routePoints} color="#3b82f6" weight={isFull ? 6 : 4} opacity={0.7} />
-      )}
-      <MapBoundsHandler volunteerCoords={hasValidVol ? { lat: vLat, lng: vLng } : null} taskCoords={{ lat: tLat, lng: tLng }} />
-    </MapContainer>
-  );
+  const polylinePositions = hasVol ? [[vLat, vLng], [tLat, tLng]] : [];
 
   return (
-    <>
-      <div className="mt-4 rounded-3xl overflow-hidden bg-slate-900 relative shadow-xl" style={{ height: 300 }}>
-        <div className="absolute top-4 left-4 z-[500] bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl text-[11px] font-bold text-white border border-white/10 flex items-center gap-2 pointer-events-none">
-          <Zap className="w-3 h-3 text-blue-400" />
-          {hasValidVol ? `${displayDistance} km` : 'GPS acquiring...'}
-        </div>
+    <div className={`relative rounded-xl overflow-hidden border border-slate-200 transition-all ${
+      isFullscreen ? 'fixed inset-0 z-50 rounded-none' : 'w-full h-80'
+    }`}>
+      <MapContainer
+        center={[tLat, tLng]}
+        zoom={14}
+        className="w-full h-full"
+        zoomControl={false}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-        <button
-          onClick={(e) => { e.stopPropagation(); setIsFullscreen(true); }}
-          className="absolute top-4 right-4 z-[500] bg-slate-900/90 hover:bg-slate-800 backdrop-blur-md p-3 rounded-2xl border-2 border-[#4ade80]/50 hover:border-[#4ade80] transition-all transform hover:scale-110 shadow-2xl active:scale-95"
-          title="Fullscreen Map"
-        >
-          <Maximize2 className="w-5 h-5 text-[#4ade80]" />
-        </button>
+        {hasVol && (
+          <RotatingVolunteerMarker
+            position={{ lat: vLat, lng: vLng }}
+            heading={heading}
+          />
+        )}
 
-        <div className="w-full h-full">{renderMap(false)}</div>
-      </div>
+        <Marker position={[tLat, tLng]} icon={taskIcon} />
 
-      {isFullscreen && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col">
-          <header className="p-4 bg-slate-900 flex items-center justify-between border-b border-white/5">
-            <button onClick={() => setIsFullscreen(false)} className="text-white hover:bg-white/10 p-2 rounded-xl transition-colors">
-              <X />
-            </button>
-            <span className="text-white font-bold">
-              {hasValidVol ? `${displayDistance} km to target` : 'Mission Location'}
-            </span>
-            <div className="w-6" />
-          </header>
-          <div className="flex-1">{renderMap(true)}</div>
+        {polylinePositions.length > 0 && (
+          <Polyline
+            positions={polylinePositions}
+            pathOptions={{ color: '#2563eb', weight: 4, dashArray: '8, 8', opacity: 0.7 }}
+          />
+        )}
+
+        <MapBoundsHandler
+          volunteerCoords={hasVol ? { lat: vLat, lng: vLng } : null}
+          taskCoords={{ lat: tLat, lng: tLng }}
+        />
+      </MapContainer>
+
+      {/* Distance overlay pill */}
+      {distance !== null && (
+        <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-md border border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+          <Zap className="w-3.5 h-3.5 text-blue-600" />
+          <span>{distance < 1 ? `${Math.round(distance * 1000)}m away` : `${distance.toFixed(1)}km away`}</span>
         </div>
       )}
 
+      {/* Fullscreen toggle button */}
+      <button
+        onClick={() => setIsFullscreen(!isFullscreen)}
+        className="absolute top-3 right-3 z-[1000] bg-white/95 backdrop-blur-sm p-2 rounded-lg shadow-md border border-slate-200/60 hover:bg-slate-50 transition-colors"
+        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >
+        {isFullscreen ? <X className="w-4 h-4 text-slate-700" /> : <Maximize2 className="w-4 h-4 text-slate-700" />}
+      </button>
+
+      {/* Custom Styles for Rotating Volunteer Marker */}
       <style>{`
-        .premium-volunteer-marker { display:flex; align-items:center; justify-content:center; }
-        .marker-container { position:relative; width:40px; height:40px; transition:transform 0.5s ease-out; }
-        .heading-beam { position:absolute; width:0; height:0; border-left:15px solid transparent; border-right:15px solid transparent; border-bottom:40px solid rgba(59,130,246,0.3); filter:blur(4px); top:-20px; left:5px; }
-        .pulse-ring { position:absolute; width:20px; height:20px; left:10px; top:10px; border-radius:50%; background:rgba(59,130,246,0.3); animation:marker-pulse 2s infinite; }
-        .marker-core { width:16px; height:16px; position:absolute; left:12px; top:12px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
-        .marker-blue-center { width:10px; height:10px; background:#3b82f6; border-radius:50%; }
-        @keyframes marker-pulse { 0%{transform:scale(1);opacity:1} 100%{transform:scale(3);opacity:0} }
+        .premium-volunteer-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+        .marker-container {
+          position: relative;
+          width: 40px;
+          height: 40px;
+          transition: transform 0.3s ease-out;
+        }
+        .marker-core {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          width: 20px;
+          height: 20px;
+          background: #2563eb;
+          border: 3px solid #ffffff;
+          border-radius: 50%;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2;
+        }
+        .marker-blue-center {
+          width: 6px;
+          height: 6px;
+          background: #ffffff;
+          border-radius: 50%;
+        }
+        .pulse-ring {
+          position: absolute;
+          top: 4px;
+          left: 4px;
+          width: 32px;
+          height: 32px;
+          background: rgba(37, 99, 235, 0.25);
+          border-radius: 50%;
+          animation: mapMarkerPulse 2s ease-out infinite;
+          z-index: 1;
+        }
+        .heading-beam {
+          position: absolute;
+          top: -12px;
+          left: 14px;
+          width: 0;
+          height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-bottom: 14px solid #2563eb;
+          filter: drop-shadow(0 2px 4px rgba(37, 99, 235, 0.4));
+          z-index: 3;
+        }
+        @keyframes mapMarkerPulse {
+          0% {
+            transform: scale(0.6);
+            opacity: 0.8;
+          }
+          100% {
+            transform: scale(1.6);
+            opacity: 0;
+          }
+        }
       `}</style>
-    </>
+    </div>
   );
 };
 

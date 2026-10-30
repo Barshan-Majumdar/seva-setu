@@ -5,16 +5,16 @@ import 'leaflet/dist/leaflet.css';
 
 const RecenterMap = ({ center, selectedNeed, needs }) => {
   const map = useMap();
+  const hasSetInitialViewRef = useRef(false);
+  const lastSelectedIdRef = useRef(null);
   
   useEffect(() => {
     // 1. Initial Load: Center on the data cluster
-    if (!map._hasSetInitialView && center) {
+    if (!hasSetInitialViewRef.current && center) {
       map.setView(center, 11);
-      map._hasSetInitialView = true;
+      hasSetInitialViewRef.current = true;
     }
   }, [center, map]);
-
-  const lastSelectedIdRef = useRef(null);
 
   useEffect(() => {
     // 2. Selection Change: Smoothly fly to the selected need ONLY if the ID actually changed
@@ -50,112 +50,92 @@ const deriveCenter = (needs) => {
   return [latAvg, lngAvg];
 };
 
-const NeedsHeatmap = ({ needs, volunteers = [], selectedNeedId, setSelectedNeedId, onDispatch }) => {
+const NeedsHeatmap = ({ needs, selectedNeed, onSelectNeed }) => {
   const center = useMemo(() => deriveCenter(needs), [needs]);
-  const selectedNeed = useMemo(() => needs.find(n => n.id === selectedNeedId), [needs, selectedNeedId]);
+
+  const mapNeeds = useMemo(() => {
+    return needs
+      .map((need) => ({
+        ...need,
+        lat: Number(need.lat),
+        lng: Number(need.lng),
+        urgency_score: Number(need.urgency_score),
+      }))
+      .filter((need) => !Number.isNaN(need.lat) && !Number.isNaN(need.lng));
+  }, [needs]);
 
   return (
-    <section className="dashboard-card">
-      <div className="dashboard-card-header">
-        <h2 className="dashboard-card-title">Needs Heatmap</h2>
-        <div className="dashboard-map-legend" aria-label="Disaster types">
-          <span><i style={{ background: '#f43f5e' }} /> Medical</span>
-          <span><i style={{ background: '#0ea5e9' }} /> Food</span>
-          <span><i style={{ background: '#f59e0b' }} /> Shelter</span>
-          <span><i style={{ background: '#8b5cf6' }} /> Education</span>
-          <span><i style={{ background: '#64748b' }} /> Other</span>
-          <span><i style={{ background: '#3b82f6' }} /> Volunteer</span>
-        </div>
-      </div>
-
-      <MapContainer className="dashboard-map" center={center} zoom={11} scrollWheelZoom>
-        <RecenterMap center={center} selectedNeed={selectedNeed} />
+    <div className="dashboard-card map-container">
+      <MapContainer center={center} zoom={11} scrollWheelZoom className="leaflet-map-root">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {volunteers.map((vol) => {
-          if (!vol.lat || !vol.lng) return null;
-          return (
-            <CircleMarker
-              key={vol.user_id}
-              center={[Number(vol.lat), Number(vol.lng)]}
-              radius={8}
-              pathOptions={{
-                color: '#fff',
-                fillColor: '#3b82f6',
-                fillOpacity: 0.9,
-                weight: 2,
-                className: 'volunteer-pulse-marker',
-              }}
-            >
-              <Popup>
-                <div className="space-y-1 min-w-40">
-                  <div className="flex items-center gap-2">
-                    <span style={{ background: '#3b82f6', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
-                      VOLUNTEER
-                    </span>
-                    <p className="font-semibold text-sm">{vol.name}</p>
-                  </div>
-                  <p className="text-xs text-slate-600">Phone: {vol.phone || 'N/A'}</p>
-                  <p className="text-xs text-slate-600">Status: {vol.is_available ? 'Available' : 'Busy'}</p>
-                </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
+        <RecenterMap center={center} selectedNeed={selectedNeed} needs={needs} />
 
-        {needs
-          .filter((n) => n.status !== 'completed' && n.status !== 'archived')
-          .map((need) => {
-          const isSelected = selectedNeedId === need.id;
-          const typeColor = disasterColor(need.need_type);
+        {mapNeeds.map((need) => {
+          const isSelected = selectedNeed?.id === need.id;
+          const markerColor = need.is_disaster_zone
+            ? disasterColor(need.need_type || need.is_disaster_zone)
+            : urgencyColor(need.urgency_score);
 
           return (
             <CircleMarker
               key={need.id}
-              center={[Number(need.lat), Number(need.lng)]}
-              radius={isSelected ? 14 : 10}
+              center={[need.lat, need.lng]}
+              radius={isSelected ? 14 : Math.max(6, need.urgency_score * 1.5)}
               pathOptions={{
-                color: need.is_verified ? '#fff' : typeColor, // White border for verified
-                fillColor: typeColor,
-                fillOpacity: isSelected ? 0.9 : 0.7,
-                weight: need.is_verified ? 3 : 1,
-                className: `pulse-marker ${need.is_verified ? 'verified-pulse' : ''}`,
+                color: isSelected ? '#1e293b' : markerColor,
+                fillColor: markerColor,
+                fillOpacity: isSelected ? 0.95 : 0.65,
+                weight: isSelected ? 3 : 1.5,
               }}
-              style={{ '--marker-color': typeColor }}
-              eventHandlers={{ click: () => setSelectedNeedId(need.id) }}
+              eventHandlers={{
+                click: () => onSelectNeed(need),
+              }}
             >
               <Popup>
-                <div className="space-y-2 min-w-48">
-                  <div className="flex items-center gap-2">
-                    {need.is_verified && (
-                      <span 
-                        style={{ background: '#34d399', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}
-                      >
-                        VERIFIED
-                      </span>
-                    )}
-                    <p className="font-semibold text-sm">{need.title}</p>
+                <div className="map-popup">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="font-bold text-slate-800 text-sm">{need.title}</span>
+                    <span
+                      className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white"
+                      style={{ backgroundColor: markerColor }}
+                    >
+                      Score: {need.urgency_score.toFixed(1)}
+                    </span>
                   </div>
-                  <p className="text-xs text-slate-600">Urgency: {need.urgency_score}</p>
-                  <p className="text-xs text-slate-600">People affected: {need.people_affected || 0}</p>
-                  <p className="text-xs text-slate-600">Status: {need.status}</p>
-                  <p className="text-xs text-slate-600">Reported: {formatElapsed(need.created_at)}</p>
-                  {need.description && (
-                    <p className="text-xs text-slate-500 italic mt-2 border-l-2 border-slate-200 pl-2">
-                      "{need.description}"
+
+                  <div className="space-y-1 text-xs text-slate-600 mb-3">
+                    <p className="flex justify-between">
+                      <span className="text-slate-400">Ward/District:</span>
+                      <span className="font-medium text-slate-700">
+                        {need.ward || 'Ward -'}, {need.district || 'Kolkata'}
+                      </span>
                     </p>
+                    <p className="flex justify-between">
+                      <span className="text-slate-400">Type:</span>
+                      <span className="font-medium text-slate-700 uppercase">{need.need_type}</span>
+                    </p>
+                    <p className="flex justify-between">
+                      <span className="text-slate-400">Reported:</span>
+                      <span className="font-medium text-slate-700">{formatElapsed(need.created_at)}</span>
+                    </p>
+                  </div>
+
+                  {need.is_disaster_zone && (
+                    <div className="mb-2 px-2 py-1 bg-red-50 border border-red-200 rounded text-[11px] font-semibold text-red-700 flex items-center gap-1">
+                      <span>⚠️ High Impact Disaster Zone</span>
+                    </div>
                   )}
+
                   <button
                     type="button"
-                    className="dashboard-dispatch-btn"
-                    onClick={() => onDispatch(need)}
-                    disabled={need.status !== 'open'}
-                    style={{ marginTop: '0.5rem', width: '100%' }}
+                    onClick={() => onSelectNeed(need)}
+                    className="w-full py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold tracking-wide transition-colors"
                   >
-                    Dispatch
+                    View in Triage Board
                   </button>
                 </div>
               </Popup>
@@ -163,7 +143,7 @@ const NeedsHeatmap = ({ needs, volunteers = [], selectedNeedId, setSelectedNeedI
           );
         })}
       </MapContainer>
-    </section>
+    </div>
   );
 };
 
