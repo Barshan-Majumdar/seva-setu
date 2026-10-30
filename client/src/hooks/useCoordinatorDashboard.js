@@ -14,8 +14,9 @@ export const useCoordinatorDashboard = () => {
     status: 'all',
     needType: 'all',
     district: 'all',
+    priority: 'all',
   });
-  const [sorting, setSorting] = useState({ key: 'urgency_score', direction: 'desc' });
+  const [sorting, setSorting] = useState({ key: 'priority_level', direction: 'asc' });
   const [selectedNeedId, setSelectedNeedId] = useState(null);
   
   const [matchModalNeed, setMatchModalNeed] = useState(null);
@@ -129,19 +130,63 @@ export const useCoordinatorDashboard = () => {
     return ['all', ...Array.from(all)];
   }, [needs]);
 
+  const priorityWeight = { High: 1, Medium: 2, Low: 3 };
+
   const filteredNeeds = useMemo(() => {
     return needs.filter((need) => {
       if (need.status === 'archived' || need.status === 'rejected') return false;
       if (filters.status !== 'all' && need.status !== filters.status) return false;
       if (filters.needType !== 'all' && need.need_type !== filters.needType) return false;
       if (filters.district !== 'all' && need.district !== filters.district) return false;
+      if (filters.priority && filters.priority !== 'all') {
+        const pLevel = (need.priority_level || 'Medium').toLowerCase();
+        if (pLevel !== filters.priority.toLowerCase()) return false;
+      }
       return true;
     });
   }, [filters, needs]);
 
+  const isUnresolved = (status) => ['open', 'pending', 'assigned', 'in_progress'].includes(status);
+
   const sortedNeeds = useMemo(() => {
     const list = [...filteredNeeds];
     list.sort((a, b) => {
+      // 1. Unresolved incidents always precede completed ones unless filtered
+      const unresA = isUnresolved(a.status) ? 0 : 1;
+      const unresB = isUnresolved(b.status) ? 0 : 1;
+      if (unresA !== unresB) return unresA - unresB;
+
+      // 2. Sorting by urgency_score (pure numeric urgency ranking)
+      if (sorting.key === 'urgency_score') {
+        const scoreA = Number(a.urgency_score) || 0;
+        const scoreB = Number(b.urgency_score) || 0;
+        if (scoreA !== scoreB) {
+          return sorting.direction === 'asc' ? scoreA - scoreB : scoreB - scoreA;
+        }
+        // Secondary tie-break: priority level then creation time
+        const pA = priorityWeight[a.priority_level] || 2;
+        const pB = priorityWeight[b.priority_level] || 2;
+        if (pA !== pB) return pA - pB;
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      }
+
+      // 3. Sorting by priority_level (High -> Medium -> Low)
+      if (sorting.key === 'priority_level') {
+        const pA = priorityWeight[a.priority_level] || 2;
+        const pB = priorityWeight[b.priority_level] || 2;
+        if (pA !== pB) return sorting.direction === 'asc' ? pA - pB : pB - pA;
+        // Secondary tie-break: urgency score descending
+        const scoreDiff = (Number(b.urgency_score) || 0) - (Number(a.urgency_score) || 0);
+        if (scoreDiff !== 0) return scoreDiff;
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      }
+
+      // 4. Sorting by created_at or other keys
+      if (sorting.key === 'created_at') {
+        const timeDiff = new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        return sorting.direction === 'asc' ? -timeDiff : timeDiff;
+      }
+
       const aVal = a[sorting.key];
       const bVal = b[sorting.key];
       if (aVal < bVal) return sorting.direction === 'asc' ? -1 : 1;

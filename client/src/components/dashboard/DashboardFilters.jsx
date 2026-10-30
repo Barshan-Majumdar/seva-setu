@@ -3,7 +3,12 @@ import { SlidersHorizontal, X } from 'lucide-react';
 const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) => {
   const update = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
 
-  const hasActiveFilters = filters.status !== 'all' || filters.needType !== 'all' || filters.district !== 'all' || (sorting?.key && sorting.key !== 'urgency_score');
+  const hasActiveFilters =
+    filters.status !== 'all' ||
+    filters.needType !== 'all' ||
+    filters.district !== 'all' ||
+    (filters.priority && filters.priority !== 'all') ||
+    (sorting?.key && sorting.key !== 'priority_level');
 
   return (
     <section className="dashboard-sidebar-card">
@@ -27,12 +32,30 @@ const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) 
         <select
           id="sort-filter"
           className="input-field"
-          value={sorting?.key || 'urgency_score'}
+          value={sorting?.key || 'priority_level'}
           onChange={(e) => setSort(e.target.value)}
           style={{ cursor: 'pointer', width: '100%', marginTop: '0.3rem' }}
         >
-          <option value="urgency_score">Highest Urgency</option>
+          <option value="priority_level">🚨 High Priority First</option>
+          <option value="urgency_score">Highest Urgency Score</option>
           <option value="created_at">Most Recent</option>
+        </select>
+      </div>
+
+      {/* Priority Level */}
+      <div>
+        <label className="dashboard-filter-label" htmlFor="priority-filter">Emergency Priority</label>
+        <select
+          id="priority-filter"
+          className="input-field"
+          value={filters.priority || 'all'}
+          onChange={(e) => update('priority', e.target.value)}
+          style={{ cursor: 'pointer', width: '100%', marginTop: '0.3rem' }}
+        >
+          <option value="all">All Priorities</option>
+          <option value="high">🔴 High Priority</option>
+          <option value="medium">🟡 Medium Priority</option>
+          <option value="low">🔵 Low Priority</option>
         </select>
       </div>
 
@@ -96,8 +119,8 @@ const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) 
       {hasActiveFilters && (
         <button
           onClick={() => {
-            setFilters({ status: 'all', needType: 'all', district: 'all' });
-            setSort('urgency_score');
+            setFilters({ status: 'all', needType: 'all', district: 'all', priority: 'all' });
+            setSort('priority_level');
           }}
           style={{
             marginTop: '0.15rem',
