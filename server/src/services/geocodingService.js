@@ -147,14 +147,14 @@ async function resolveLocation({ lat, lng, spokenDistrict, spokenArea, spokenLan
   }
 
   // 2. Overlay or enhance with spoken NLP clues if user explicitly said their location
-  const finalDistrict = spokenDistrict?.trim() || resolved?.district || 'Kolkata';
-  let finalArea = spokenArea?.trim() || resolved?.area || 'General Area';
+  const finalDistrict = spokenDistrict?.trim() || resolved?.district || (lat != null ? 'Kolkata' : 'Unspecified District');
+  let finalArea = spokenArea?.trim() || resolved?.area || (lat != null ? 'General Area' : 'Unspecified Area');
 
   if (spokenLandmark?.trim()) {
     finalArea = `${finalArea} (Near ${spokenLandmark.trim()})`;
   }
 
-  const fullAddress = resolved?.fullAddress || `${finalArea}, ${finalDistrict}, India`;
+  const fullAddress = resolved?.fullAddress || (lat != null ? `${finalArea}, ${finalDistrict}, India` : 'GPS Coordinates Unavailable — Refer to Landmark');
 
   return {
     district: finalDistrict,
@@ -163,7 +163,7 @@ async function resolveLocation({ lat, lng, spokenDistrict, spokenArea, spokenLan
     fullAddress,
     lat: lat != null ? Number(lat) : null,
     lng: lng != null ? Number(lng) : null,
-    source: resolved?.source || (spokenDistrict ? 'spoken_transcript' : 'default_fallback')
+    source: resolved?.source || (spokenDistrict ? 'spoken_transcript' : (lat != null ? 'default_fallback' : 'location_unavailable'))
   };
 }
 

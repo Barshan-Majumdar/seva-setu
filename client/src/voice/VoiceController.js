@@ -16,6 +16,7 @@ import { Capacitor } from '@capacitor/core';
 import { v4 as uuidv4 } from 'uuid';
 import { EmergencyManager } from '../services/EmergencyManager.js';
 import { t, getLocale } from './i18n.js';
+import { evaluateEmergencyIntent } from './EmergencyIntentDetector.js';
 
 export const VoiceState = {
   OFF: 'OFF',
@@ -143,6 +144,15 @@ class VoiceController {
     this._silenceNudgeCount = 0;
     this._silenceNudgeTimer = null;
 
+    // Autodispatch & Segment Buffer Lifecycle
+    this._turnAccumulator = '';
+    this._interimBuffer = '';
+    this._lastProcessedResultIndex = 0;
+    this._hasAutoDispatched = false;
+    this._stabilityTimer = null;
+    this._candidateIntent = null;
+    this._sessionTranscriptHistory = [];
+
     // Pre-cache voices and set up global gesture unlock
     if (typeof window !== 'undefined') {
       const unlockEvents = ['click', 'keydown', 'touchstart', 'pointerdown'];
@@ -227,6 +237,8 @@ class VoiceController {
       isSpeaking: this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING,
       monitorPeakLevel: this._monitorPeakLevel,
       silentMicWarning: this._silentMicWarned,
+      hasAutoDispatched: this._hasAutoDispatched,
+      candidateIntent: this._candidateIntent,
     };
   }
 
@@ -748,31 +760,87 @@ class VoiceController {
         if (this._sessionId !== sessionId) return;
         if (this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING) return;
 
-        let sessionFinal = '';
-        let sessionInterim = '';
-
-        for (let i = 0; i < event.results.length; i++) {
-          const res = event.results[i];
-          if (res.isFinal) sessionFinal += res[0].transcript + ' ';
-          else sessionInterim += res[0].transcript;
-        }
-
-        const fullPhrase = (sessionFinal.trim() + ' ' + sessionInterim.trim()).trim();
-        if (!fullPhrase) return;
-
-        // ⚡ INSTANT WAKE DETECTION: If waiting for wake word, trigger immediately on partial/final speech!
+        // 1. Wake Detection if ARMED_LISTENING_FOR_WAKE
         if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
-          if (this._isWakeWord(fullPhrase)) {
-            console.log('[VoiceController] ⚡ INSTANT WAKE WORD via WebSpeech:', fullPhrase);
-            const trailingSpeech = this._stripWakePrefix(fullPhrase);
+          let wakeText = '';
+          for (let i = 0; i < event.results.length; i++) {
+            wakeText += event.results[i][0].transcript + ' ';
+          }
+          wakeText = wakeText.trim();
+          if (wakeText && this._isWakeWord(wakeText)) {
+            console.log('[VoiceController] ⚡ INSTANT WAKE WORD via WebSpeech:', wakeText);
+            const trailingSpeech = this._stripWakePrefix(wakeText);
             this.triggerEmergencySession('VOICE_WAKE', trailingSpeech);
             return;
           }
+          return;
         }
 
-        // Visual feedback during conversation turns
-        this._partialTranscript = fullPhrase;
-        this._notify();
+        // 2. Continuous Emergency Listening in LISTENING_USER
+        if (this._state === VoiceState.LISTENING_USER) {
+          let turnFinalText = '';
+          let liveInterimText = '';
+
+          // Accumulate only results from the current active turn
+          for (let i = this._lastProcessedResultIndex; i < event.results.length; i++) {
+            const res = event.results[i];
+            if (res.isFinal) {
+              turnFinalText += res[0].transcript.trim() + ' ';
+            } else {
+              liveInterimText += res[0].transcript;
+            }
+          }
+
+          this._interimBuffer = liveInterimText;
+          const previewText = (this._turnAccumulator + ' ' + turnFinalText + ' ' + liveInterimText).trim();
+          if (!previewText) return;
+
+          this._partialTranscript = previewText;
+          this._notify();
+
+          // Interim candidate detection for responsive visual indicators
+          const liveCandidate = evaluateEmergencyIntent(previewText);
+          if (liveCandidate.isEmergency) {
+            this._candidateIntent = liveCandidate;
+          }
+
+          // When final segment(s) arrive, evaluate complete statement
+          if (turnFinalText.trim()) {
+            this._turnAccumulator = (this._turnAccumulator + ' ' + turnFinalText).trim();
+            this._lastProcessedResultIndex = event.results.length;
+
+            console.log('[VoiceController] 📝 Accumulated Final Speech:', this._turnAccumulator);
+            const intentResult = evaluateEmergencyIntent(this._turnAccumulator);
+
+            // Handle spoken cancellation immediately
+            if (intentResult.intent === 'CANCEL' || intentResult.intent === 'SAFE') {
+              console.log('[VoiceController] Spoken cancellation / safe signal:', intentResult.intent);
+              clearTimeout(this._stabilityTimer);
+              const cancelText = this._turnAccumulator;
+              this._turnAccumulator = '';
+              this.commitUserTurn(cancelText, intentResult);
+              return;
+            }
+
+            // If emergency detected on stable final text, trigger multi-signal stability gate
+            if (intentResult.isEmergency && !this._hasAutoDispatched) {
+              clearTimeout(this._stabilityTimer);
+              const stabilityDelay = (intentResult.facts.injuredCount || intentResult.facts.peopleCount) ? 800 : 1000;
+              
+              console.log(`[VoiceController] 🚨 Emergency Candidate Detected (${intentResult.intent}). Stability window: ${stabilityDelay}ms...`);
+
+              this._stabilityTimer = setTimeout(() => {
+                if (this._state === VoiceState.LISTENING_USER && !this._hasAutoDispatched) {
+                  console.log('[VoiceController] 🚀 Stability gate verified! Triggering zero-tap auto-dispatch:', this._turnAccumulator);
+                  this._hasAutoDispatched = true;
+                  const finalSpeech = this._turnAccumulator;
+                  this._turnAccumulator = '';
+                  this.commitUserTurn(finalSpeech, intentResult);
+                }
+              }, stabilityDelay);
+            }
+          }
+        }
       };
 
       rec.onerror = (e) => {
@@ -979,6 +1047,18 @@ class VoiceController {
 
   async arm() {
     if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) return;
+    this._turnAccumulator = '';
+    this._interimBuffer = '';
+    this._lastProcessedResultIndex = 0;
+    this._hasAutoDispatched = false;
+    this._candidateIntent = null;
+    clearTimeout(this._stabilityTimer);
+    clearTimeout(this._silenceTimer);
+    if (typeof window === 'undefined') {
+      this._state = VoiceState.ARMED_LISTENING_FOR_WAKE;
+      this._notify();
+      return;
+    }
     await this.unlockAudio();
     this._transition(VoiceState.ARMED_LISTENING_FOR_WAKE, { error: null });
     this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
@@ -1007,6 +1087,16 @@ class VoiceController {
     this._transcript = initialTranscript;
     this._partialTranscript = '';
     this._currentTurnText = '';
+    this._turnAccumulator = initialTranscript || '';
+    this._interimBuffer = '';
+    this._lastProcessedResultIndex = 0;
+    this._hasAutoDispatched = false;
+    this._candidateIntent = null;
+    clearTimeout(this._stabilityTimer);
+    clearTimeout(this._silenceTimer);
+
+    // Pre-warm GPS location in the background while user begins speaking
+    EmergencyManager.prewarmLocation?.();
 
     this._transition(VoiceState.TRIGGERED, {
       clientEventId,
@@ -1015,7 +1105,7 @@ class VoiceController {
     });
 
     console.log('[VoiceController] 🚨 Minimum SOS creation initiated:', clientEventId);
-    EmergencyManager.triggerEmergency(triggerType).catch(err => {
+    EmergencyManager.triggerEmergency(triggerType, null, clientEventId).catch(err => {
       console.warn('[VoiceController] Minimum SOS non-blocking trigger notice:', err);
     });
 
@@ -1041,11 +1131,16 @@ class VoiceController {
     }
   }
 
-  async commitUserTurn(spokenText) {
+  async commitUserTurn(spokenText, preEvaluatedIntent = null) {
     if (!spokenText || !spokenText.trim()) return;
+    this._hasAutoDispatched = true;
     clearTimeout(this._silenceTimer);
+    clearTimeout(this._stabilityTimer);
     clearTimeout(this._silenceNudgeTimer);
     
+    // Clear PCM chunks to bypass unnecessary Whisper CPU processing on Web Speech success
+    this._pcmChunks = [];
+
     const extractGen = this._transition(VoiceState.EXTRACTING, {
       transcript: spokenText,
       partialTranscript: spokenText
@@ -1053,29 +1148,44 @@ class VoiceController {
     await this._stopRecognitionAsync();
 
     try {
-      const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
-      const aiResponse = await fetch(`${AI_URL}/extract-facts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript: spokenText,
-          language: this._locale || 'en-IN'
-        })
-      });
+      let nlpResult = preEvaluatedIntent;
 
-      if (!aiResponse.ok) {
-        throw new Error(`AI returned HTTP ${aiResponse.status}`);
+      // If preEvaluatedIntent is not provided or incomplete, try AI service
+      if (!nlpResult || !nlpResult.facts) {
+        try {
+          const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
+          const aiResponse = await fetch(`${AI_URL}/extract-facts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transcript: spokenText,
+              language: this._locale || 'en-IN'
+            })
+          });
+          if (aiResponse.ok) {
+            nlpResult = await aiResponse.json();
+          }
+        } catch (_) {}
       }
 
-      const nlpResult = await aiResponse.json();
-      console.log('[VoiceController] NLP Analysis:', nlpResult);
+      // If AI service failed, fall back to local EmergencyIntentDetector
+      if (!nlpResult) {
+        nlpResult = evaluateEmergencyIntent(spokenText);
+      }
+
+      console.log('[VoiceController] Final NLP Analysis:', nlpResult);
 
       if (this._generation !== extractGen) return;
 
       const intent = (nlpResult.intent || 'UNKNOWN').toUpperCase();
-      const reply = nlpResult.reply || 'Understood.';
+      const isEmergency = intent !== 'SAFE' && intent !== 'CANCEL' && intent !== 'INFO' && intent !== 'QUERY_DETAILS';
+      const defaultReply = isEmergency 
+        ? 'We have received your distress signal. You are not alone. Assistance is being coordinated.' 
+        : 'Understood.';
+      const reply = nlpResult.reply || defaultReply;
 
       if (intent === 'SAFE' || intent === 'CANCEL') {
+        EmergencyManager.cancelEmergency?.(this._clientEventId, 'USER_DECLARED_SAFE');
         const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: reply });
         await this._speakHalfDuplex(reply);
         if (this._generation !== promptGen) return;
@@ -1089,6 +1199,8 @@ class VoiceController {
         if (this._generation !== promptGen) return;
         this._partialTranscript = '';
         this._transcript = '';
+        this._turnAccumulator = '';
+        this._hasAutoDispatched = false;
         this._transition(VoiceState.LISTENING_USER);
         await this._startRecognition(VoiceState.LISTENING_USER);
         return;
@@ -1100,19 +1212,28 @@ class VoiceController {
         if (this._generation !== promptGen) return;
         this._partialTranscript = '';
         this._transcript = '';
+        this._turnAccumulator = '';
+        this._hasAutoDispatched = false;
         this._transition(VoiceState.LISTENING_USER);
         await this._startRecognition(VoiceState.LISTENING_USER);
         return;
       }
 
+      // ── Dispatch to Backend ──
       const loc = await EmergencyManager.getBestAvailableLocation().catch(() => null);
       const enrichResult = await EmergencyManager.enrichEmergencyWithVoice(this._clientEventId, spokenText, loc).catch(() => null);
 
+      const emergencyMessage = "We have received your distress signal. You are not alone. Assistance is being coordinated.";
+      const hasGps = loc?.lat != null && loc?.lng != null;
+      const spokenAck = hasGps 
+        ? emergencyMessage 
+        : `${emergencyMessage} GPS coordinates unavailable; your report has been escalated directly to emergency coordinators.`;
+
       const confirmGen = this._transition(VoiceState.CONFIRMING, {
         emergencyData: nlpResult,
-        systemReply: reply
+        systemReply: spokenAck
       });
-      await this._speakHalfDuplex(reply);
+      await this._speakHalfDuplex(spokenAck);
 
       if (this._generation !== confirmGen) return;
 
@@ -1124,7 +1245,9 @@ class VoiceController {
         this._partialTranscript = '';
         this._transcript = '';
         this._systemReply = '';
-        this.arm(); // Automatically resets state to ARMED_LISTENING_FOR_WAKE, dismissing the modal popup
+        this._turnAccumulator = '';
+        this._hasAutoDispatched = false;
+        this.arm();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('sevasetu:emergency-closed', { detail: enrichResult }));
         }
@@ -1138,13 +1261,13 @@ class VoiceController {
 
       if (this._generation !== fallbackGen) return;
 
-      // Auto-close session & dismiss popup after confirmation (+ 2.5s display grace period)
       await new Promise((r) => setTimeout(r, 2500));
       if (this._generation === fallbackGen) {
-        console.log('[VoiceController] Auto-closing fallback emergency session.');
         this._partialTranscript = '';
         this._transcript = '';
         this._systemReply = '';
+        this._turnAccumulator = '';
+        this._hasAutoDispatched = false;
         this.arm();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('sevasetu:emergency-closed'));
@@ -1155,6 +1278,9 @@ class VoiceController {
 
   cancelSession() {
     console.log('[VoiceController] Cancelling active session...');
+    if (this._clientEventId) {
+      EmergencyManager.cancelEmergency?.(this._clientEventId, 'USER_CANCELLED');
+    }
     clearTimeout(this._silenceTimer);
     clearTimeout(this._silenceNudgeTimer);
     this.arm();

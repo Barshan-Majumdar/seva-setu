@@ -400,8 +400,8 @@ export function VoiceEmergencyModal({ autoActivate = false, handleClose: parentH
               </div>
             </div>
 
-            {/* Quick Submit Tap Hint */}
-            {voice.state === VoiceState.LISTENING_USER && !voice.isTranscribing && (
+            {/* Quick Submit Tap Hint (Hidden during auto-dispatch) */}
+            {voice.state === VoiceState.LISTENING_USER && !voice.isTranscribing && !voice.hasAutoDispatched && !voice.candidateIntent?.isEmergency && (
               <button
                 type="button"
                 onClick={() => voice.finishSpeakingNow()}
@@ -444,8 +444,12 @@ export function VoiceEmergencyModal({ autoActivate = false, handleClose: parentH
             >
               {voice.state === VoiceState.TRIGGERED && t('statusTriggered', voice.locale)}
               {voice.state === VoiceState.PROMPTING && t('statusPrompting', voice.locale)}
-              {voice.state === VoiceState.LISTENING_USER && (voice.isTranscribing ? 'Processing your voice...' : t('statusListening', voice.locale))}
-              {voice.state === VoiceState.EXTRACTING && t('statusExtracting', voice.locale)}
+              {voice.state === VoiceState.LISTENING_USER && (
+                voice.candidateIntent?.isEmergency 
+                  ? '🚨 Emergency Detected • Submitting...' 
+                  : (voice.isTranscribing ? 'Processing your voice...' : t('statusListening', voice.locale))
+              )}
+              {voice.state === VoiceState.EXTRACTING && '🚨 Emergency Detected • Submitting...'}
               {voice.state === VoiceState.CONFIRMING && t('statusConfirming', voice.locale)}
               {voice.state === VoiceState.STAY_ON_LINE && t('statusStayOnLine', voice.locale)}
             </h2>

@@ -16,6 +16,8 @@ const activeEmergencyStore = localforage.createInstance({
 
 // Internal state — not on the exported object to avoid `this` confusion
 let _retryInterval = null;
+let _prewarmedLocation = null;
+let _prewarmedLocationTime = 0;
 
 const API_URL = import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
 const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
@@ -37,8 +39,33 @@ export const EmergencyManager = {
    * Phase 1: Create deterministic emergency locally before network/AI.
    * This MUST succeed even if network, GPS, and AI are all unavailable.
    */
-  async triggerEmergency(triggerType = 'BUTTON', location = null) {
-    const clientEventId = uuidv4();
+  prewarmLocation() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          _prewarmedLocation = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracyMeters: pos.coords.accuracy,
+            source: 'browser',
+            confidence: 0.95
+          };
+          _prewarmedLocationTime = Date.now();
+          console.log('[EmergencyManager] 📍 Location pre-warmed successfully');
+        },
+        () => {},
+        { timeout: 7000, maximumAge: 30000, enableHighAccuracy: true }
+      );
+    } catch (_) {}
+  },
+
+  /**
+   * Phase 1: Create deterministic emergency locally before network/AI.
+   * This MUST succeed even if network, GPS, and AI are all unavailable.
+   */
+  async triggerEmergency(triggerType = 'BUTTON', location = null, explicitClientEventId = null) {
+    const clientEventId = explicitClientEventId || uuidv4();
     
     const emergencyEvent = {
       clientEventId,
@@ -66,19 +93,27 @@ export const EmergencyManager = {
   },
 
   async getBestAvailableLocation() {
+    if (_prewarmedLocation && (Date.now() - _prewarmedLocationTime < 60000)) {
+      return _prewarmedLocation;
+    }
     return new Promise((resolve) => {
-      if (!navigator.geolocation) {
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
         resolve(null);
         return;
       }
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracyMeters: pos.coords.accuracy,
-          source: 'browser',
-          confidence: 0.9
-        }),
+        (pos) => {
+          const loc = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracyMeters: pos.coords.accuracy,
+            source: 'browser',
+            confidence: 0.9
+          };
+          _prewarmedLocation = loc;
+          _prewarmedLocationTime = Date.now();
+          resolve(loc);
+        },
         () => resolve(null), // Fail silently — GPS failure must NOT block SOS
         { timeout: 5000, maximumAge: 60000 }
       );
@@ -252,6 +287,22 @@ export const EmergencyManager = {
     } catch (err) {
       // Enrichment failure is non-fatal. The minimum SOS is already saved.
       console.error('[EmergencyManager] Enrichment failed (SOS is still active):', err.message);
+    }
+  },
+
+  async cancelEmergency(clientEventId, reason = 'USER_CANCELLED') {
+    if (!clientEventId) return;
+    try {
+      console.log('[EmergencyManager] Cancelling emergency session:', clientEventId);
+      await fetch(`${API_URL}/api/emergency/${clientEventId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      }).catch(() => {});
+      await activeEmergencyStore.removeItem(clientEventId).catch(() => {});
+      await offlineQueue.removeItem(clientEventId).catch(() => {});
+    } catch (err) {
+      console.warn('[EmergencyManager] Cancellation notice:', err.message);
     }
   }
 };
