@@ -38,17 +38,9 @@ export function VoiceEmergencyModal({ autoActivate = false, handleClose: parentH
     }
   }, []);
 
-  const handlePillClick = async (e) => {
+  const handlePillClick = (e) => {
     e.stopPropagation();
     voice.unlockAudio();
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-      } catch (err) {
-        console.warn('[VoiceEmergencyModal] getUserMedia notice:', err);
-      }
-    }
     voice.triggerEmergency('BUTTON');
   };
 
