@@ -145,3 +145,16 @@ test('VoiceState enum contains all required states', () => {
   }
 });
 
+test('VoiceController singleton exposes complete snapshot contract', async () => {
+  const { voiceController } = await import('./VoiceController.js');
+  const snap = voiceController.getSnapshot();
+  assert.ok(typeof snap === 'object');
+  assert.ok('state' in snap);
+  assert.ok('generation' in snap);
+  assert.ok('transcript' in snap);
+  assert.ok('partialTranscript' in snap);
+  assert.ok('systemReply' in snap);
+  assert.ok('isListening' in snap);
+  assert.ok('isSpeaking' in snap);
+});
+

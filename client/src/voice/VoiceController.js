@@ -56,6 +56,9 @@ class VoiceController {
 
     // Adapters & audio hardware handles
     this._recognition = null;
+    this._sessionId = 0;
+    this._isStarting = false;
+    this._sessionStartTime = 0;
     this._audioContext = null;
     this._analyser = null;
     this._mediaStream = null;
@@ -63,6 +66,7 @@ class VoiceController {
     this._restartTimer = null;
     this._backoffMs = 500;
     this._currentTurnText = '';
+    this._accumulatedTurn = '';
     this._cachedVoices = [];
 
     // Pre-cache voices and set up global gesture unlock
@@ -242,8 +246,10 @@ class VoiceController {
   _stopRecognition() {
     clearTimeout(this._silenceTimer);
     clearTimeout(this._restartTimer);
+    this._restartTimer = null;
     this._audioLevel = 0.0;
     this._isRecognitionActive = false;
+    this._isStarting = false;
 
     if (this._recognition) {
       try {
@@ -258,23 +264,85 @@ class VoiceController {
     }
   }
 
-  _startRecognition(expectedState) {
+  async _stopRecognitionAsync() {
+    clearTimeout(this._silenceTimer);
+    clearTimeout(this._restartTimer);
+    this._restartTimer = null;
+    this._audioLevel = 0.0;
+    this._isRecognitionActive = false;
+    this._isStarting = false;
+
+    if (!this._recognition) {
+      return;
+    }
+
+    const r = this._recognition;
+    this._recognition = null;
+
+    await new Promise((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+
+      const safetyTimer = setTimeout(done, 250);
+
+      r.onend = () => {
+        clearTimeout(safetyTimer);
+        done();
+      };
+      r.onerror = () => {
+        clearTimeout(safetyTimer);
+        done();
+      };
+
+      try {
+        r.abort();
+      } catch (_) {
+        clearTimeout(safetyTimer);
+        done();
+      }
+    });
+
+    // 100ms hardware breather so OS audio handle settles
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  async _startRecognition(expectedState) {
     if (this._state !== expectedState) return;
 
-    // Seamless stream reuse: if recognition is already running, keep the warm audio stream active!
+    // Seamless stream reuse: if recognition is already running and active, keep it!
     if (this._recognition && this._isRecognitionActive) {
       console.log(`[VoiceController] 🎙️ Reusing active microphone stream for state: ${this._state}`);
       return;
     }
 
-    this._stopRecognition();
+    if (this._isStarting) {
+      return;
+    }
+
+    this._isStarting = true;
+
+    if (this._recognition) {
+      await this._stopRecognitionAsync();
+    }
+
+    if (this._state !== expectedState) {
+      this._isStarting = false;
+      return;
+    }
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
+      this._isStarting = false;
       this._transition(VoiceState.OFF, { error: 'Web Speech API not supported in this browser' });
       return;
     }
 
+    const sessionId = ++this._sessionId;
     const currentGen = this._generation;
 
     try {
@@ -282,26 +350,35 @@ class VoiceController {
       rec.continuous = true;
       rec.interimResults = true;
       rec.maxAlternatives = 1;
-      rec.lang = 'en-IN'; // Optimized for Indian English, accent variations, and local terms
+      // Use user/system locale with fallback to en-IN or en-US
+      rec.lang = this._locale || (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
 
       rec.onstart = () => {
+        if (this._sessionId !== sessionId) return;
+        this._isStarting = false;
         this._isRecognitionActive = true;
+        this._sessionStartTime = Date.now();
         this._backoffMs = 500;
-        console.log(`[VoiceController] 🎙️ Mic active and listening in state: ${this._state}`);
+        console.log(`[VoiceController] 🎙️ Mic active and listening in state: ${this._state} (lang: ${rec.lang})`);
         this._notify();
       };
 
       rec.onaudiostart = () => {
+        if (this._sessionId !== sessionId) return;
         console.log('[VoiceController] 🔊 Audio hardware capture started');
       };
 
       rec.onspeechstart = () => {
+        if (this._sessionId !== sessionId) return;
         console.log('[VoiceController] 🗣️ Speech detected by browser');
       };
 
       rec.onresult = (event) => {
-        // If system is speaking or in software mute, suppress audio feedback without killing mic
-        if (this._isSpeakingMuted || this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING) {
+        if (this._sessionId !== sessionId) return;
+        if (this._generation !== currentGen) return;
+
+        // Software half-duplex mute: don't process speech during TTS
+        if (this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING) {
           console.log('[VoiceController] 🔇 Software suppressed audio feedback while speaking');
           return;
         }
@@ -323,38 +400,53 @@ class VoiceController {
       };
 
       rec.onerror = (event) => {
+        if (this._sessionId !== sessionId) return;
         const err = event?.error;
         console.warn(`[VoiceController] STT Error: ${err} in state: ${this._state}`);
 
         if (err === 'no-speech' || err === 'aborted') {
-          return; // benign
+          return; // Normal: browser silence timeout or intentional abort
         }
 
-        if (err === 'not-allowed' || err === 'service-not-allowed') {
+        if (err === 'not-allowed') {
+          this._isStarting = false;
           this._isRecognitionActive = false;
-          this._stopRecognition();
+          this._stopRecognitionAsync();
           this._transition(VoiceState.OFF, { error: 'Microphone permission required' });
           return;
         }
 
-        if (err === 'network' || err === 'audio-capture' || err === 'language-not-supported') {
-          this._backoffMs = Math.min(this._backoffMs * 1.5, 4000);
+        // For service-not-allowed / network / audio-capture: back off gracefully
+        if (err === 'network' || err === 'audio-capture' || err === 'service-not-allowed' || err === 'language-not-supported') {
+          this._backoffMs = Math.min(this._backoffMs * 1.5, 5000);
+          if (err === 'language-not-supported' && rec.lang !== 'en-US') {
+            this._locale = 'en-US';
+          }
         }
       };
 
       rec.onend = () => {
+        if (this._sessionId !== sessionId) return;
+        this._isStarting = false;
         this._isRecognitionActive = false;
         this._recognition = null;
         console.log(`[VoiceController] Mic session ended in state: ${this._state}`);
 
-        // Calm restart if we should still be listening
+        // Rapid loop protection: if the session ended in under 800ms, wait at least 1500ms
+        const duration = Date.now() - (this._sessionStartTime || 0);
+        let delay = this._backoffMs;
+        if (duration < 800) {
+          delay = Math.max(delay, 1500);
+        }
+
+        // Restart ONLY if we should still be listening
         if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
           clearTimeout(this._restartTimer);
           this._restartTimer = setTimeout(() => {
             if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
               this._startRecognition(this._state);
             }
-          }, this._backoffMs);
+          }, delay);
         }
       };
 
@@ -362,13 +454,15 @@ class VoiceController {
       rec.start();
     } catch (err) {
       console.warn('[VoiceController] Failed to start recognition:', err);
+      this._isStarting = false;
       this._isRecognitionActive = false;
+      this._recognition = null;
       clearTimeout(this._restartTimer);
       this._restartTimer = setTimeout(() => {
         if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
           this._startRecognition(expectedState);
         }
-      }, 1000);
+      }, 1500);
     }
   }
 
@@ -422,7 +516,7 @@ class VoiceController {
       this._currentTurnText = phrase;
       this._notify();
 
-      // Silence-based end-of-utterance commitment (1800ms natural breathing space)
+      // Silence-based end-of-utterance commitment (2200ms natural breathing space per spec §2.2)
       clearTimeout(this._silenceTimer);
       this._silenceTimer = setTimeout(() => {
         if (this._generation === gen && this._currentTurnText) {
@@ -431,7 +525,7 @@ class VoiceController {
           this._currentTurnText = '';
           this.commitUserTurn(finalTurn);
         }
-      }, 1800);
+      }, 2200);
     }
   }
 
@@ -441,8 +535,8 @@ class VoiceController {
   async _speakHalfDuplex(text) {
     const currentGen = this._generation;
 
-    // 1. Unconditionally stop STT so the assistant never hears itself
-    this._stopRecognition();
+    // 1. Unconditionally stop STT cleanly so assistant never hears itself
+    await this._stopRecognitionAsync();
 
     console.log(`[VoiceController] 🔊 Half-duplex TTS Speaking: "${text}"`);
 
@@ -568,23 +662,29 @@ class VoiceController {
       console.warn('[VoiceController] Minimum SOS non-blocking trigger notice:', err);
     });
 
-    // 2. Speak greeting prompt aloud
-    const promptText = t('greeting', this._locale);
-    const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: promptText });
-    await this._speakHalfDuplex(promptText);
+    try {
+      // 2. Speak greeting prompt aloud
+      const promptText = t('greeting', this._locale);
+      const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: promptText });
+      await this._speakHalfDuplex(promptText);
 
-    if (this._generation !== promptGen) return;
+      if (this._generation !== promptGen) return;
 
-    // 3. If the user already gave their emergency details alongside the wake word:
-    if (initialTranscript && initialTranscript.length > 8) {
-      this.commitUserTurn(initialTranscript);
-      return;
+      // 3. If the user already gave their emergency details alongside the wake word:
+      if (initialTranscript && initialTranscript.length > 8) {
+        this.commitUserTurn(initialTranscript);
+        return;
+      }
+
+      // 4. Otherwise, enter active listening for user description
+      console.log('[VoiceController] 🎙️ Opening microphone for user response...');
+      this._transition(VoiceState.LISTENING_USER, { systemReply: '' });
+      await this._startRecognition(VoiceState.LISTENING_USER);
+    } catch (err) {
+      console.warn('[VoiceController] Error in emergency session turn:', err);
+      this._transition(VoiceState.LISTENING_USER, { systemReply: '' });
+      await this._startRecognition(VoiceState.LISTENING_USER);
     }
-
-    // 4. Otherwise, enter active listening for user description
-    console.log('[VoiceController] 🎙️ Opening microphone for user response...');
-    this._transition(VoiceState.LISTENING_USER, { systemReply: '' });
-    this._startRecognition(VoiceState.LISTENING_USER);
   }
 
   /**
@@ -596,7 +696,7 @@ class VoiceController {
       transcript: spokenText,
       partialTranscript: spokenText
     });
-    this._stopRecognition();
+    await this._stopRecognitionAsync();
 
     try {
       const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
@@ -637,7 +737,7 @@ class VoiceController {
         if (this._generation !== promptGen) return;
         // Continue listening for emergency
         this._transition(VoiceState.LISTENING_USER);
-        this._startRecognition(VoiceState.LISTENING_USER);
+        await this._startRecognition(VoiceState.LISTENING_USER);
         return;
       }
 
@@ -647,7 +747,7 @@ class VoiceController {
         await this._speakHalfDuplex(reply);
         if (this._generation !== promptGen) return;
         this._transition(VoiceState.LISTENING_USER);
-        this._startRecognition(VoiceState.LISTENING_USER);
+        await this._startRecognition(VoiceState.LISTENING_USER);
         return;
       }
 

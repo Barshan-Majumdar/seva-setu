@@ -86,18 +86,25 @@ export async function requestAllPermissions() {
 async function requestBrowserPermissions() {
   const results = { camera: 'unknown', location: 'unknown', microphone: 'unknown' };
 
-  try {
-    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    micStream.getTracks().forEach(t => t.stop());
-    results.microphone = 'granted';
-  } catch { results.microphone = 'denied'; }
+  if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
+    try {
+      const micStatus = await navigator.permissions.query({ name: 'microphone' });
+      results.microphone = micStatus.state;
+    } catch (_) {
+      results.microphone = 'prompt';
+    }
+  }
 
-  try {
-    await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-    });
-    results.location = 'granted';
-  } catch { results.location = 'denied'; }
+  if (typeof navigator !== 'undefined' && navigator.geolocation) {
+    try {
+      await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, maximumAge: 60000 });
+      });
+      results.location = 'granted';
+    } catch (_) {
+      results.location = 'denied';
+    }
+  }
 
   // Camera is requested when the user actually takes a photo
   results.camera = 'deferred';
