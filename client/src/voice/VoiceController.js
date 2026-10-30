@@ -2,11 +2,14 @@
  * VoiceController — Single Deterministic Voice Assistant Architecture for SevaSetu
  * 
  * Rules:
- *  1. SINGLE OWNER: Exactly ONE speech recognition instance and ONE TTS stream at any time.
- *  2. HALF-DUPLEX: STT is unconditionally stopped while TTS speaks, plus a 250ms acoustic guard.
- *  3. EXPLICIT FSM: OFF -> ARMING -> ARMED_LISTENING_FOR_WAKE -> TRIGGERED -> PROMPTING -> LISTENING_USER -> EXTRACTING -> CONFIRMING -> STAY_ON_LINE.
- *  4. GENERATION MUTEX: Every state change increments `_generation`. Stale timers or callbacks abort.
- *  5. SOS FIRST, NLP SECOND: Minimum SOS is stored locally and sent to /api/emergency/trigger before waiting for NLP.
+ *  1. SINGLE OWNER: Exactly ONE speech recognition instance, ONE PCM WAV recorder, and ONE TTS stream.
+ *  2. HALF-DUPLEX: STT & audio recording are unconditionally stopped while TTS speaks, plus 250ms acoustic guard.
+ *  3. DUAL-ENGINE STT:
+ *     - Engine A: Web Speech API (streaming partials in Chrome where cloud speech works)
+ *     - Engine B: Local Whisper PCM WAV Engine (100% offline, deterministic, records voice as 16-bit WAV
+ *                 and transcribes locally on port 8000. Resolves Chrome cloud Web Speech failures completely.)
+ *  4. EXPLICIT FSM: OFF -> ARMING -> ARMED_LISTENING_FOR_WAKE -> TRIGGERED -> PROMPTING -> LISTENING_USER -> EXTRACTING -> CONFIRMING -> STAY_ON_LINE.
+ *  5. SOS FIRST, NLP SECOND: Minimum SOS stored locally and sent to /api/emergency/trigger before waiting for NLP.
  */
 
 import { Capacitor } from '@capacitor/core';
@@ -37,6 +40,56 @@ const WAKE_WORDS = [
   'sevashito', 'sebaseto', 'seversetu'
 ];
 
+/**
+ * Encodes raw Float32Array PCM chunks into a valid 16-bit mono RIFF WAV Blob.
+ * Preserves the browser's native sample rate so FFmpeg/Whisper resamples with sinc precision.
+ */
+function pcmToWavBlob(chunks, sampleRate = 44100) {
+  let totalSamples = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    totalSamples += chunks[i].length;
+  }
+  if (totalSamples === 0) return null;
+
+  const merged = new Float32Array(totalSamples);
+  let offset = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    merged.set(chunks[i], offset);
+    offset += chunks[i].length;
+  }
+
+  const wavBuffer = new ArrayBuffer(44 + merged.length * 2);
+  const view = new DataView(wavBuffer);
+
+  const writeStr = (pos, str) => {
+    for (let j = 0; j < str.length; j++) {
+      view.setUint8(pos + j, str.charCodeAt(j));
+    }
+  };
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + merged.length * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format (1)
+  view.setUint16(22, 1, true); // Mono channel (1)
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // Byte rate
+  view.setUint16(32, 2, true); // Block align
+  view.setUint16(34, 16, true); // 16 bits per sample
+  writeStr(36, 'data');
+  view.setUint32(40, merged.length * 2, true);
+
+  let byteOffset = 44;
+  for (let i = 0; i < merged.length; i++, byteOffset += 2) {
+    const s = Math.max(-1, Math.min(1, merged[i]));
+    view.setInt16(byteOffset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
 class VoiceController {
   constructor() {
     this._state = VoiceState.OFF;
@@ -58,16 +111,37 @@ class VoiceController {
     this._recognition = null;
     this._sessionId = 0;
     this._isStarting = false;
+    this._isRecognitionActive = false;
     this._sessionStartTime = 0;
-    this._audioContext = null;
-    this._analyser = null;
-    this._mediaStream = null;
     this._silenceTimer = null;
     this._restartTimer = null;
     this._backoffMs = 500;
     this._currentTurnText = '';
-    this._accumulatedTurn = '';
     this._cachedVoices = [];
+
+    // Audio monitor & PCM WAV recording handles
+    this._monitorStream = null;
+    this._monitorCtx = null;
+    this._monitorSource = null;
+    this._monitorAnalyser = null;
+    this._recorderNode = null;
+    this._muteGain = null;
+    this._monitorAnimFrame = null;
+    this._monitorPeakLevel = 0;
+    this._silentMicWarned = false;
+    this._selectedDeviceId = null;
+
+    // VAD & PCM buffer state
+    this._pcmChunks = [];
+    this._isRecordingAudio = false;
+    this._isTranscribing = false;
+    this._vadSpeechActive = false;
+    this._speechStartTime = 0;
+    this._lastSpeechTime = 0;
+
+    // Silence nudge tracking for LISTENING_USER
+    this._silenceNudgeCount = 0;
+    this._silenceNudgeTimer = null;
 
     // Pre-cache voices and set up global gesture unlock
     if (typeof window !== 'undefined') {
@@ -85,6 +159,15 @@ class VoiceController {
       window.addEventListener('sevasetu:voice-form-closed', () => {
         console.log('[VoiceController] Voice form closed — re-arming background listener.');
         this.arm();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && !this._isRecognitionActive && !this._isStarting) {
+            console.log('[VoiceController] Tab visible again — re-starting recognition.');
+            this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
+          }
+        }
       });
 
       if (window.speechSynthesis) {
@@ -107,9 +190,6 @@ class VoiceController {
     return VoiceController._instance;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Observer Subscription
-  // ─────────────────────────────────────────────────────────────
   subscribe(callback) {
     this._listeners.add(callback);
     callback(this.getSnapshot());
@@ -142,14 +222,14 @@ class VoiceController {
       audioLevel: this._audioLevel,
       isUnlocked: this._isUnlocked,
       locale: this._locale,
-      isListening: this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER,
-      isSpeaking: this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING
+      isListening: (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) && !this._isTranscribing,
+      isTranscribing: this._isTranscribing,
+      isSpeaking: this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING,
+      monitorPeakLevel: this._monitorPeakLevel,
+      silentMicWarning: this._silentMicWarned,
     };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // State Transitions & Mutex
-  // ─────────────────────────────────────────────────────────────
   _transition(nextState, details = {}) {
     this._generation++;
     const prev = this._state;
@@ -167,26 +247,18 @@ class VoiceController {
     return this._generation;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Audio Context & User Gesture Unlocking
-  // ─────────────────────────────────────────────────────────────
-  unlockAudio() {
-    if (this._isUnlocked) return Promise.resolve(true);
-    console.log('[VoiceController] 🔓 Unlocking AudioContext & SpeechSynthesis...');
+  async unlockAudio() {
+    if (this._isUnlocked && this._monitorStream) return true;
+    console.log('[VoiceController] 🔓 Unlocking AudioContext, Mic & SpeechSynthesis...');
 
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
-        if (!this._audioContext) {
-          this._audioContext = new AudioCtx();
+        if (!this._monitorCtx) {
+          this._monitorCtx = new AudioCtx();
         }
-        if (this._audioContext.state === 'suspended') {
-          this._audioContext.resume().then(() => {
-            this._isUnlocked = true;
-            this._notify();
-          }).catch(() => {});
-        } else if (this._audioContext.state === 'running') {
-          this._isUnlocked = true;
+        if (this._monitorCtx.state === 'suspended') {
+          await this._monitorCtx.resume().catch(() => {});
         }
       }
 
@@ -194,62 +266,379 @@ class VoiceController {
         window.speechSynthesis.resume();
       }
 
-      return Promise.resolve(this._isUnlocked);
+      await this._startAudioMonitor();
+
+      this._isUnlocked = true;
+      this._notify();
+      return true;
     } catch (e) {
       console.warn('[VoiceController] Audio unlock deferred:', e);
-      return Promise.resolve(false);
+      return false;
+    }
+  }
+
+  async _startAudioMonitor() {
+    if (this._monitorStream && this._monitorStream.active) return;
+
+    try {
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      };
+
+      if (this._selectedDeviceId) {
+        constraints.audio.deviceId = { exact: this._selectedDeviceId };
+      }
+
+      this._monitorStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!this._monitorCtx || this._monitorCtx.state === 'closed') {
+        this._monitorCtx = new AudioCtx();
+      }
+      if (this._monitorCtx.state === 'suspended') {
+        await this._monitorCtx.resume();
+      }
+
+      this._monitorAnalyser = this._monitorCtx.createAnalyser();
+      this._monitorAnalyser.fftSize = 256;
+      this._monitorSource = this._monitorCtx.createMediaStreamSource(this._monitorStream);
+      this._monitorSource.connect(this._monitorAnalyser);
+
+      // Create pure PCM recording node (4096 buffer size, 1 channel)
+      this._pcmChunks = [];
+      if (!this._recorderNode) {
+        this._recorderNode = this._monitorCtx.createScriptProcessor(4096, 1, 1);
+        this._recorderNode.onaudioprocess = (e) => {
+          if (this._isRecordingAudio) {
+            const inputData = e.inputBuffer.getChannelData(0);
+            this._pcmChunks.push(new Float32Array(inputData));
+          }
+        };
+        // Connect to a 0-gain node to prevent microphone audio leaking through speakers
+        this._muteGain = this._monitorCtx.createGain();
+        this._muteGain.gain.value = 0;
+        this._monitorSource.connect(this._recorderNode);
+        this._recorderNode.connect(this._muteGain);
+        this._muteGain.connect(this._monitorCtx.destination);
+      }
+
+      const data = new Uint8Array(this._monitorAnalyser.frequencyBinCount);
+      this._monitorPeakLevel = 0;
+      this._silentMicWarned = false;
+      let sampleCount = 0;
+
+      const poll = () => {
+        if (!this._monitorAnalyser) return;
+        this._monitorAnalyser.getByteFrequencyData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        const avg = sum / data.length;
+
+        this._audioLevel = avg;
+        if (avg > this._monitorPeakLevel) this._monitorPeakLevel = avg;
+
+        sampleCount++;
+
+        if (sampleCount % 4 === 0) {
+          this._notify();
+        }
+
+        // ── VAD Processing in LISTENING_USER & STAY_ON_LINE states ──
+        if ((this._state === VoiceState.LISTENING_USER || this._state === VoiceState.STAY_ON_LINE) && this._isRecordingAudio && !this._isTranscribing) {
+          const now = Date.now();
+          const SPEECH_THRESHOLD = 5.0;
+
+          if (avg > SPEECH_THRESHOLD) {
+            this._lastSpeechTime = now;
+            if (!this._vadSpeechActive) {
+              if (!this._speechStartTime) {
+                this._speechStartTime = now;
+              } else if (now - this._speechStartTime >= 100) {
+                this._vadSpeechActive = true;
+                console.log('[VoiceController] 🗣️ User speech onset detected');
+                this._setupSilenceNudge();
+              }
+            }
+          } else {
+            if (this._vadSpeechActive) {
+              const silenceDuration = now - this._lastSpeechTime;
+              const totalSpeechDuration = this._lastSpeechTime - this._speechStartTime;
+
+              // Smart adaptive silence threshold:
+              // - Long complete sentences (>= 1800ms speech): 950ms silence is sufficient to detect completion.
+              // - Standard speech (700ms - 1800ms): 1100ms silence.
+              // - Short utterances (< 700ms): 1300ms silence to prevent cutting off early pauses.
+              let requiredSilence = 1100;
+              if (totalSpeechDuration >= 1800) {
+                requiredSilence = 950;
+              } else if (totalSpeechDuration < 700) {
+                requiredSilence = 1300;
+              }
+
+              if ((totalSpeechDuration >= 400 && silenceDuration >= requiredSilence) || (now - this._speechStartTime >= 14000)) {
+                console.log(`[VoiceController] ⏱️ VAD: Sentence boundary reached (Spoke: ${totalSpeechDuration}ms, Silence: ${silenceDuration}ms >= ${requiredSilence}ms). Transcribing...`);
+                this._stopVADAndTranscribe();
+              }
+            }
+          }
+        }
+
+        // ── VAD Processing in ARMED_LISTENING_FOR_WAKE state ──
+        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && this._isRecordingAudio && !this._isTranscribing) {
+          const now = Date.now();
+          if (avg > 6.0) {
+            this._lastSpeechTime = now;
+            if (!this._vadSpeechActive) {
+              if (!this._speechStartTime) {
+                this._speechStartTime = now;
+              } else if (now - this._speechStartTime >= 100) {
+                this._vadSpeechActive = true;
+              }
+            }
+          } else {
+            if (this._vadSpeechActive) {
+              const silenceDuration = now - this._lastSpeechTime;
+              const speechDuration = this._lastSpeechTime - this._speechStartTime;
+              // Snappy wake silence: 380ms silence after wake utterance triggers Whisper immediately (reduced from 1200ms)
+              if ((speechDuration >= 200 && silenceDuration >= 380) || (now - this._speechStartTime >= 5000)) {
+                console.log(`[VoiceController] ⏱️ VAD: Wake speech phrase ended (Spoke: ${speechDuration}ms, Silence: ${silenceDuration}ms). Checking wake word...`);
+                this._checkWakeWordViaWhisper();
+              }
+            }
+          }
+        }
+
+        this._monitorAnimFrame = requestAnimationFrame(poll);
+      };
+      poll();
+
+      const tracks = this._monitorStream.getAudioTracks();
+      const label = tracks[0]?.label || 'Microphone';
+      console.log(`[VoiceController] 🔍 PCM Mic monitor active on: "${label}"`);
+
+    } catch (err) {
+      console.warn('[VoiceController] Audio monitor notice:', err.message);
+    }
+  }
+
+  _stopAudioMonitor() {
+    if (this._monitorAnimFrame) {
+      cancelAnimationFrame(this._monitorAnimFrame);
+      this._monitorAnimFrame = null;
+    }
+    if (this._monitorStream) {
+      this._monitorStream.getTracks().forEach(t => t.stop());
+      this._monitorStream = null;
+    }
+    this._monitorAnalyser = null;
+    this._audioLevel = 0;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // VAD PCM WAV Engine (Local Whisper STT)
+  // ─────────────────────────────────────────────────────────────
+  _startVADRecording() {
+    if (!this._monitorStream || !this._monitorStream.active) {
+      this._startAudioMonitor().then(() => this._startVADRecording());
+      return;
+    }
+
+    this._pcmChunks = [];
+    this._isRecordingAudio = true;
+    this._isTranscribing = false;
+    this._vadSpeechActive = false;
+    this._speechStartTime = 0;
+    this._lastSpeechTime = 0;
+    console.log(`[VoiceController] 🎙️ VAD PCM recording ACTIVE (State: ${this._state})`);
+  }
+
+  _stopVADRecording() {
+    this._isRecordingAudio = false;
+    this._vadSpeechActive = false;
+    this._speechStartTime = 0;
+    this._lastSpeechTime = 0;
+    this._pcmChunks = [];
+  }
+
+  finishSpeakingNow() {
+    if ((this._state === VoiceState.LISTENING_USER || this._state === VoiceState.STAY_ON_LINE) && this._isRecordingAudio && !this._isTranscribing) {
+      console.log('[VoiceController] ⚡ finishSpeakingNow triggered immediately');
+      this._stopVADAndTranscribe();
+    }
+  }
+
+  async _stopVADAndTranscribe() {
+    if (!this._isRecordingAudio || this._isTranscribing) return;
+    this._isTranscribing = true;
+    this._isRecordingAudio = false;
+    this._notify();
+
+    // Grab accumulated PCM samples
+    const chunks = this._pcmChunks;
+    this._pcmChunks = [];
+
+    const sampleRate = (this._monitorCtx && this._monitorCtx.sampleRate) || 44100;
+    const wavBlob = pcmToWavBlob(chunks, sampleRate);
+
+    if (!wavBlob || wavBlob.size < 4000) {
+      this._isTranscribing = false;
+      if (this._state === VoiceState.LISTENING_USER || this._state === VoiceState.STAY_ON_LINE) {
+        this._startVADRecording();
+      }
+      return;
+    }
+
+    if (this._state !== VoiceState.LISTENING_USER && this._state !== VoiceState.STAY_ON_LINE) {
+      this._isTranscribing = false;
+      return;
+    }
+
+    this._partialTranscript = 'Transcribing your full sentence...';
+    this._notify();
+
+    try {
+      const formData = new FormData();
+      formData.append('file', wavBlob, 'user_speech.wav');
+
+      const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
+      const res = await fetch(`${AI_URL}/transcribe`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = (data.text || '').trim();
+        console.log(`[VoiceController] 🎯 Local Whisper transcribed WAV: "${text}"`);
+
+        if (text && text.length > 1) {
+          this._partialTranscript = text;
+          this._transcript = text;
+          this._notify();
+          this._isTranscribing = false;
+          await this.commitUserTurn(text);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[VoiceController] Whisper transcribe error:', err);
+    }
+
+    this._isTranscribing = false;
+    if (this._state === VoiceState.LISTENING_USER || this._state === VoiceState.STAY_ON_LINE) {
+      this._partialTranscript = '';
+      this._notify();
+      this._startVADRecording();
+    }
+  }
+
+  async _checkWakeWordViaWhisper() {
+    if (!this._isRecordingAudio || this._isTranscribing) return;
+    this._isTranscribing = true;
+    this._isRecordingAudio = false;
+
+    const chunks = this._pcmChunks;
+    this._pcmChunks = [];
+
+    const sampleRate = (this._monitorCtx && this._monitorCtx.sampleRate) || 44100;
+    const wavBlob = pcmToWavBlob(chunks, sampleRate);
+
+    if (!wavBlob || wavBlob.size < 4000) {
+      this._isTranscribing = false;
+      if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) this._startVADRecording();
+      return;
+    }
+
+    if (this._state !== VoiceState.ARMED_LISTENING_FOR_WAKE) {
+      this._isTranscribing = false;
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', wavBlob, 'wake_snippet.wav');
+
+      const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
+      const res = await fetch(`${AI_URL}/transcribe`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = (data.text || '').trim();
+        console.log(`[VoiceController] 🔍 Wake test Whisper transcript: "${text}"`);
+
+        if (text && this._isWakeWord(text)) {
+          console.log('[VoiceController] 🎯 WAKE WORD DETECTED VIA WHISPER:', text);
+          this._isTranscribing = false;
+          const trailing = this._stripWakePrefix(text);
+          this.triggerEmergencySession('VOICE_WAKE', trailing);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[VoiceController] Wake check error:', err);
+    }
+
+    this._isTranscribing = false;
+    if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
+      this._startVADRecording();
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Acoustic Feedback: Two-Tone Wake Chime (<10ms instant ACK)
+  // Acoustic Feedback: Two-Tone Wake Chime
   // ─────────────────────────────────────────────────────────────
   playChime() {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
-      if (!this._audioContext) this._audioContext = new AudioCtx();
-      if (this._audioContext.state === 'suspended') {
-        this._audioContext.resume().catch(() => {});
-      }
+      const ctx = this._monitorCtx || new AudioCtx();
+      if (!this._monitorCtx) this._monitorCtx = ctx;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-      const now = this._audioContext.currentTime;
-      // Tone 1: 520Hz (C5) 120ms
-      const osc1 = this._audioContext.createOscillator();
-      const g1 = this._audioContext.createGain();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const g1 = ctx.createGain();
       osc1.type = 'sine';
       osc1.frequency.setValueAtTime(520, now);
       g1.gain.setValueAtTime(0.2, now);
       g1.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
       osc1.connect(g1);
-      g1.connect(this._audioContext.destination);
+      g1.connect(ctx.destination);
       osc1.start(now);
       osc1.stop(now + 0.12);
 
-      // Tone 2: 780Hz (G5) 160ms
-      const osc2 = this._audioContext.createOscillator();
-      const g2 = this._audioContext.createGain();
+      const osc2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
       osc2.type = 'sine';
       osc2.frequency.setValueAtTime(780, now + 0.09);
       g2.gain.setValueAtTime(0.25, now + 0.09);
       g2.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
       osc2.connect(g2);
-      g2.connect(this._audioContext.destination);
+      g2.connect(ctx.destination);
       osc2.start(now + 0.09);
       osc2.stop(now + 0.25);
     } catch (_) {}
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Speech-to-Text: Pure Single-Owner Recognition Engine
+  // STT: Speech Recognition Engine
   // ─────────────────────────────────────────────────────────────
   _stopRecognition() {
     clearTimeout(this._silenceTimer);
     clearTimeout(this._restartTimer);
+    clearTimeout(this._silenceNudgeTimer);
     this._restartTimer = null;
     this._audioLevel = 0.0;
     this._isRecognitionActive = false;
     this._isStarting = false;
+    this._stopVADRecording();
 
     if (this._recognition) {
       try {
@@ -267,14 +656,14 @@ class VoiceController {
   async _stopRecognitionAsync() {
     clearTimeout(this._silenceTimer);
     clearTimeout(this._restartTimer);
+    clearTimeout(this._silenceNudgeTimer);
     this._restartTimer = null;
     this._audioLevel = 0.0;
     this._isRecognitionActive = false;
     this._isStarting = false;
+    this._stopVADRecording();
 
-    if (!this._recognition) {
-      return;
-    }
+    if (!this._recognition) return;
 
     const r = this._recognition;
     this._recognition = null;
@@ -288,8 +677,10 @@ class VoiceController {
         }
       };
 
-      const safetyTimer = setTimeout(done, 250);
+      const safetyTimer = setTimeout(done, 400);
 
+      r.onstart = null;
+      r.onresult = null;
       r.onend = () => {
         clearTimeout(safetyTimer);
         done();
@@ -307,23 +698,17 @@ class VoiceController {
       }
     });
 
-    // 100ms hardware breather so OS audio handle settles
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   async _startRecognition(expectedState) {
     if (this._state !== expectedState) return;
 
-    // Seamless stream reuse: if recognition is already running and active, keep it!
-    if (this._recognition && this._isRecognitionActive) {
-      console.log(`[VoiceController] 🎙️ Reusing active microphone stream for state: ${this._state}`);
-      return;
-    }
+    // Start local PCM WAV recording IMMEDIATELY and UNCONDITIONALLY!
+    this._startVADRecording();
 
-    if (this._isStarting) {
-      return;
-    }
-
+    if (this._recognition && this._isRecognitionActive) return;
+    if (this._isStarting) return;
     this._isStarting = true;
 
     if (this._recognition) {
@@ -338,20 +723,17 @@ class VoiceController {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       this._isStarting = false;
-      this._transition(VoiceState.OFF, { error: 'Web Speech API not supported in this browser' });
       return;
     }
 
     const sessionId = ++this._sessionId;
-    const currentGen = this._generation;
 
     try {
       const rec = new SpeechRec();
       rec.continuous = true;
       rec.interimResults = true;
       rec.maxAlternatives = 1;
-      // Use user/system locale with fallback to en-IN or en-US
-      rec.lang = this._locale || (typeof navigator !== 'undefined' ? navigator.language : 'en-US');
+      rec.lang = this._locale || 'en-US';
 
       rec.onstart = () => {
         if (this._sessionId !== sessionId) return;
@@ -359,69 +741,54 @@ class VoiceController {
         this._isRecognitionActive = true;
         this._sessionStartTime = Date.now();
         this._backoffMs = 500;
-        console.log(`[VoiceController] 🎙️ Mic active and listening in state: ${this._state} (lang: ${rec.lang})`);
         this._notify();
-      };
-
-      rec.onaudiostart = () => {
-        if (this._sessionId !== sessionId) return;
-        console.log('[VoiceController] 🔊 Audio hardware capture started');
-      };
-
-      rec.onspeechstart = () => {
-        if (this._sessionId !== sessionId) return;
-        console.log('[VoiceController] 🗣️ Speech detected by browser');
       };
 
       rec.onresult = (event) => {
         if (this._sessionId !== sessionId) return;
-        if (this._generation !== currentGen) return;
-
-        // Software half-duplex mute: don't process speech during TTS
-        if (this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING) {
-          console.log('[VoiceController] 🔇 Software suppressed audio feedback while speaking');
-          return;
-        }
+        if (this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING) return;
 
         let sessionFinal = '';
         let sessionInterim = '';
 
         for (let i = 0; i < event.results.length; i++) {
           const res = event.results[i];
-          if (res.isFinal) {
-            sessionFinal += res[0].transcript + ' ';
-          } else {
-            sessionInterim += res[0].transcript;
-          }
+          if (res.isFinal) sessionFinal += res[0].transcript + ' ';
+          else sessionInterim += res[0].transcript;
         }
 
         const fullPhrase = (sessionFinal.trim() + ' ' + sessionInterim.trim()).trim();
-        this._handleSpeechResult(fullPhrase, currentGen);
+        if (!fullPhrase) return;
+
+        // ⚡ INSTANT WAKE DETECTION: If waiting for wake word, trigger immediately on partial/final speech!
+        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
+          if (this._isWakeWord(fullPhrase)) {
+            console.log('[VoiceController] ⚡ INSTANT WAKE WORD via WebSpeech:', fullPhrase);
+            const trailingSpeech = this._stripWakePrefix(fullPhrase);
+            this.triggerEmergencySession('VOICE_WAKE', trailingSpeech);
+            return;
+          }
+        }
+
+        // Visual feedback during conversation turns
+        this._partialTranscript = fullPhrase;
+        this._notify();
       };
 
-      rec.onerror = (event) => {
+      rec.onerror = (e) => {
         if (this._sessionId !== sessionId) return;
-        const err = event?.error;
-        console.warn(`[VoiceController] STT Error: ${err} in state: ${this._state}`);
+        this._isStarting = false;
+        this._isRecognitionActive = false;
+        this._recognition = null;
 
-        if (err === 'no-speech' || err === 'aborted') {
-          return; // Normal: browser silence timeout or intentional abort
-        }
-
-        if (err === 'not-allowed') {
-          this._isStarting = false;
-          this._isRecognitionActive = false;
-          this._stopRecognitionAsync();
-          this._transition(VoiceState.OFF, { error: 'Microphone permission required' });
-          return;
-        }
-
-        // For service-not-allowed / network / audio-capture: back off gracefully
-        if (err === 'network' || err === 'audio-capture' || err === 'service-not-allowed' || err === 'language-not-supported') {
-          this._backoffMs = Math.min(this._backoffMs * 1.5, 5000);
-          if (err === 'language-not-supported' && rec.lang !== 'en-US') {
-            this._locale = 'en-US';
-          }
+        // Auto-restart streaming recognition on transient error so wake listening never dies
+        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && e?.error !== 'not-allowed') {
+          clearTimeout(this._restartTimer);
+          this._restartTimer = setTimeout(() => {
+            if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && !this._isRecognitionActive && !this._isStarting) {
+              this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
+            }
+          }, 400);
         }
       };
 
@@ -430,45 +797,57 @@ class VoiceController {
         this._isStarting = false;
         this._isRecognitionActive = false;
         this._recognition = null;
-        console.log(`[VoiceController] Mic session ended in state: ${this._state}`);
 
-        // Rapid loop protection: if the session ended in under 800ms, wait at least 1500ms
-        const duration = Date.now() - (this._sessionStartTime || 0);
-        let delay = this._backoffMs;
-        if (duration < 800) {
-          delay = Math.max(delay, 1500);
-        }
-
-        // Restart ONLY if we should still be listening
-        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
+        // Keep wake-word listener alive continuously across browser silence timeouts
+        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
           clearTimeout(this._restartTimer);
           this._restartTimer = setTimeout(() => {
-            if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
-              this._startRecognition(this._state);
+            if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && !this._isRecognitionActive && !this._isStarting) {
+              this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
             }
-          }, delay);
+          }, 250);
         }
       };
 
       this._recognition = rec;
       rec.start();
+
+      if (expectedState === VoiceState.LISTENING_USER) {
+        this._silenceNudgeCount = 0;
+        this._setupSilenceNudge();
+      }
+
     } catch (err) {
-      console.warn('[VoiceController] Failed to start recognition:', err);
       this._isStarting = false;
       this._isRecognitionActive = false;
       this._recognition = null;
-      clearTimeout(this._restartTimer);
-      this._restartTimer = setTimeout(() => {
-        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
-          this._startRecognition(expectedState);
-        }
-      }, 1500);
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Speech Result Processing: Wake-Word & Turn Commitment
-  // ─────────────────────────────────────────────────────────────
+  _setupSilenceNudge() {
+    clearTimeout(this._silenceNudgeTimer);
+    this._silenceNudgeTimer = setTimeout(async () => {
+      if (this._state !== VoiceState.LISTENING_USER) return;
+      if (this._vadSpeechActive || this._isTranscribing) return;
+
+      this._silenceNudgeCount++;
+      if (this._silenceNudgeCount >= 2) {
+        if (this._transcript) {
+          this.commitUserTurn(this._transcript);
+        }
+        return;
+      }
+
+      const nudgeText = t('silenceNudge', this._locale);
+      const nudgeGen = this._transition(VoiceState.PROMPTING, { systemReply: nudgeText });
+      await this._speakHalfDuplex(nudgeText);
+      if (this._generation !== nudgeGen) return;
+      this._transition(VoiceState.LISTENING_USER, { systemReply: '' });
+      await this._startRecognition(VoiceState.LISTENING_USER);
+      this._setupSilenceNudge();
+    }, 8500);
+  }
+
   _isWakeWord(text) {
     if (!text) return false;
     const lower = text.toLowerCase().trim();
@@ -476,7 +855,6 @@ class VoiceController {
 
     if (WAKE_WORDS.some(kw => clean.includes(kw))) return true;
 
-    // Pattern matching: "hey seva setu", "seva setu", "hey seba", "seva"
     if (/\b(?:hey|hi|hello|ok|okay|ay|oye)?\s*(?:seva|sewa|seba|sheba|sheva|sayva|saver|sever)\s+(?:setu|sethu|seeto|setoo|shetu|situ|to|2)\b/i.test(lower)) {
       return true;
     }
@@ -497,30 +875,29 @@ class VoiceController {
     return trailing;
   }
 
-  _handleSpeechResult(phrase, gen) {
-    if (this._generation !== gen || !phrase) return;
+  _handleSpeechResult(phrase) {
+    if (!phrase || !phrase.trim()) return;
 
-    // Mode 1: Listening for Wake Word ("Hey SevaSetu")
     if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
       if (this._isWakeWord(phrase)) {
-        console.log('[VoiceController] 🎯 Wake word detected:', phrase);
+        console.log('[VoiceController] 🎯 WAKE WORD DETECTED:', phrase);
         const trailingSpeech = this._stripWakePrefix(phrase);
         this.triggerEmergencySession('VOICE_WAKE', trailingSpeech);
       }
       return;
     }
 
-    // Mode 2: Actively Listening to User Emergency Details
     if (this._state === VoiceState.LISTENING_USER) {
       this._partialTranscript = phrase;
       this._currentTurnText = phrase;
       this._notify();
 
-      // Silence-based end-of-utterance commitment (2200ms natural breathing space per spec §2.2)
+      this._setupSilenceNudge();
+
       clearTimeout(this._silenceTimer);
       this._silenceTimer = setTimeout(() => {
-        if (this._generation === gen && this._currentTurnText) {
-          console.log('[VoiceController] ⏱️ Silence detected. Committing full user turn:', this._currentTurnText);
+        if (this._state === VoiceState.LISTENING_USER && this._currentTurnText) {
+          console.log('[VoiceController] ⏱️ WebSpeech turn commitment:', this._currentTurnText);
           const finalTurn = this._currentTurnText;
           this._currentTurnText = '';
           this.commitUserTurn(finalTurn);
@@ -529,16 +906,12 @@ class VoiceController {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Text-To-Speech: Half-Duplex Guaranteed
-  // ─────────────────────────────────────────────────────────────
   async _speakHalfDuplex(text) {
     const currentGen = this._generation;
 
-    // 1. Unconditionally stop STT cleanly so assistant never hears itself
     await this._stopRecognitionAsync();
 
-    console.log(`[VoiceController] 🔊 Half-duplex TTS Speaking: "${text}"`);
+    console.log(`[VoiceController] 🔊 TTS Speaking: "${text}"`);
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -556,7 +929,6 @@ class VoiceController {
         console.warn('[VoiceController] Native TTS error:', err);
       }
     } else {
-      // Browser Web Speech Synthesis
       await new Promise((resolve) => {
         if (typeof window === 'undefined' || !window.speechSynthesis) {
           return resolve();
@@ -591,7 +963,6 @@ class VoiceController {
         utterance.onend = done;
         utterance.onerror = done;
 
-        // Safety timeout so speech never hangs the state machine
         const durationEstimate = Math.max(2500, (text.length / 10) * 1000 + 1000);
         setTimeout(done, durationEstimate);
 
@@ -602,30 +973,20 @@ class VoiceController {
 
     if (this._generation !== currentGen) return;
 
-    // 2. Mandatory 250ms Acoustic Guard Time before audio hardware reopens
-    console.log('[VoiceController] 🛡️ 250ms acoustic guard time settling...');
+    console.log('[VoiceController] 🛡️ 250ms acoustic guard...');
     await new Promise((r) => setTimeout(r, 250));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Public Lifecycle & Commands
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Arm the assistant into passive wake-word detection
-   */
-  arm() {
+  async arm() {
     if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) return;
-    this.unlockAudio();
+    await this.unlockAudio();
     this._transition(VoiceState.ARMED_LISTENING_FOR_WAKE, { error: null });
     this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
   }
 
-  /**
-   * Turn assistant completely off
-   */
   disarm() {
     this._stopRecognition();
+    this._stopAudioMonitor();
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
@@ -637,19 +998,15 @@ class VoiceController {
     });
   }
 
-  /**
-   * Core Entry Point: User says "Hey SevaSetu" OR clicks voice emergency button
-   * Golden Law: Creates local minimum SOS & triggers API BEFORE awaiting NLP.
-   */
   async triggerEmergencySession(triggerType = 'VOICE_WAKE', initialTranscript = '') {
-    this.unlockAudio();
+    await this.unlockAudio();
     this.playChime();
 
-    // 1. Create clientEventId & save Minimum SOS locally and remotely FIRST
     const clientEventId = uuidv4();
     this._clientEventId = clientEventId;
     this._transcript = initialTranscript;
     this._partialTranscript = '';
+    this._currentTurnText = '';
 
     this._transition(VoiceState.TRIGGERED, {
       clientEventId,
@@ -663,20 +1020,17 @@ class VoiceController {
     });
 
     try {
-      // 2. Speak greeting prompt aloud
       const promptText = t('greeting', this._locale);
       const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: promptText });
       await this._speakHalfDuplex(promptText);
 
       if (this._generation !== promptGen) return;
 
-      // 3. If the user already gave their emergency details alongside the wake word:
       if (initialTranscript && initialTranscript.length > 8) {
         this.commitUserTurn(initialTranscript);
         return;
       }
 
-      // 4. Otherwise, enter active listening for user description
       console.log('[VoiceController] 🎙️ Opening microphone for user response...');
       this._transition(VoiceState.LISTENING_USER, { systemReply: '' });
       await this._startRecognition(VoiceState.LISTENING_USER);
@@ -687,11 +1041,11 @@ class VoiceController {
     }
   }
 
-  /**
-   * Manual commit or silence commit of user's utterance
-   */
   async commitUserTurn(spokenText) {
     if (!spokenText || !spokenText.trim()) return;
+    clearTimeout(this._silenceTimer);
+    clearTimeout(this._silenceNudgeTimer);
+    
     const extractGen = this._transition(VoiceState.EXTRACTING, {
       transcript: spokenText,
       partialTranscript: spokenText
@@ -721,7 +1075,6 @@ class VoiceController {
       const intent = (nlpResult.intent || 'UNKNOWN').toUpperCase();
       const reply = nlpResult.reply || 'Understood.';
 
-      // Case A: User indicates safe / cancel
       if (intent === 'SAFE' || intent === 'CANCEL') {
         const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: reply });
         await this._speakHalfDuplex(reply);
@@ -730,31 +1083,30 @@ class VoiceController {
         return;
       }
 
-      // Case B: User asking who you are / what is SevaSetu
       if (intent === 'INFO') {
         const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: reply });
         await this._speakHalfDuplex(reply);
         if (this._generation !== promptGen) return;
-        // Continue listening for emergency
+        this._partialTranscript = '';
+        this._transcript = '';
         this._transition(VoiceState.LISTENING_USER);
         await this._startRecognition(VoiceState.LISTENING_USER);
         return;
       }
 
-      // Case C: User says yes / needs to give details
       if (intent === 'QUERY_DETAILS' && !nlpResult.isEmergency) {
         const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: reply });
         await this._speakHalfDuplex(reply);
         if (this._generation !== promptGen) return;
+        this._partialTranscript = '';
+        this._transcript = '';
         this._transition(VoiceState.LISTENING_USER);
         await this._startRecognition(VoiceState.LISTENING_USER);
         return;
       }
 
-      // Case D: Confirmed Emergency (or fallback emergency)
-      // Forward facts to Node server with location
       const loc = await EmergencyManager.getBestAvailableLocation().catch(() => null);
-      await EmergencyManager.enrichEmergencyWithVoice(this._clientEventId, spokenText, loc);
+      const enrichResult = await EmergencyManager.enrichEmergencyWithVoice(this._clientEventId, spokenText, loc).catch(() => null);
 
       const confirmGen = this._transition(VoiceState.CONFIRMING, {
         emergencyData: nlpResult,
@@ -763,25 +1115,48 @@ class VoiceController {
       await this._speakHalfDuplex(reply);
 
       if (this._generation !== confirmGen) return;
-      this._transition(VoiceState.STAY_ON_LINE);
+
+      // Auto-close session & dismiss popup after confirmation is spoken (+ 2.5s display grace period)
+      await new Promise((r) => setTimeout(r, 2500));
+
+      if (this._generation === confirmGen) {
+        console.log('[VoiceController] Auto-closing emergency session. Returning to hands-free wake listener.');
+        this._partialTranscript = '';
+        this._transcript = '';
+        this._systemReply = '';
+        this.arm(); // Automatically resets state to ARMED_LISTENING_FOR_WAKE, dismissing the modal popup
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sevasetu:emergency-closed', { detail: enrichResult }));
+        }
+      }
 
     } catch (err) {
-      console.warn('[VoiceController] NLP extract error, falling back to emergency dispatch:', err);
-      // Golden Law: In case of AI failure, emergency is STILL preserved & acknowledged!
+      console.warn('[VoiceController] NLP extract fallback to emergency dispatch:', err);
       const fallbackAck = t('emergencyAck', this._locale);
       const fallbackGen = this._transition(VoiceState.CONFIRMING, { systemReply: fallbackAck });
       await this._speakHalfDuplex(fallbackAck);
 
       if (this._generation !== fallbackGen) return;
-      this._transition(VoiceState.STAY_ON_LINE);
+
+      // Auto-close session & dismiss popup after confirmation (+ 2.5s display grace period)
+      await new Promise((r) => setTimeout(r, 2500));
+      if (this._generation === fallbackGen) {
+        console.log('[VoiceController] Auto-closing fallback emergency session.');
+        this._partialTranscript = '';
+        this._transcript = '';
+        this._systemReply = '';
+        this.arm();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sevasetu:emergency-closed'));
+        }
+      }
     }
   }
 
-  /**
-   * Cancel or close the current active session
-   */
   cancelSession() {
     console.log('[VoiceController] Cancelling active session...');
+    clearTimeout(this._silenceTimer);
+    clearTimeout(this._silenceNudgeTimer);
     this.arm();
   }
 }

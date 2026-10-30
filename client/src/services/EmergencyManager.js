@@ -95,6 +95,14 @@ export const EmergencyManager = {
         throw new Error('Offline');
       }
 
+      let currentUser = null;
+      try {
+        const rawUser = typeof localStorage !== 'undefined' ? localStorage.getItem('currentUser') : null;
+        if (rawUser) currentUser = JSON.parse(rawUser);
+      } catch (_) {}
+
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+
       const payload = {
         clientEventId: event.clientEventId,
         source: event.source || event.triggerType || 'VOICE',
@@ -107,12 +115,17 @@ export const EmergencyManager = {
         deviceId: event.deviceId,
         sessionId: event.sessionId,
         location: event.location,
-        capabilitySnapshot: event.capabilitySnapshot
+        capabilitySnapshot: event.capabilitySnapshot,
+        userId: currentUser?.id || null,
+        reportedBy: currentUser?.id || null
       };
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
       const response = await fetch(`${API_URL}/api/emergency/trigger`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
 
@@ -200,20 +213,38 @@ export const EmergencyManager = {
       const enrichmentData = await aiResponse.json();
       console.log('[EmergencyManager] NLP Facts Extracted:', enrichmentData);
 
-      // 2. Submit to Node Server for persistence and Safety Rules (attach GPS location)
+      // 2. Submit to Node Server for persistence and Safety Rules (attach GPS location & user auth)
+      let currentUser = null;
+      try {
+        const rawUser = typeof localStorage !== 'undefined' ? localStorage.getItem('currentUser') : null;
+        if (rawUser) currentUser = JSON.parse(rawUser);
+      } catch (_) {}
+
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const serverResponse = await fetch(`${API_URL}/api/emergency/${clientEventId}/facts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ 
           ...enrichmentData, 
-          factsSeq: Date.now(),
-          location 
+          factsSeq: 1,
+          location,
+          userId: currentUser?.id || null,
+          reportedBy: currentUser?.id || null
         })
       });
 
       if (serverResponse.ok) {
         const result = await serverResponse.json();
-        console.log('[EmergencyManager] Emergency enriched. Urgency:', result.urgencyScore);
+        console.log('[EmergencyManager] Emergency enriched. Urgency:', result.urgency, 'Need ID:', result.needId);
+        
+        // Dispatch local event so any open UI / dashboards can instantly update
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sevasetu:need-created', { detail: result }));
+        }
+        return result;
       } else {
         console.warn('[EmergencyManager] Server enrichment failed:', serverResponse.status);
       }

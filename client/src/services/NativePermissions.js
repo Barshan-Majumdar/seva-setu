@@ -62,10 +62,29 @@ export async function requestAllPermissions() {
   }
 
   try {
-    // 3. Microphone permission (no Capacitor plugin — use Web API)
-    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    micStream.getTracks().forEach(t => t.stop()); // Release immediately
-    results.microphone = 'granted';
+    // 3. Microphone permission — use permissions API first, fall back to getUserMedia
+    //    NOTE: We do NOT call track.stop() after getUserMedia on native because
+    //    stopping the track can kill the Windows CoreAudio handle used by SpeechRecognition.
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const micPerm = await navigator.permissions.query({ name: 'microphone' });
+        results.microphone = micPerm.state;
+      } catch (_) {
+        // Fallback: request mic via getUserMedia but don't stop the track immediately
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        results.microphone = 'granted';
+        // Release after a delay to let CoreAudio settle
+        setTimeout(() => {
+          micStream.getTracks().forEach(t => t.stop());
+        }, 2000);
+      }
+    } else {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      results.microphone = 'granted';
+      setTimeout(() => {
+        micStream.getTracks().forEach(t => t.stop());
+      }, 2000);
+    }
   } catch (err) {
     console.warn('[Permissions] Microphone error:', err.message);
     results.microphone = 'denied';

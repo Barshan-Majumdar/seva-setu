@@ -23,7 +23,8 @@ export const STRINGS = {
     statusStayOnLine: "Stay Safe • Responders Dispatched",
     sendButton: "Send Now",
     cancelButton: "Cancel",
-    sosButton: "Emergency SOS"
+    sosButton: "Emergency SOS",
+    silenceNudge: "I'm still here. Tell me what's happening."
   },
   bn: {
     greeting: "সেবা সেতু শুনছে। আপনার কী জরুরি অবস্থা?",
@@ -44,7 +45,8 @@ export const STRINGS = {
     statusStayOnLine: "উদ্ধারকারী দল পাঠানো হয়েছে",
     sendButton: "এখনই পাঠান",
     cancelButton: "বাতিল",
-    sosButton: "জরুরি এসওএস"
+    sosButton: "জরুরি এসওএস",
+    silenceNudge: "আমি এখনো শুনছি। কী হচ্ছে আমাকে বলুন।"
   },
   hi: {
     greeting: "सेवा सेतु सुन रहा है। आपकी क्या आपात स्थिति है?",
@@ -65,7 +67,8 @@ export const STRINGS = {
     statusStayOnLine: "सुरक्षित रहें • बचाव दल रवाना",
     sendButton: "अभी भेजें",
     cancelButton: "रद्द करें",
-    sosButton: "आपातकालीन एसओएस"
+    sosButton: "आपातकालीन एसओएस",
+    silenceNudge: "मैं अभी भी सुन रहा हूँ। बताइए क्या हो रहा है।"
   }
 };
 

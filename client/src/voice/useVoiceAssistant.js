@@ -35,6 +35,10 @@ export function useVoiceAssistant() {
     voiceController.cancelSession();
   }, []);
 
+  const finishSpeakingNow = useCallback(() => {
+    voiceController.finishSpeakingNow();
+  }, []);
+
   const unlockAudio = useCallback(() => {
     voiceController.unlockAudio();
   }, []);
@@ -48,6 +52,7 @@ export function useVoiceAssistant() {
     commitTurn,
     cancelSession,
     unlockAudio,
+    finishSpeakingNow,
   };
 }
 

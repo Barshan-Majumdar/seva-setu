@@ -1,6 +1,8 @@
 const express = require('express');
 const prisma = require('../config/db');
 const { resolveLocation } = require('../services/geocodingService');
+const { calculatePriority } = require('../services/scoringService');
+const redisService = require('../services/redisService');
 
 const router = express.Router();
 
@@ -213,7 +215,11 @@ router.post('/:id/facts', async (req, res) => {
       lastEnrichedAt: new Date().toISOString()
     };
 
-    const newSeq = Math.max(incident.factsSeq || 0, Number(factsSeq) || 0);
+    const incomingSeq = Number(factsSeq) || 0;
+    // facts_seq in DB is INT4 (max 2147483647), protect against Date.now() timestamp overflow
+    const newSeq = (incomingSeq > 2147483640)
+      ? ((incident.factsSeq || 0) + 1)
+      : Math.max(incident.factsSeq || 0, incomingSeq);
 
     // Persist enriched facts to DB
     await prisma.emergencyEvent.update({
@@ -227,7 +233,27 @@ router.post('/:id/facts', async (req, res) => {
       }
     });
 
-    // ── 5. Push to Coordinator Dashboard & Create/Update Need ──
+    // ── 5. Push to Coordinator Dashboard & Create/Update Real Need ──
+    // Extract user ID from request body or Authorization Bearer token
+    let finalUserId = req.body.userId || req.body.reportedBy || null;
+
+    if (!finalUserId && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      try {
+        const token = req.headers.authorization.split(' ')[1];
+        const { verifyClerkJwt } = require('../services/clerkService');
+        const decoded = await verifyClerkJwt(token).catch(() => null);
+        if (decoded?.sub) {
+          const u = await prisma.user.findFirst({ where: { clerkId: decoded.sub }, select: { id: true } });
+          if (u) finalUserId = u.id;
+        }
+      } catch (_) {}
+    }
+
+    if (finalUserId) {
+      const validUser = await prisma.user.findUnique({ where: { id: finalUserId }, select: { id: true } }).catch(() => null);
+      if (!validUser) finalUserId = null;
+    }
+
     let mappedType = 'other';
     const lowerIntent = (intent || '').toLowerCase();
     if (lowerIntent.includes('accident')) mappedType = 'accidental';
@@ -257,7 +283,7 @@ router.post('/:id/facts', async (req, res) => {
     const numChildren = parseInt(mergedFacts.childrenCount, 10) || 0;
     const numWomen = parseInt(mergedFacts.womenCount, 10) || 0;
     const numPregnant = parseInt(mergedFacts.pregnantCount, 10) || 0;
-    const effectivePeople = Math.max(totalPeople, numChildren + numWomen);
+    const effectivePeople = Math.max(totalPeople, numChildren + numWomen, 1);
 
     if (effectivePeople > 0 || numWomen > 0 || numChildren > 0) {
       desc += `\n👥 People Affected: ${effectivePeople || "Unspecified"}`;
@@ -272,47 +298,85 @@ router.post('/:id/facts', async (req, res) => {
       ? `Voice Alert: ${intent || 'Emergency'} (${locationTag})`
       : `Voice Alert: ${intent || 'Emergency'}`;
 
+    // Compute standard SevaSetu priority score & vulnerability factors
+    const scoringResult = calculatePriority({
+      need_type: mappedType,
+      people_affected: effectivePeople,
+      children_count: numChildren,
+      adults_count: Math.max(0, effectivePeople - numChildren),
+      pregnant_count: numPregnant,
+      title: titleWithLocation,
+      description: desc,
+      is_disaster_zone: Boolean(mergedFacts.fire || mergedFacts.trapped),
+      is_verified: true,
+    });
+
+    const finalUrgencyScore = Math.max(newUrgency, scoringResult.urgency_score || 1.0);
+    const finalPriorityLevel = (finalUrgencyScore >= 9.0 || scoringResult.priority_level === 'High') ? 'High' : (scoringResult.priority_level || 'Medium');
+    const finalVulnerabilityFactors = unionArrays(scoringResult.vulnerability_factors || [], criticalSignals);
+
+    const finalLat = lat != null ? Number(lat) : (locationInfo.lat != null ? Number(locationInfo.lat) : 22.5726);
+    const finalLng = lng != null ? Number(lng) : (locationInfo.lng != null ? Number(locationInfo.lng) : 88.3639);
+
     const createdNeed = await prisma.need.create({
       data: {
         title: titleWithLocation,
         description: desc,
         needType: mappedType,
-        urgencyScore: newUrgency,
-        district: locationInfo.district,
-        ward: locationInfo.area || locationInfo.ward,
-        peopleAffected: effectivePeople || 1,
+        urgencyScore: finalUrgencyScore,
+        priorityLevel: finalPriorityLevel,
+        vulnerabilityFactors: finalVulnerabilityFactors,
+        district: locationInfo.district || 'Kolkata',
+        ward: locationInfo.area || locationInfo.ward || 'Central',
+        peopleAffected: effectivePeople,
         childrenCount: numChildren,
         adultsCount: Math.max(0, effectivePeople - numChildren),
         pregnantCount: numPregnant,
         isVerified: true,
         status: 'open',
         isDisasterZone: mergedFacts.fire || mergedFacts.trapped ? true : false,
+        reportedBy: finalUserId || undefined,
       }
     });
 
-    if (lat != null && lng != null) {
-      await prisma.$executeRaw`
-        UPDATE needs
-        SET location = ST_SetSRID(ST_MakePoint(${Number(lng)}, ${Number(lat)}), 4326)
-        WHERE id = ${createdNeed.id}::uuid
-      `;
-    }
+    await prisma.$executeRaw`
+      UPDATE needs
+      SET location = ST_SetSRID(ST_MakePoint(${finalLng}::float, ${finalLat}::float), 4326),
+          priority_level = ${finalPriorityLevel},
+          vulnerability_factors = ${finalVulnerabilityFactors}::text[],
+          children_count = ${numChildren}::int,
+          adults_count = ${Math.max(0, effectivePeople - numChildren)}::int,
+          pregnant_count = ${numPregnant}::int
+      WHERE id = ${createdNeed.id}::uuid
+    `;
 
-    // Emit socket event for coordinator dashboard in real-time
+    // Smart cache invalidation so user dashboard & coordinator immediately see the new need
+    await redisService.clearCache('/api/needs').catch(() => {});
+    await redisService.clearCache('/api/coordinators/stats').catch(() => {});
+
+    // Emit socket event for coordinator dashboard and reporter in real-time
     if (global.io) {
       global.io.emit('need_created', { 
         id: createdNeed.id, 
         status: 'open',
-        district: locationInfo.district,
-        ward: locationInfo.area,
+        district: createdNeed.district,
+        ward: createdNeed.ward,
+        need_type: mappedType,
         needType: mappedType,
-        urgencyScore: newUrgency
+        urgency_score: finalUrgencyScore,
+        urgencyScore: finalUrgencyScore,
+        priority_level: finalPriorityLevel,
+        priorityLevel: finalPriorityLevel,
+        reported_by: finalUserId || null,
+        reportedBy: finalUserId || null,
+        title: titleWithLocation,
+        created_at: createdNeed.createdAt,
       });
-      console.log(`[EMERGENCY-API] ✅ need_created emitted → needId: ${createdNeed.id} | Urgency: ${newUrgency}`);
+      console.log(`[EMERGENCY-API] ✅ need_created emitted → needId: ${createdNeed.id} | ReportedBy: ${finalUserId} | Urgency: ${finalUrgencyScore} | Priority: ${finalPriorityLevel}`);
     }
 
     // Proximity volunteer broadcast
-    if (lat != null && lng != null) {
+    if (finalLat != null && finalLng != null) {
       const { triggerBroadcast } = require('../services/matchingService');
       triggerBroadcast(createdNeed.id, 10).catch(err => {
         console.error('[EMERGENCY-API] Broadcast to volunteers failed:', err.message);
@@ -321,11 +385,13 @@ router.post('/:id/facts', async (req, res) => {
 
     return res.status(200).json({
       clientEventId: id,
-      urgency: newUrgency,
+      urgency: finalUrgencyScore,
+      priorityLevel: finalPriorityLevel,
       status: 'URGENCY_CALCULATED',
       factsSeq: newSeq,
       mergedFacts,
-      needId: createdNeed.id
+      needId: createdNeed.id,
+      reportedBy: finalUserId || null
     });
   } catch (err) {
     console.error('[EMERGENCY-API] Error enriching incident:', err);

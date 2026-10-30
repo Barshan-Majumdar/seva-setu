@@ -134,7 +134,7 @@ export default function ChatWidget() {
       {/* Chat Window */}
       {isOpen && (
         <div style={{
-          position: 'fixed', bottom: '110px', right: '32px', zIndex: 9998,
+          position: 'fixed', bottom: '110px', right: '32px', zIndex: 10000,
           width: '400px', maxWidth: 'calc(100vw - 64px)',
           height: '600px', maxHeight: 'calc(100vh - 160px)',
           background: 'rgba(255, 255, 255, 0.95)',

@@ -50,9 +50,11 @@ const ReporterStatusList = () => {
 
     socket.on('need_created', handleRealtimeRefresh);
     socket.on('need_updated', handleRealtimeRefresh);
+    window.addEventListener('sevasetu:need-created', handleRealtimeRefresh);
 
     return () => {
       socket.disconnect();
+      window.removeEventListener('sevasetu:need-created', handleRealtimeRefresh);
     };
   }, [fetchIssues]);
 

@@ -1,5 +1,5 @@
-﻿import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { ClerkProvider, SignIn, SignUp } from '@clerk/react';
 import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -94,9 +94,21 @@ function ClerkProviderWithRouter({ children }) {
  * MainContent â€” rendered INSIDE Router so all hooks have full context.
  */
 function MainContent() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, currentUser } = useAuth();
   const [isReady, setIsReady] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const currentRole = currentUser?.role || localStorage.getItem('dbRole') || 'user';
+  const isCoordinatorOrVolunteer = 
+    currentRole === 'coordinator' || 
+    currentRole === 'volunteer' ||
+    location.pathname.startsWith('/dashboard') ||
+    location.pathname.startsWith('/volunteer') ||
+    location.pathname.startsWith('/shelters') ||
+    location.pathname.startsWith('/volunteer-approvals') ||
+    location.pathname.startsWith('/needs-archive');
+  const showVoiceAssistant = !isCoordinatorOrVolunteer;
 
   const handleSyncReady = useCallback(() => {
     setIsReady(true);
@@ -120,8 +132,16 @@ function MainContent() {
     }
   }, [isReady]);
 
-  // Start background wake word listener after user is authenticated (NATIVE ONLY)
+  // Start background wake word listener ONLY for normal users / citizens (NATIVE ONLY)
   useEffect(() => {
+    if (!showVoiceAssistant) {
+      if (bgVoiceInitialized.current) {
+        backgroundVoiceService.stop();
+        bgVoiceInitialized.current = false;
+      }
+      return;
+    }
+
     if (isAuthenticated && isReady && !bgVoiceInitialized.current) {
       bgVoiceInitialized.current = true;
       
@@ -141,7 +161,7 @@ function MainContent() {
     }
 
     return () => {};
-  }, [isAuthenticated, isReady]);
+  }, [isAuthenticated, isReady, showVoiceAssistant]);
 
   // Pause background voice when emergency modal is open, resume when closed
   const handleVoiceEmergencyClose = useCallback(() => {
@@ -330,13 +350,15 @@ function MainContent() {
           </Routes>
           {isAuthenticated && <ChatWidget />}
 
-          {/* Voice Emergency Modal â€” triggered by wake word or manual activation */}
-          <Suspense fallback={null}>
-            <VoiceEmergencyModal 
-              autoActivate={autoActivateEmergency}
-              handleClose={handleVoiceEmergencyClose} 
-            />
-          </Suspense>
+          {/* Voice Emergency Modal — ONLY usable for normal users / citizens, not coordinator or volunteer */}
+          {showVoiceAssistant && (
+            <Suspense fallback={null}>
+              <VoiceEmergencyModal 
+                autoActivate={autoActivateEmergency}
+                handleClose={handleVoiceEmergencyClose} 
+              />
+            </Suspense>
+          )}
         </Suspense>
       )}
     </>

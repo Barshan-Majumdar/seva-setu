@@ -17,6 +17,8 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 import io
 import os
+import requests
+import whisper
 from typing import Optional
 from nlp_module import FactExtractionRequest, nlp_module
 
@@ -298,6 +300,111 @@ async def extract_facts(req: FactExtractionRequest):
     except Exception as e:
         print(f"[AI-SERVICE] [NLP CRASH]: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════════════════════
+# AUDIO TRANSCRIPTION ENDPOINT (Local Whisper STT + Gemini Fallback)
+# ══════════════════════════════════════════════════════════════════════
+import base64
+import tempfile
+
+# Configure CPU threading for minimum inference latency
+if hasattr(torch, 'set_num_threads'):
+    torch.set_num_threads(max(1, min(4, (os.cpu_count() or 4))))
+
+print("[AI-SERVICE] Loading local Whisper 'base.en' model...")
+try:
+    whisper_model = whisper.load_model('base.en')
+    print("[AI-SERVICE] [OK] Local Whisper base.en English STT model loaded successfully")
+except Exception as e:
+    try:
+        whisper_model = whisper.load_model('tiny.en')
+        print("[AI-SERVICE] [OK] Local Whisper tiny.en English STT model loaded successfully")
+    except Exception as e2:
+        whisper_model = None
+        print(f"[AI-SERVICE] [WARNING] Could not load local Whisper: {e2}")
+
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """
+    Accepts an audio file (16kHz 16-bit mono WAV) and
+    returns a text transcription using local Whisper STT (instant, offline).
+    Forces English decoding with beam_size=5, temperature=0.0, and domain prompt.
+    """
+    audio_data = await file.read()
+    if len(audio_data) < 500:
+        return {"text": "", "error": "Audio too short"}
+
+    # 1. Primary: Local Whisper (offline, deterministic, high-accuracy base.en)
+    if whisper_model is not None:
+        try:
+            suffix = ".wav"
+            if file.filename and file.filename.endswith(".webm"):
+                suffix = ".webm"
+            elif file.filename and file.filename.endswith(".ogg"):
+                suffix = ".ogg"
+
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp.write(audio_data)
+                tmp_path = tmp.name
+
+            try:
+                result = whisper_model.transcribe(
+                    tmp_path,
+                    language="en",
+                    beam_size=1,
+                    best_of=1,
+                    temperature=0.0,
+                    condition_on_previous_text=False,
+                    initial_prompt="Emergency disaster relief fire accident trapped injured medical help flood rescue SevaSetu",
+                    fp16=False
+                )
+                transcript = (result.get("text") or "").strip()
+                # Clean up artifacts
+                if transcript.lower() in ("", ".", "silence", "no speech", "unintelligible", "inaudible", "thank you", "thanks for watching", "subtitles by"):
+                    transcript = ""
+                print(f"[AI-SERVICE] Whisper transcribed ({len(audio_data)} bytes): '{transcript}'")
+                return {"text": transcript, "engine": "local-whisper"}
+            finally:
+                if os.path.exists(tmp_path):
+                    try: os.remove(tmp_path)
+                    except: pass
+        except Exception as e:
+            print(f"[AI-SERVICE] Whisper error: {e}. Falling back to Gemini...")
+
+    # 2. Fallback: Gemini cloud API
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        server_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'server', '.env')
+        if os.path.exists(server_env):
+            with open(server_env, 'r') as f:
+                for line in f:
+                    if line.startswith("GEMINI_API_KEY="):
+                        api_key = line.split("=", 1)[1].strip('"').strip("'")
+                        break
+
+    if api_key:
+        try:
+            content_type = file.content_type or "audio/webm"
+            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"inlineData": {"mimeType": content_type, "data": audio_b64}},
+                        {"text": "Transcribe this audio exactly as spoken. Return ONLY the raw transcription text, nothing else."}
+                    ]
+                }],
+                "generationConfig": {"temperature": 0.0}
+            }
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200:
+                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return {"text": text, "engine": "gemini-cloud"}
+        except Exception as e:
+            print(f"[AI-SERVICE] Gemini transcribe fallback error: {e}")
+
+    return {"text": "", "error": "Transcription failed"}
+
 
 # ══════════════════════════════════════════════════════════════════════
 # STARTUP

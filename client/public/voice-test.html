@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SevaSetu Voice Diagnostic</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 1.5rem; }
+    h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: #38bdf8; }
+    .subtitle { color: #94a3b8; margin-bottom: 1.5rem; font-size: 0.85rem; }
+    .card { background: #1e293b; border-radius: 12px; padding: 1.2rem; margin-bottom: 1rem; border: 1px solid #334155; }
+    .card h2 { font-size: 1rem; color: #f8fafc; margin-bottom: 0.75rem; }
+    .log { background: #0f172a; border-radius: 8px; padding: 0.75rem; font-family: monospace; font-size: 0.75rem; max-height: 200px; overflow-y: auto; border: 1px solid #334155; line-height: 1.5; }
+    .log .ok { color: #4ade80; } .log .warn { color: #facc15; } .log .err { color: #f87171; } .log .info { color: #38bdf8; }
+    button { background: #2563eb; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    button.danger { background: #dc2626; } button.danger:hover { background: #b91c1c; }
+    select { background: #0f172a; color: #e2e8f0; border: 1px solid #475569; padding: 0.5rem; border-radius: 6px; font-size: 0.8rem; width: 100%; margin-bottom: 0.75rem; }
+    .meter-bar { height: 24px; background: #1e293b; border-radius: 12px; overflow: hidden; margin: 0.5rem 0; border: 1px solid #334155; }
+    .meter-fill { height: 100%; background: linear-gradient(90deg, #22c55e, #facc15, #ef4444); transition: width 50ms; border-radius: 12px; }
+    .status { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
+    .status.pass { background: rgba(34,197,94,0.2); color: #4ade80; }
+    .status.fail { background: rgba(239,68,68,0.2); color: #f87171; }
+    .status.wait { background: rgba(250,204,21,0.2); color: #facc15; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+    .result-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #334155; }
+    .result-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <h1>🔬 SevaSetu Voice Diagnostic Tool</h1>
+  <p class="subtitle">This page tests your browser's speech recognition, microphone, and TTS independently from SevaSetu's code.</p>
+
+  <!-- Test 1: Microphone Device Selection & Audio Level -->
+  <div class="card">
+    <h2>🎤 Test 1: Microphone & Audio Level</h2>
+    <p style="color:#94a3b8;font-size:0.8rem;margin-bottom:0.5rem">Select your PHYSICAL microphone (not Camo or virtual devices), then click Start to verify audio is received.</p>
+    <select id="micSelect"><option value="">Loading devices...</option></select>
+    <button onclick="startMicTest()" id="micStartBtn">▶ Start Mic Test</button>
+    <button onclick="stopMicTest()" class="danger" id="micStopBtn" disabled>■ Stop</button>
+    <div class="meter-bar"><div class="meter-fill" id="meterFill" style="width:0%"></div></div>
+    <div id="micLevel" style="font-family:monospace;font-size:0.75rem;color:#94a3b8">Level: —</div>
+    <div id="micResult" style="margin-top:0.5rem"></div>
+  </div>
+
+  <!-- Test 2: Web Speech API Recognition -->
+  <div class="card">
+    <h2>🗣️ Test 2: Web Speech API (SpeechRecognition)</h2>
+    <p style="color:#94a3b8;font-size:0.8rem;margin-bottom:0.5rem">Tests if Chrome's built-in speech-to-text can hear and transcribe your voice.</p>
+    <button onclick="startSpeechTest()" id="speechStartBtn">▶ Start Speech Test</button>
+    <button onclick="stopSpeechTest()" class="danger" id="speechStopBtn" disabled>■ Stop</button>
+    <div id="speechTranscript" style="margin:0.5rem 0;padding:0.5rem;background:#0f172a;border-radius:6px;font-size:0.85rem;min-height:36px;border:1px solid #334155;color:#f8fafc"></div>
+    <div class="log" id="speechLog"></div>
+  </div>
+
+  <!-- Test 3: Combined mic + speech -->
+  <div class="card">
+    <h2>🔗 Test 3: Combined (Mic + Speech Recognition)</h2>
+    <p style="color:#94a3b8;font-size:0.8rem;margin-bottom:0.5rem">Runs getUserMedia AND SpeechRecognition simultaneously to check if they conflict.</p>
+    <button onclick="startCombinedTest()" id="combinedStartBtn">▶ Start Combined Test</button>
+    <button onclick="stopCombinedTest()" class="danger" id="combinedStopBtn" disabled>■ Stop</button>
+    <div class="meter-bar"><div class="meter-fill" id="combinedMeter" style="width:0%"></div></div>
+    <div id="combinedTranscript" style="margin:0.5rem 0;padding:0.5rem;background:#0f172a;border-radius:6px;font-size:0.85rem;min-height:36px;border:1px solid #334155;color:#f8fafc"></div>
+    <div class="log" id="combinedLog"></div>
+  </div>
+
+  <!-- Test 4: TTS -->
+  <div class="card">
+    <h2>🔊 Test 4: Text-to-Speech</h2>
+    <button onclick="testTTS()">Speak "SevaSetu here"</button>
+    <div id="ttsResult" style="margin-top:0.5rem"></div>
+  </div>
+
+  <!-- Summary -->
+  <div class="card" id="summaryCard" style="display:none">
+    <h2>📋 Diagnostic Summary</h2>
+    <div id="summaryContent"></div>
+  </div>
+
+  <script>
+    // ── Mic device enumeration ──
+    let micStream = null, micCtx = null, micAnalyser = null, micAnimFrame = null;
+    let speechRec = null;
+    let combinedStream = null, combinedCtx = null, combinedAnalyser = null, combinedAnimFrame = null, combinedRec = null;
+    let maxLevel = 0;
+
+    async function loadDevices() {
+      try {
+        // Need a getUserMedia call first to get device labels
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tempStream.getTracks().forEach(t => t.stop());
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(d => d.kind === 'audioinput');
+        const sel = document.getElementById('micSelect');
+        sel.innerHTML = '';
+        audioInputs.forEach((d, i) => {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          const label = d.label || `Microphone ${i + 1}`;
+          opt.textContent = label;
+          // Flag virtual devices
+          if (/camo|virtual|nvidia/i.test(label)) {
+            opt.textContent = `⚠️ ${label} (VIRTUAL — may not work)`;
+            opt.style.color = '#facc15';
+          }
+          sel.appendChild(opt);
+        });
+        // Auto-select first non-virtual device
+        const physical = audioInputs.findIndex(d => !/camo|virtual|nvidia/i.test(d.label));
+        if (physical >= 0) sel.selectedIndex = physical;
+      } catch (e) {
+        document.getElementById('micSelect').innerHTML = `<option>❌ ${e.message}</option>`;
+      }
+    }
+    loadDevices();
+
+    // ── Test 1: Mic audio level ──
+    async function startMicTest() {
+      const deviceId = document.getElementById('micSelect').value;
+      document.getElementById('micStartBtn').disabled = true;
+      document.getElementById('micStopBtn').disabled = false;
+      maxLevel = 0;
+      const resultEl = document.getElementById('micResult');
+      resultEl.innerHTML = '<span class="status wait">⏳ Listening for audio... speak now!</span>';
+
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        micCtx = new (window.AudioContext || window.webkitAudioContext)();
+        micAnalyser = micCtx.createAnalyser();
+        micAnalyser.fftSize = 256;
+        const source = micCtx.createMediaStreamSource(micStream);
+        source.connect(micAnalyser);
+        const data = new Uint8Array(micAnalyser.frequencyBinCount);
+
+        function draw() {
+          micAnalyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) sum += data[i];
+          const avg = sum / data.length;
+          const pct = Math.min(100, (avg / 128) * 100);
+          if (avg > maxLevel) maxLevel = avg;
+          document.getElementById('meterFill').style.width = pct + '%';
+          document.getElementById('micLevel').textContent = `Level: ${avg.toFixed(1)} / 255  |  Peak: ${maxLevel.toFixed(1)}  |  ${avg > 5 ? '✅ REAL AUDIO' : '⚠️ SILENCE'}`;
+
+          if (maxLevel > 5) {
+            resultEl.innerHTML = '<span class="status pass">✅ PASS — Real audio detected from this microphone</span>';
+          }
+          micAnimFrame = requestAnimationFrame(draw);
+        }
+        draw();
+      } catch (e) {
+        resultEl.innerHTML = `<span class="status fail">❌ FAIL: ${e.message}</span>`;
+        document.getElementById('micStartBtn').disabled = false;
+        document.getElementById('micStopBtn').disabled = true;
+      }
+    }
+
+    function stopMicTest() {
+      if (micAnimFrame) cancelAnimationFrame(micAnimFrame);
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      if (micCtx) micCtx.close().catch(() => {});
+      micStream = null; micCtx = null;
+      document.getElementById('micStartBtn').disabled = false;
+      document.getElementById('micStopBtn').disabled = true;
+      document.getElementById('meterFill').style.width = '0%';
+
+      const resultEl = document.getElementById('micResult');
+      if (maxLevel <= 5) {
+        resultEl.innerHTML = '<span class="status fail">❌ FAIL — This microphone sent SILENCE. Try selecting a different mic above.</span>';
+      }
+    }
+
+    // ── Test 2: SpeechRecognition only ──
+    function addLog(targetId, msg, cls = 'info') {
+      const el = document.getElementById(targetId);
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function startSpeechTest() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        addLog('speechLog', 'Web Speech API NOT SUPPORTED in this browser!', 'err');
+        return;
+      }
+      document.getElementById('speechStartBtn').disabled = true;
+      document.getElementById('speechStopBtn').disabled = false;
+      document.getElementById('speechLog').innerHTML = '';
+      document.getElementById('speechTranscript').textContent = '';
+
+      speechRec = new SpeechRec();
+      speechRec.continuous = true;
+      speechRec.interimResults = true;
+      speechRec.lang = navigator.language || 'en-US';
+      speechRec.maxAlternatives = 1;
+
+      addLog('speechLog', `Created SpeechRecognition (lang: ${speechRec.lang}, continuous: true, interimResults: true)`, 'info');
+
+      speechRec.onstart = () => addLog('speechLog', '✅ onstart — Recognition started', 'ok');
+      speechRec.onaudiostart = () => addLog('speechLog', '✅ onaudiostart — Audio capture hardware opened', 'ok');
+      speechRec.onsoundstart = () => addLog('speechLog', '✅ onsoundstart — Sound detected', 'ok');
+      speechRec.onspeechstart = () => addLog('speechLog', '✅ onspeechstart — HUMAN SPEECH detected!', 'ok');
+      speechRec.onspeechend = () => addLog('speechLog', 'onspeechend — Speech ended', 'warn');
+      speechRec.onsoundend = () => addLog('speechLog', 'onsoundend — Sound ended', 'warn');
+      speechRec.onaudioend = () => addLog('speechLog', 'onaudioend — Audio capture closed', 'warn');
+      speechRec.onend = () => {
+        addLog('speechLog', 'onend — Recognition session ended', 'warn');
+        document.getElementById('speechStartBtn').disabled = false;
+        document.getElementById('speechStopBtn').disabled = true;
+      };
+      speechRec.onerror = (e) => addLog('speechLog', `❌ onerror: ${e.error} — ${e.message || ''}`, 'err');
+      speechRec.onresult = (event) => {
+        let final = '', interim = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const r = event.results[i];
+          if (r.isFinal) final += r[0].transcript + ' ';
+          else interim += r[0].transcript;
+        }
+        const text = (final + interim).trim();
+        addLog('speechLog', `✅ onresult: "${text}" (confidence: ${event.results[event.results.length-1][0].confidence?.toFixed(2) || 'N/A'})`, 'ok');
+        document.getElementById('speechTranscript').textContent = text;
+      };
+
+      addLog('speechLog', 'Calling rec.start()...', 'info');
+      try {
+        speechRec.start();
+      } catch (e) {
+        addLog('speechLog', `❌ start() threw: ${e.message}`, 'err');
+      }
+    }
+
+    function stopSpeechTest() {
+      if (speechRec) { try { speechRec.stop(); } catch(_) {} speechRec = null; }
+      document.getElementById('speechStartBtn').disabled = false;
+      document.getElementById('speechStopBtn').disabled = true;
+    }
+
+    // ── Test 3: Combined ──
+    async function startCombinedTest() {
+      const deviceId = document.getElementById('micSelect').value;
+      document.getElementById('combinedStartBtn').disabled = true;
+      document.getElementById('combinedStopBtn').disabled = false;
+      document.getElementById('combinedLog').innerHTML = '';
+      document.getElementById('combinedTranscript').textContent = '';
+
+      // Start getUserMedia first
+      try {
+        combinedStream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        addLog('combinedLog', '✅ getUserMedia succeeded', 'ok');
+        combinedCtx = new (window.AudioContext || window.webkitAudioContext)();
+        combinedAnalyser = combinedCtx.createAnalyser();
+        combinedAnalyser.fftSize = 256;
+        combinedCtx.createMediaStreamSource(combinedStream).connect(combinedAnalyser);
+        const data = new Uint8Array(combinedAnalyser.frequencyBinCount);
+        function draw() {
+          combinedAnalyser.getByteFrequencyData(data);
+          let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i];
+          const pct = Math.min(100, ((sum / data.length) / 128) * 100);
+          document.getElementById('combinedMeter').style.width = pct + '%';
+          combinedAnimFrame = requestAnimationFrame(draw);
+        }
+        draw();
+      } catch (e) {
+        addLog('combinedLog', `❌ getUserMedia failed: ${e.message}`, 'err');
+      }
+
+      // Now start SpeechRecognition alongside
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) { addLog('combinedLog', '❌ No SpeechRecognition', 'err'); return; }
+
+      combinedRec = new SpeechRec();
+      combinedRec.continuous = true;
+      combinedRec.interimResults = true;
+      combinedRec.lang = navigator.language || 'en-US';
+
+      combinedRec.onstart = () => addLog('combinedLog', '✅ Speech onstart', 'ok');
+      combinedRec.onaudiostart = () => addLog('combinedLog', '✅ Speech onaudiostart', 'ok');
+      combinedRec.onspeechstart = () => addLog('combinedLog', '✅ SPEECH DETECTED', 'ok');
+      combinedRec.onerror = (e) => addLog('combinedLog', `❌ Speech error: ${e.error}`, 'err');
+      combinedRec.onend = () => {
+        addLog('combinedLog', 'Speech session ended', 'warn');
+        document.getElementById('combinedStartBtn').disabled = false;
+        document.getElementById('combinedStopBtn').disabled = true;
+      };
+      combinedRec.onresult = (event) => {
+        let final = '', interim = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const r = event.results[i]; if (r.isFinal) final += r[0].transcript + ' '; else interim += r[0].transcript;
+        }
+        const text = (final + interim).trim();
+        addLog('combinedLog', `✅ TRANSCRIPT: "${text}"`, 'ok');
+        document.getElementById('combinedTranscript').textContent = text;
+      };
+
+      addLog('combinedLog', 'Starting speech recognition...', 'info');
+      try { combinedRec.start(); } catch (e) { addLog('combinedLog', `❌ start() error: ${e.message}`, 'err'); }
+    }
+
+    function stopCombinedTest() {
+      if (combinedAnimFrame) cancelAnimationFrame(combinedAnimFrame);
+      if (combinedStream) combinedStream.getTracks().forEach(t => t.stop());
+      if (combinedCtx) combinedCtx.close().catch(() => {});
+      if (combinedRec) { try { combinedRec.stop(); } catch(_) {} }
+      combinedStream = null; combinedCtx = null; combinedRec = null;
+      document.getElementById('combinedStartBtn').disabled = false;
+      document.getElementById('combinedStopBtn').disabled = true;
+      document.getElementById('combinedMeter').style.width = '0%';
+    }
+
+    // ── Test 4: TTS ──
+    function testTTS() {
+      const el = document.getElementById('ttsResult');
+      if (!window.speechSynthesis) { el.innerHTML = '<span class="status fail">❌ SpeechSynthesis not supported</span>'; return; }
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance('SevaSetu here. What is your emergency?');
+      utt.rate = 1.0; utt.pitch = 1.0; utt.volume = 1.0;
+      utt.onstart = () => { el.innerHTML = '<span class="status wait">🔊 Speaking...</span>'; };
+      utt.onend = () => { el.innerHTML = '<span class="status pass">✅ TTS completed successfully</span>'; };
+      utt.onerror = (e) => { el.innerHTML = `<span class="status fail">❌ TTS error: ${e.error}</span>`; };
+      window.speechSynthesis.speak(utt);
+    }
+  </script>
+</body>
+</html>
+

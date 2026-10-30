@@ -247,6 +247,9 @@ Schema:
             if "who are you" in t or "what are you" in t or "introduce yourself" in t or "what is seva setu" in t:
                 reply = "I am Seva Setu, your disaster and emergency relief assistant. Is there an emergency right now?"
                 intent_override = "INFO"
+            elif re.search(r'\b(hear|listen|listening)\b', t) is not None or has_any(["can you hear me", "can you listen", "can you hear", "are you listening", "hear me", "listen me", "listen to me", "are you there", "hello", "hi"], t):
+                reply = "Yes, I can hear you clearly! Please describe your emergency."
+                intent_override = "QUERY_DETAILS"
             elif has_any(["i am safe", "i am fine", "i am okay", "no emergency", "false alarm", "everything is fine", "all good", "safe"], t) or \
                  re.search(r'\bno\b', t) is not None:
                 reply = "Glad to hear that. Closing the session now. Stay safe!"
