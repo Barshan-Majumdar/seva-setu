@@ -79,22 +79,22 @@ const MatchModal = ({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '0.5rem' }}>
               {Number(need.children_count) > 0 && (
                 <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.08)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                  👶 {need.children_count} {Number(need.children_count) === 1 ? 'Child' : 'Children'}
+                  {need.children_count} {Number(need.children_count) === 1 ? 'Child' : 'Children'}
                 </span>
               )}
               {Number(need.pregnant_count) > 0 && (
                 <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(244, 63, 94, 0.1)', color: '#be185d', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
-                  🤰 {need.pregnant_count} {Number(need.pregnant_count) === 1 ? 'Pregnant Woman' : 'Pregnant Women'}
+                  {need.pregnant_count} {Number(need.pregnant_count) === 1 ? 'Pregnant Woman' : 'Pregnant Women'}
                 </span>
               )}
               {Number(need.adults_count) > 0 && (
                 <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(71, 85, 105, 0.08)', color: '#475569', border: '1px solid rgba(71, 85, 105, 0.2)' }}>
-                  🧑 {need.adults_count} Adults
+                  {need.adults_count} Adults
                 </span>
               )}
               {Array.isArray(need.vulnerability_factors) && need.vulnerability_factors.map((f, i) => (
                 <span key={i} style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
-                  ⚡ {f}
+                  {f}
                 </span>
               ))}
             </div>

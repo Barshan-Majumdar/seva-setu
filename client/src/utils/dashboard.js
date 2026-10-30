@@ -34,9 +34,13 @@ export const disasterColor = (type) => {
     education: '#8b5cf6', // Violet/Purple
     other: '#64748b'      // Slate/Gray
   };
+  if (!type) return colors.other;
   if (typeof type === 'boolean') {
     return type ? '#ef4444' : colors.other;
   }
-  const key = typeof type === 'string' ? type.toLowerCase() : 'other';
-  return colors[key] || colors.other;
+  if (typeof type === 'string') {
+    const key = type.toLowerCase().trim();
+    return colors[key] || colors.other;
+  }
+  return colors.other;
 };

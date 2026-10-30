@@ -121,25 +121,25 @@ export const calculateUrgencyPreview = ({
   if (PATTERNS.lifeThreat.trapped.test(combined)) {
     isLifeThreatening = true;
     lifeThreatReasons.push('Trapped Under Rubble / Debris');
-    factors.push('🚨 Critical: Trapped / Debris');
+    factors.push('Critical: Trapped / Debris');
     severityScore += SCORING_CONFIG.SEVERITY.trapped_collapse;
   }
   if (PATTERNS.lifeThreat.activeFire.test(combined)) {
     isLifeThreatening = true;
     lifeThreatReasons.push('Active Fire / Explosion');
-    factors.push('🚨 Critical: Active Fire');
+    factors.push('Critical: Active Fire');
     severityScore += SCORING_CONFIG.SEVERITY.active_fire;
   }
   if (PATTERNS.lifeThreat.criticalMedical.test(combined)) {
     isLifeThreatening = true;
     lifeThreatReasons.push('Severe Trauma / Unconscious');
-    factors.push('🚨 Critical: Severe Trauma / Bleeding');
+    factors.push('Critical: Severe Trauma / Bleeding');
     severityScore += SCORING_CONFIG.SEVERITY.critical_medical;
   }
   if (PATTERNS.lifeThreat.deliveryEmergency.test(combined)) {
     isLifeThreatening = true;
     lifeThreatReasons.push('Imminent Childbirth / Labor');
-    factors.push('🚨 Critical: Imminent Delivery');
+    factors.push('Critical: Imminent Delivery');
     severityScore += SCORING_CONFIG.SEVERITY.critical_medical;
   }
 

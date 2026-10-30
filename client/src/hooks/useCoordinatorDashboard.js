@@ -3,6 +3,8 @@ import { io } from 'socket.io-client';
 import { fetchNeeds, fetchVolunteers, fetchTasks, fetchSystemStats } from '../services/dashboard';
 import api from '../services/api';
 
+const PRIORITY_WEIGHT = { High: 1, Medium: 2, Low: 3 };
+
 export const useCoordinatorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -130,8 +132,6 @@ export const useCoordinatorDashboard = () => {
     return ['all', ...Array.from(all)];
   }, [needs]);
 
-  const priorityWeight = { High: 1, Medium: 2, Low: 3 };
-
   const filteredNeeds = useMemo(() => {
     return needs.filter((need) => {
       if (need.status === 'archived' || need.status === 'rejected') return false;
@@ -164,16 +164,16 @@ export const useCoordinatorDashboard = () => {
           return sorting.direction === 'asc' ? scoreA - scoreB : scoreB - scoreA;
         }
         // Secondary tie-break: priority level then creation time
-        const pA = priorityWeight[a.priority_level] || 2;
-        const pB = priorityWeight[b.priority_level] || 2;
+        const pA = PRIORITY_WEIGHT[a.priority_level] || 2;
+        const pB = PRIORITY_WEIGHT[b.priority_level] || 2;
         if (pA !== pB) return pA - pB;
         return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       }
 
       // 3. Sorting by priority_level (High -> Medium -> Low)
       if (sorting.key === 'priority_level') {
-        const pA = priorityWeight[a.priority_level] || 2;
-        const pB = priorityWeight[b.priority_level] || 2;
+        const pA = PRIORITY_WEIGHT[a.priority_level] || 2;
+        const pB = PRIORITY_WEIGHT[b.priority_level] || 2;
         if (pA !== pB) return sorting.direction === 'asc' ? pA - pB : pB - pA;
         // Secondary tie-break: urgency score descending
         const scoreDiff = (Number(b.urgency_score) || 0) - (Number(a.urgency_score) || 0);

@@ -127,7 +127,7 @@ const CoordinatorManagerModal = ({ onClose }) => {
           ) : (
             <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'grid', gap: '0.5rem', paddingRight: '0.5rem' }}>
               {coordinators.map(c => {
-                const isMe = c.email?.toLowerCase() === currentUser?.email?.toLowerCase();
+                const isMe = typeof c.email === 'string' && typeof currentUser?.email === 'string' && c.email.toLowerCase() === currentUser.email.toLowerCase();
                 return (
                   <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: 'var(--color-surface-secondary)', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

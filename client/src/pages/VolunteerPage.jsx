@@ -272,12 +272,12 @@ const VolunteerPage = () => {
                     <span className="task-meta-tag">Urgency: {Number(task.urgency_score || 0).toFixed(1)}</span>
                     {Number(task.children_count) > 0 && (
                       <span className="task-meta-tag" style={{ color: '#dc2626', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                        👶 {task.children_count} Children
+                        {task.children_count} Children
                       </span>
                     )}
                     {Number(task.pregnant_count) > 0 && (
                       <span className="task-meta-tag" style={{ color: '#be185d', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', fontWeight: 700 }}>
-                        🤰 {task.pregnant_count} {Number(task.pregnant_count) === 1 ? 'Pregnant Woman' : 'Pregnant Women'}
+                        {task.pregnant_count} {Number(task.pregnant_count) === 1 ? 'Pregnant Woman' : 'Pregnant Women'}
                       </span>
                     )}
                     
@@ -336,7 +336,9 @@ const VolunteerPage = () => {
                     {task.lat != null && task.lng != null && !isNaN(Number(task.lat)) && !isNaN(Number(task.lng)) ? (
                         <VolunteerTaskMap
                           volunteerCoords={volunteerCoords}
+                          volunteerLocation={volunteerCoords}
                           taskCoords={{ lat: Number(task.lat), lng: Number(task.lng) }}
+                          taskLocation={{ lat: Number(task.lat), lng: Number(task.lng) }}
                         />
                       ) : (
                         <div className="volunteer-map-loading">
@@ -393,7 +395,7 @@ const VolunteerPage = () => {
                           }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                               {selectedFiles[task.task_id].hasGps
-                                ? <><MapPin style={{ width: 11, height: 11 }} /> GPS VERIFIED</>
+                                ? <><MapPin style={{ width: 11, height: 11 }} /> GPS EMBEDDED</>
                                 : <><AlertCircle style={{ width: 11, height: 11 }} /> NO GPS</>}
                             </span>
                           </div>

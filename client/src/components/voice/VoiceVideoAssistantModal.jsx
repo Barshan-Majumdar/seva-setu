@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { VoiceFeedback } from '../../services/VoiceFeedback';
 import { extractLiveFormFields } from './TopVoiceFormBanner';
+import { speechService } from '../../services/SpeechService';
 
 /**
  * VoiceVideoAssistantModal
@@ -13,9 +14,20 @@ import { extractLiveFormFields } from './TopVoiceFormBanner';
  * 2. Live camera viewfinder & GPS photo capture (inside this same div)
  * 3. Photo preview + Say "Submit" voice auto-submission (inside this same div)
  */
+const mergeTranscripts = (base, current) => {
+  const b = (base || '').trim();
+  const c = (current || '').trim();
+  if (!b) return c;
+  if (!c) return b;
+  if (b.endsWith(c) || b === c) return b;
+  if (c.startsWith(b)) return c;
+  return `${b} ${c}`;
+};
+
 export const VoiceVideoAssistantModal = ({
   isOpen,
   onClose,
+  onResetForm,
   onApplyData,
   onSubmitForm,
   formData = {},
@@ -24,8 +36,6 @@ export const VoiceVideoAssistantModal = ({
   submitSuccess = false,
   submitError = '',
 }) => {
-  if (!isOpen) return null;
-
   // Flow steps: 'voice' | 'camera' | 'submit' | 'submitting' | 'success'
   const [step, setStep] = useState('voice');
 
@@ -36,6 +46,27 @@ export const VoiceVideoAssistantModal = ({
   const [language, setLanguage] = useState('en-IN');
   const [extractedFields, setExtractedFields] = useState({});
   const recognitionRef = useRef(null);
+  const baseTranscriptRef = useRef('');
+  const sessionFinalRef = useRef('');
+  const transcriptRef = useRef('');
+  const interimTextRef = useRef('');
+  const extractedFieldsRef = useRef({});
+  const isManuallyStoppedRef = useRef(false);
+  const restartTimeoutRef = useRef(null);
+  const isOpenRef = useRef(isOpen);
+  const stepRef = useRef(step);
+  const onApplyDataRef = useRef(onApplyData);
+  const formDataRef = useRef(formData);
+  const languageRef = useRef(language);
+
+  // Keep references synchronized
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+    stepRef.current = step;
+    onApplyDataRef.current = onApplyData;
+    formDataRef.current = formData;
+    languageRef.current = language;
+  });
 
   // Step 2: Camera state
   const videoRef = useRef(null);
@@ -50,6 +81,7 @@ export const VoiceVideoAssistantModal = ({
   // Step 3: Submission state
   const [localSubmitError, setLocalSubmitError] = useState('');
   const [localSubmitSuccess, setLocalSubmitSuccess] = useState(false);
+  const lastSpokenErrorRef = useRef('');
 
   // Sync external success from parent
   useEffect(() => {
@@ -59,28 +91,40 @@ export const VoiceVideoAssistantModal = ({
       VoiceFeedback.speak('Report submitted successfully.');
       const t = setTimeout(() => {
         onClose();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sevasetu:voice-form-closed'));
+        }
       }, 1600);
       return () => clearTimeout(t);
     }
   }, [submitSuccess, onClose]);
 
-  // Sync external error from parent
+  // Sync external error from parent and read it aloud
   useEffect(() => {
-    if (submitError && (step === 'submitting' || step === 'submit')) {
+    const activeErr = submitError || localSubmitError;
+    if (activeErr && activeErr !== lastSpokenErrorRef.current && (step === 'submitting' || step === 'submit')) {
+      lastSpokenErrorRef.current = activeErr;
       setStep('submit');
-      setLocalSubmitError(submitError);
-      VoiceFeedback.speak(submitError);
+      const speechText = typeof activeErr === 'string'
+        ? activeErr.replace(/[{}"]/g, '').replace(/\\n/g, '. ').trim()
+        : 'Submission failed. Please check details and try again.';
+      VoiceFeedback.speak(speechText);
     }
-  }, [submitError, step]);
+  }, [submitError, localSubmitError, step]);
 
   // ══════════════════════════════════════════════════════
   // 1. STEP 1: VOICE RECOGNITION SETUP
   // ══════════════════════════════════════════════════════
   const stopVoiceListening = useCallback(() => {
+    isManuallyStoppedRef.current = true;
+    clearTimeout(restartTimeoutRef.current);
     if (recognitionRef.current) {
       try {
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
         recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch (_) {}
       recognitionRef.current = null;
     }
@@ -88,9 +132,10 @@ export const VoiceVideoAssistantModal = ({
   }, []);
 
   const handleProceedToCamera = useCallback(() => {
+    isManuallyStoppedRef.current = true;
     stopVoiceListening();
-    const currentSpeech = (transcript + ' ' + interimText).trim();
-    const fieldsToApply = { ...extractedFields };
+    const currentSpeech = (baseTranscriptRef.current + ' ' + sessionFinalRef.current + ' ' + interimTextRef.current).trim();
+    const fieldsToApply = { ...extractedFieldsRef.current };
     if (currentSpeech) {
       if (!fieldsToApply.title) {
         const firstSentence = currentSpeech.split(/[.,\n]/)[0].trim();
@@ -99,99 +144,176 @@ export const VoiceVideoAssistantModal = ({
       if (!fieldsToApply.description) {
         fieldsToApply.description = currentSpeech;
       }
-      if (!fieldsToApply.district && !formData.district) {
+      if (!fieldsToApply.district && !formDataRef.current?.district) {
         fieldsToApply.district = 'Kolkata';
       }
-      if (!fieldsToApply.ward && !formData.ward) {
+      if (!fieldsToApply.ward && !formDataRef.current?.ward) {
         fieldsToApply.ward = '1';
       }
       setExtractedFields(fieldsToApply);
-      if (onApplyData) {
-        onApplyData(fieldsToApply, null, null);
+      if (onApplyDataRef.current) {
+        onApplyDataRef.current(fieldsToApply, null, null);
       }
     }
     setStep('camera');
     VoiceFeedback.speak('Incident details recorded. Please capture a live photo of the incident.');
-  }, [transcript, interimText, extractedFields, formData, onApplyData, stopVoiceListening]);
+  }, [stopVoiceListening]);
 
   const startVoiceListening = useCallback(() => {
-    stopVoiceListening();
+    isManuallyStoppedRef.current = false;
+    clearTimeout(restartTimeoutRef.current);
+    setIsListening(true);
+
+    // Stop background wake word listener to avoid Chromium audio conflict
+    if (speechService && typeof speechService.stop === 'function') {
+      try { speechService.stop(); } catch (_) {}
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.abort();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       console.warn('[VoiceVideoModal] Speech Recognition not supported in this browser.');
+      setIsListening(false);
       return;
     }
 
-    try {
-      const recognition = new SpeechRec();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = language;
+    const launchRecognition = () => {
+      if (isManuallyStoppedRef.current || !isOpenRef.current || stepRef.current !== 'voice') {
+        setIsListening(false);
+        return;
+      }
 
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
+      try {
+        const recognition = new SpeechRec();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = languageRef.current || 'en-IN';
 
-      recognition.onresult = (event) => {
-        let currentInterim = '';
-        let finalTrans = '';
+        recognition.onstart = () => {
+          setIsListening(true);
+        };
 
-        for (let i = 0; i < event.results.length; i++) {
-          const res = event.results[i];
-          if (res.isFinal) {
-            finalTrans += res[0].transcript + ' ';
+        recognition.onresult = (event) => {
+          let currentSessionFinal = '';
+          let currentSessionInterim = '';
+
+          for (let i = 0; i < event.results.length; i++) {
+            const res = event.results[i];
+            if (res.isFinal) {
+              currentSessionFinal += res[0].transcript + ' ';
+            } else {
+              currentSessionInterim += res[0].transcript;
+            }
+          }
+
+          currentSessionFinal = currentSessionFinal.trim();
+          sessionFinalRef.current = currentSessionFinal;
+
+          const totalFinal = mergeTranscripts(baseTranscriptRef.current, currentSessionFinal);
+          transcriptRef.current = totalFinal;
+          setTranscript(totalFinal);
+
+          interimTextRef.current = currentSessionInterim;
+          setInterimText(currentSessionInterim);
+
+          const fullSpeech = (totalFinal + ' ' + currentSessionInterim).trim();
+          if (fullSpeech) {
+            const parsed = extractLiveFormFields(fullSpeech);
+            extractedFieldsRef.current = parsed.fields;
+            setExtractedFields(parsed.fields);
+            if (onApplyDataRef.current && Object.keys(parsed.fields).length > 0) {
+              onApplyDataRef.current(parsed.fields, null, null);
+            }
+
+            // Voice trigger for advancing to camera:
+            if (/\b(open\s*camera|take\s*photo|camera|capture|tasveer|chobi)\b/i.test(fullSpeech.toLowerCase())) {
+              handleProceedToCamera();
+            }
+          }
+        };
+
+        recognition.onerror = (err) => {
+          const errCode = err?.error;
+          console.warn('[VoiceVideoModal] Speech error:', errCode);
+          if (errCode === 'no-speech' || errCode === 'aborted') {
+            // Normal silence timeout or browser audio cycle — do not terminate listening state
+            return;
+          }
+          // On fatal errors like 'not-allowed', stop to prevent infinite error loops
+          isManuallyStoppedRef.current = true;
+          clearTimeout(restartTimeoutRef.current);
+          setIsListening(false);
+          if (errCode === 'not-allowed') {
+            VoiceFeedback.speak('Microphone access denied. Please allow microphone in browser address bar.');
+          }
+        };
+
+        recognition.onend = () => {
+          recognitionRef.current = null;
+
+          // Commit current session's final text into baseTranscriptRef
+          if (sessionFinalRef.current) {
+            baseTranscriptRef.current = mergeTranscripts(baseTranscriptRef.current, sessionFinalRef.current);
+            sessionFinalRef.current = '';
+          }
+          interimTextRef.current = '';
+          setInterimText('');
+
+          // Keep continuously listening seamlessly during voice step without toggling UI to green
+          if (!isManuallyStoppedRef.current && isOpenRef.current && stepRef.current === 'voice') {
+            clearTimeout(restartTimeoutRef.current);
+            restartTimeoutRef.current = setTimeout(() => {
+              if (!isManuallyStoppedRef.current && isOpenRef.current && stepRef.current === 'voice') {
+                launchRecognition();
+              }
+            }, 100);
           } else {
-            currentInterim += res[0].transcript;
+            setIsListening(false);
           }
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (err) {
+        console.error('[VoiceVideoModal] Speech start error:', err);
+        if (!isManuallyStoppedRef.current && isOpenRef.current && stepRef.current === 'voice') {
+          clearTimeout(restartTimeoutRef.current);
+          restartTimeoutRef.current = setTimeout(() => {
+            if (!isManuallyStoppedRef.current && isOpenRef.current && stepRef.current === 'voice') {
+              launchRecognition();
+            }
+          }, 250);
+        } else {
+          setIsListening(false);
         }
+      }
+    };
 
-        if (finalTrans) {
-          setTranscript((prev) => (prev + ' ' + finalTrans).trim());
-        }
-        setInterimText(currentInterim);
+    // Buffer 100ms so Chromium cleanly releases previous microphone session
+    restartTimeoutRef.current = setTimeout(launchRecognition, 100);
+  }, [handleProceedToCamera]);
 
-        const fullSpeech = (finalTrans ? (transcript + ' ' + finalTrans) : (transcript + ' ' + currentInterim)).trim();
-        if (fullSpeech) {
-          const parsed = extractLiveFormFields(fullSpeech);
-          setExtractedFields(parsed.fields);
-          if (onApplyData && Object.keys(parsed.fields).length > 0) {
-            onApplyData(parsed.fields, null, null);
-          }
-
-          // Voice trigger for advancing to camera:
-          if (/\b(open\s*camera|take\s*photo|camera|capture|tasveer|chobi)\b/i.test(fullSpeech.toLowerCase())) {
-            handleProceedToCamera();
-          }
-        }
-      };
-
-      recognition.onerror = (err) => {
-        console.warn('[VoiceVideoModal] Speech error:', err?.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.error('[VoiceVideoModal] Speech start error:', err);
-      setIsListening(false);
-    }
-  }, [language, transcript, onApplyData, stopVoiceListening, handleProceedToCamera]);
-
-  // Start listening automatically when entering 'voice' step
+  // Start listening automatically when modal opens in 'voice' step, or when language switches
   useEffect(() => {
-    if (step === 'voice') {
+    if (isOpen && step === 'voice') {
       startVoiceListening();
     } else {
       stopVoiceListening();
     }
-    return () => stopVoiceListening();
-  }, [step, startVoiceListening, stopVoiceListening]);
+    return () => {
+      stopVoiceListening();
+    };
+  }, [isOpen, step, language, startVoiceListening, stopVoiceListening]);
 
   // ══════════════════════════════════════════════════════
   // 2. STEP 2: CAMERA HARDWARE & GPS SETUP
@@ -341,6 +463,7 @@ export const VoiceVideoAssistantModal = ({
   const executeSubmission = useCallback(async () => {
     setStep('submitting');
     setLocalSubmitError('');
+    lastSpokenErrorRef.current = '';
     VoiceFeedback.speak('Submitting report now...');
 
     try {
@@ -349,16 +472,24 @@ export const VoiceVideoAssistantModal = ({
       }
     } catch (err) {
       console.error('[VoiceVideoModal] Submission failed:', err);
-      setLocalSubmitError(err?.message || 'Submission failed. Please try again.');
+      const errDetail = err?.response?.data?.errors?.join('. ') || err?.response?.data?.message || err?.message || 'Submission failed. Please try again.';
+      setLocalSubmitError(errDetail);
       setStep('submit');
-      VoiceFeedback.speak('Submission failed. Please tap submit to retry.');
+      lastSpokenErrorRef.current = errDetail;
+      const speechText = typeof errDetail === 'string'
+        ? errDetail.replace(/[{}"]/g, '').replace(/\\n/g, '. ').trim()
+        : 'Submission failed. Please check details and try again.';
+      VoiceFeedback.speak(speechText);
     }
   }, [onSubmitForm]);
 
   useEffect(() => {
     if (step !== 'submit') return;
 
-    VoiceFeedback.speak("Photo captured! Say 'Submit' to send your report.");
+    // Only prompt "Photo captured" if there is no error message currently displayed
+    if (!submitError && !localSubmitError) {
+      VoiceFeedback.speak("Photo captured! Say 'Submit' to send your report.");
+    }
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) return;
@@ -413,27 +544,131 @@ export const VoiceVideoAssistantModal = ({
 
   const fullDisplayTranscript = (transcript + ' ' + interimText).trim();
 
-  // Handle closing modal
-  const handleModalClose = () => {
+  // Comprehensive Session Reset: wipes all voice, camera, photo, and error artifacts
+  const resetSession = useCallback(() => {
+    // 1. Teardown mic, camera, and all audio playback immediately
     stopVoiceListening();
     killCamera();
-    onClose();
-  };
+    VoiceFeedback.stop();
+
+    // 2. Reset step back to voice
+    setStep('voice');
+
+    // 3. Clear speech & transcription state
+    baseTranscriptRef.current = '';
+    sessionFinalRef.current = '';
+    transcriptRef.current = '';
+    interimTextRef.current = '';
+    extractedFieldsRef.current = {};
+    setTranscript('');
+    setInterimText('');
+    setExtractedFields({});
+    isManuallyStoppedRef.current = false;
+    clearTimeout(restartTimeoutRef.current);
+
+    // 4. Clear photo and GPS state
+    setCapturedPhoto(null);
+    setLocation(null);
+    setIsCapturing(false);
+
+    // 5. Clear submission & error state
+    setLocalSubmitError('');
+    setLocalSubmitSuccess(false);
+    lastSpokenErrorRef.current = '';
+
+    // 6. Notify parent to wipe previous form data, imageFile, and error
+    if (onResetForm) {
+      onResetForm();
+    }
+  }, [stopVoiceListening, killCamera, onResetForm]);
+
+  // Handle closing modal
+  const handleModalClose = useCallback(() => {
+    resetSession();
+    if (onClose) onClose();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sevasetu:voice-form-closed'));
+    }
+  }, [resetSession, onClose]);
+
+  // Clean session reset whenever modal opens or closes
+  useEffect(() => {
+    if (isOpen) {
+      setStep('voice');
+      baseTranscriptRef.current = '';
+      sessionFinalRef.current = '';
+      transcriptRef.current = '';
+      interimTextRef.current = '';
+      extractedFieldsRef.current = {};
+      setTranscript('');
+      setInterimText('');
+      setExtractedFields({});
+      setCapturedPhoto(null);
+      setLocation(null);
+      setIsCapturing(false);
+      setLocalSubmitError('');
+      setLocalSubmitSuccess(false);
+      lastSpokenErrorRef.current = '';
+      isManuallyStoppedRef.current = false;
+      if (onResetForm) onResetForm();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sevasetu:voice-form-opened'));
+      }
+      startVoiceListening();
+    } else {
+      resetSession();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sevasetu:voice-form-closed'));
+      }
+    }
+  }, [isOpen, onResetForm, resetSession, startVoiceListening]);
+
+  // Hardware Back / Browser Back / Escape Key Handler
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        handleModalClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Support browser / Android back button to cleanly close & reset
+    const handlePopState = () => {
+      handleModalClose();
+    };
+    try {
+      window.history.pushState({ sevasetuVoiceModal: true }, '');
+    } catch (_) {}
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isOpen, handleModalClose]);
+
+  if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 99999,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'rgba(15, 23, 42, 0.72)',
-      backdropFilter: 'blur(8px)',
-      padding: '1rem',
-      animation: 'fadeIn 0.2s ease',
-    }}>
-      <div style={{
+    <div 
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(15, 23, 42, 0.72)',
+        backdropFilter: 'blur(8px)',
+        padding: '1rem',
+        animation: 'fadeIn 0.2s ease',
+      }}>
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        style={{
         background: '#ffffff',
         borderRadius: '1.25rem',
         width: '100%',
@@ -513,31 +748,52 @@ export const VoiceVideoAssistantModal = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.08), rgba(16, 185, 129, 0.14))',
-              border: '1.5px solid rgba(5, 150, 105, 0.3)',
+              background: isListening 
+                ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(244, 63, 94, 0.12))' 
+                : 'linear-gradient(135deg, rgba(5, 150, 105, 0.08), rgba(16, 185, 129, 0.14))',
+              border: isListening ? '1.5px solid rgba(239, 68, 68, 0.35)' : '1.5px solid rgba(5, 150, 105, 0.3)',
               borderRadius: '12px',
               padding: '0.85rem 1.1rem',
+              transition: 'all 0.3s ease',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  background: isListening ? '#dc2626' : '#059669',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: isListening ? '0 0 0 6px rgba(220, 38, 38, 0.2)' : '0 2px 8px rgba(5, 150, 105, 0.25)',
-                  animation: isListening ? 'pulse 1.2s infinite' : 'none',
-                  flexShrink: 0,
-                }}>
-                  {isListening ? <Mic style={{ width: 20, height: 20 }} /> : <MicOff style={{ width: 20, height: 20 }} />}
-                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isListening) {
+                      stopVoiceListening();
+                    } else {
+                      startVoiceListening();
+                    }
+                  }}
+                  title={isListening ? 'Click to pause listening' : 'Click to start speaking'}
+                  aria-label={isListening ? 'Pause microphone' : 'Start microphone'}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: '50%',
+                    background: isListening ? '#dc2626' : '#059669',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: isListening ? '0 0 0 6px rgba(220, 38, 38, 0.25)' : '0 2px 8px rgba(5, 150, 105, 0.25)',
+                    animation: isListening ? 'pulse 1.2s infinite' : 'none',
+                    flexShrink: 0,
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'transform 0.15s ease, background 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.06)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  {isListening ? <Mic style={{ width: 22, height: 22 }} /> : <MicOff style={{ width: 22, height: 22 }} />}
+                </button>
 
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
-                    {isListening ? 'Listening to your voice...' : 'Microphone Ready'}
+                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: isListening ? '#991b1b' : '#0f172a' }}>
+                    {isListening ? 'Listening to your voice... (Tap mic to pause)' : 'Microphone Ready (Tap mic to speak)'}
                   </h4>
                   <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.74rem', color: '#64748b' }}>
                     Describe: emergency type, location/ward, people affected, phone number.
@@ -612,6 +868,16 @@ export const VoiceVideoAssistantModal = ({
                     People: {extractedFields.people_affected}
                   </span>
                 )}
+                {extractedFields.women_count && (
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, background: 'rgba(219, 39, 119, 0.1)', color: '#be185d', padding: '2px 7px', borderRadius: '4px' }}>
+                    Women: {extractedFields.women_count}
+                  </span>
+                )}
+                {extractedFields.children_count && (
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, background: 'rgba(14, 165, 233, 0.1)', color: '#0369a1', padding: '2px 7px', borderRadius: '4px' }}>
+                    Children: {extractedFields.children_count}
+                  </span>
+                )}
                 {extractedFields.district && (
                   <span style={{ fontSize: '0.68rem', fontWeight: 700, background: 'rgba(217, 119, 6, 0.1)', color: '#b45309', padding: '2px 7px', borderRadius: '4px' }}>
                     District: {extractedFields.district}
@@ -635,6 +901,11 @@ export const VoiceVideoAssistantModal = ({
               <button
                 type="button"
                 onClick={() => {
+                  baseTranscriptRef.current = '';
+                  sessionFinalRef.current = '';
+                  transcriptRef.current = '';
+                  interimTextRef.current = '';
+                  extractedFieldsRef.current = {};
                   setTranscript('');
                   setInterimText('');
                   setExtractedFields({});
@@ -759,7 +1030,15 @@ export const VoiceVideoAssistantModal = ({
             <div style={{ padding: '1.25rem', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <button
                 type="button"
-                onClick={() => setStep('voice')}
+                onClick={() => {
+                  killCamera();
+                  setCapturedPhoto(null);
+                  setLocalSubmitError('');
+                  lastSpokenErrorRef.current = '';
+                  VoiceFeedback.stop();
+                  setStep('voice');
+                  startVoiceListening();
+                }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -857,7 +1136,7 @@ export const VoiceVideoAssistantModal = ({
                   color: '#ffffff',
                 }}>
                   <MapPin style={{ width: 12, height: 12 }} />
-                  {capturedPhoto.hasGps ? 'GPS VERIFIED' : 'PHOTO ATTACHED'}
+                  {capturedPhoto.hasGps ? 'GPS EMBEDDED' : 'PHOTO ATTACHED'}
                 </div>
               </div>
             )}
@@ -959,10 +1238,44 @@ export const VoiceVideoAssistantModal = ({
             )}
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', justifyContent: 'flex-end', marginTop: '0.5rem', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                onClick={() => setStep('camera')}
+                onClick={() => {
+                  resetSession();
+                  startVoiceListening();
+                }}
+                disabled={step === 'submitting' || isSubmitting}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.6rem 0.85rem',
+                  background: 'transparent',
+                  color: '#64748b',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <ChevronLeft style={{ width: 14, height: 14 }} />
+                Back to Voice
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCapturedPhoto(null);
+                  setLocalSubmitError('');
+                  lastSpokenErrorRef.current = '';
+                  VoiceFeedback.stop();
+                  if (onApplyData) {
+                    onApplyData(extractedFields, null, location);
+                  }
+                  setStep('camera');
+                }}
                 disabled={step === 'submitting' || isSubmitting}
                 style={{
                   display: 'inline-flex',

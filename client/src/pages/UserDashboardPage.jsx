@@ -1,18 +1,62 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FileText, Plus, UserCheck, Loader2, Clock, CheckCircle, XCircle, ArrowRight, Home } from 'lucide-react';
+import { FileText, Plus, UserCheck, Loader2, Clock, CheckCircle, XCircle, ArrowRight, Home, Mic } from 'lucide-react';
 import MainLayout from '../layouts/MainLayout';
 import ReporterStatusList from '../components/ReporterStatusList';
 import VolunteerApplicationModal from '../components/VolunteerApplicationModal';
+import VoiceVideoAssistantModal from '../components/voice/VoiceVideoAssistantModal';
+import { useFieldForm } from '../hooks/useFieldForm';
 import api from '../services/api';
 import { io } from 'socket.io-client';
 
 const UserDashboardPage = () => {
   const [showApplicationModal, setShowApplicationModal] = useState(false);
+  const [showVoiceAssistantModal, setShowVoiceAssistantModal] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState('loading'); // 'loading' | 'none' | 'pending' | 'approved' | 'rejected'
   const [statusData, setStatusData] = useState(null);
   const navigate = useNavigate();
   const prevStatusRef = useRef(null);
+
+  const {
+    formData,
+    loading: formLoading,
+    locLoading,
+    success: formSuccess,
+    successMessage: formSuccessMessage,
+    error: formError,
+    verificationResult,
+    isOnline,
+    updateField,
+    updateMultipleFields,
+    resetForm,
+    getLocation,
+    submitForm,
+  } = useFieldForm();
+
+  // Open dedicated voice assistant modal on trigger (e.g. from bottom mic button or wake word)
+  useEffect(() => {
+    const handleVoiceTrigger = () => {
+      resetForm();
+      setShowVoiceAssistantModal(true);
+    };
+    window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+    return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+  }, [resetForm]);
+
+  const handleApplyVoiceData = useCallback((fields, photoFile, loc) => {
+    if (fields && Object.keys(fields).length > 0) {
+      updateMultipleFields(fields);
+    }
+    if (photoFile) {
+      updateField('imageFile', photoFile);
+    }
+    if (loc && loc.lat && loc.lng) {
+      updateField('lat', parseFloat(loc.lat));
+      updateField('lng', parseFloat(loc.lng));
+    } else if (!formData.lat) {
+      getLocation();
+    }
+  }, [updateMultipleFields, updateField, formData.lat, getLocation]);
 
   const fetchApplicationStatus = useCallback(async () => {
     try {
@@ -99,27 +143,54 @@ const UserDashboardPage = () => {
   return (
     <MainLayout>
       <div className="user-dashboard-shell container-lg">
-
-        {/* ── Hero ───────────────────────────────────────────── */}
+        {/* ── Welcome Banner ─────────────────────────────────── */}
         <section className="dashboard-hero-premium">
           <div className="dashboard-hero-top">
             <div className="dashboard-hero-text">
-              <p className="landing-eyebrow" style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.75rem', marginBottom: '0.5rem' }}>Community Dashboard</p>
-              <h1 className="dashboard-title-premium">
-                Report incidents. Track progress. Make an impact.
-              </h1>
+              <p style={{ color: '#2d6148', letterSpacing: '0.1em', fontWeight: 700, fontSize: '0.7rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+                Citizen Portal
+              </p>
+              <h1 className="dashboard-title-premium">Need help, or ready to lend a hand?</h1>
               <p className="dashboard-subtitle-premium">
                 You can report community needs and track their status. Want to do more? Apply to become a verified volunteer.
               </p>
+              <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetForm();
+                    setShowVoiceAssistantModal(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    padding: '0.42rem 0.85rem',
+                    borderRadius: '8px',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: 'rgba(5, 150, 105, 0.08)',
+                    border: '1px solid rgba(5, 150, 105, 0.25)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.15)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(5, 150, 105, 0.08)'; }}
+                >
+                  <Mic style={{ width: 14, height: 14 }} />
+                  Voice Assistant
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* ── Quick Actions ──────────────────────────────────── */}
+        {/* ── Quick Action Cards ─────────────────────────────── */}
         <section className="user-dashboard-actions-grid">
           <Link to="/field" className="user-dashboard-action-card card">
             <div className="user-dashboard-action-icon" style={{ background: 'rgba(45, 97, 72, 0.06)', border: '1px solid rgba(45, 97, 72, 0.1)' }}>
-              <Plus className="w-6 h-6" style={{ color: '#2d6148' }} />
+              <Plus className="w-6 h-6 text-brand-forest" />
             </div>
             <div>
               <h3 className="user-dashboard-action-title">Report New Incident</h3>
@@ -227,6 +298,22 @@ const UserDashboardPage = () => {
           onSubmitted={handleApplicationSubmitted}
         />
       )}
+
+      <VoiceVideoAssistantModal
+        isOpen={showVoiceAssistantModal}
+        onClose={() => {
+          setShowVoiceAssistantModal(false);
+          resetForm();
+        }}
+        onResetForm={resetForm}
+        onApplyData={handleApplyVoiceData}
+        onSubmitForm={submitForm}
+        formData={formData}
+        isOnline={isOnline}
+        isSubmitting={formLoading}
+        submitSuccess={formSuccess}
+        submitError={formError}
+      />
     </MainLayout>
   );
 };

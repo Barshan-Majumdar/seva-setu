@@ -254,12 +254,14 @@ export const useFieldForm = () => {
         });
 
         const needId = response.data.needId;
-        setSuccessMessage('Verifying report location and content...');
+        setSuccessMessage('Verifying report location and incident evidence with AI...');
 
-        // Poll for status until it's no longer 'pending'
+        // Wait for AI verification pipeline to finalize status ('open' or 'rejected')
         const finalNeed = await pollStatus(
           `/needs/${needId}/status`,
-          (data) => data.status !== 'pending'
+          (data) => data.status !== 'pending',
+          1000,
+          25
         );
 
         if (finalNeed.status === 'rejected') {
@@ -268,17 +270,43 @@ export const useFieldForm = () => {
             geoTag: res?.geoTag === 'PASSED' ? 'GPS VERIFIED' : 'FAILED',
             aiContent: res?.aiContent || 'FAILED'
           });
+          const rawErrors = (res?.errors && res.errors.length > 0)
+            ? res.errors
+            : [finalNeed.rejection_reason || finalNeed.rejectionReason || 'AI verification failed. The uploaded image does not match the emergency.'];
           throw { 
             response: { 
               data: { 
-                errors: res?.errors || ['Verification failed.'] 
+                errors: rawErrors 
               } 
             } 
           };
         }
 
-        setSuccess(true);
-        setSuccessMessage('Report verified and submitted successfully!');
+        if (finalNeed.status === 'open' && finalNeed.isVerified) {
+          setVerificationResult({
+            geoTag: 'GPS VERIFIED',
+            aiContent: 'PASSED'
+          });
+          setSuccess(true);
+          setSuccessMessage('Report verified and submitted successfully! Mass broadcast sent to nearby volunteers.');
+
+          // Reset the form so the user can submit a new need if needed
+          setFormData({
+            title: '',
+            description: '',
+            need_type: 'medical',
+            ward: '',
+            district: '',
+            people_affected: '',
+            children_count: '',
+            adults_count: '',
+            pregnant_count: '',
+            is_disaster_zone: false,
+            lat: null,
+            lng: null,
+            imageFile: null,
+          });
+        }
       } catch (err) {
         console.error('Submission error:', err);
         // Surface the detailed verification errors from backend
@@ -292,7 +320,7 @@ export const useFieldForm = () => {
         setLoading(false);
       }
     },
-    [formData, refreshQueuedCount]
+    [formData, refreshQueuedCount, isOnline]
   );
 
   const urgencyPreview = calculateUrgencyPreview({

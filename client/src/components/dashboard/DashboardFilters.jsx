@@ -26,6 +26,7 @@ const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) 
         )}
       </div>
 
+      <div className="dashboard-filters-grid">
       {/* Sort By */}
       <div>
         <label className="dashboard-filter-label" htmlFor="sort-filter">Sort By</label>
@@ -36,7 +37,7 @@ const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) 
           onChange={(e) => setSort(e.target.value)}
           style={{ cursor: 'pointer', width: '100%', marginTop: '0.3rem' }}
         >
-          <option value="priority_level">🚨 High Priority First</option>
+          <option value="priority_level">High Priority First</option>
           <option value="urgency_score">Highest Urgency Score</option>
           <option value="created_at">Most Recent</option>
         </select>
@@ -53,9 +54,9 @@ const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) 
           style={{ cursor: 'pointer', width: '100%', marginTop: '0.3rem' }}
         >
           <option value="all">All Priorities</option>
-          <option value="high">🔴 High Priority</option>
-          <option value="medium">🟡 Medium Priority</option>
-          <option value="low">🔵 Low Priority</option>
+          <option value="high">High Priority</option>
+          <option value="medium">Medium Priority</option>
+          <option value="low">Low Priority</option>
         </select>
       </div>
 
@@ -145,6 +146,7 @@ const DashboardFilters = ({ filters, setFilters, districts, sorting, setSort }) 
           Clear All Filters
         </button>
       )}
+      </div>
     </section>
   );
 };

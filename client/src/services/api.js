@@ -1,6 +1,15 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const normalizeApiUrl = (url) => {
+  if (!url) return '';
+  let cleaned = url.trim().replace(/\/+$/, '');
+  if (!cleaned.endsWith('/api')) {
+    cleaned += '/api';
+  }
+  return cleaned;
+};
+
+const API_BASE_URL = normalizeApiUrl(import.meta.env.VITE_API_BASE_URL) || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -34,14 +43,23 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-const API_SECONDARY_BASE_URL = import.meta.env.VITE_API_SECONDARY_BASE_URL || 'http://localhost:5001/api';
+const secondaryRaw = import.meta.env.VITE_API_SECONDARY_BASE_URL;
+const API_SECONDARY_BASE_URL = secondaryRaw ? normalizeApiUrl(secondaryRaw) : null;
 
-const SERVERS = [API_BASE_URL, API_SECONDARY_BASE_URL];
+const SERVERS = API_SECONDARY_BASE_URL ? [API_BASE_URL, API_SECONDARY_BASE_URL] : [API_BASE_URL];
 
-// Load assigned server from storage, or pick one randomly for proper 50/50 load balancing
+// Detect localhost / local development environment
+const isLocal = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+// Load assigned server from storage, or default to API_BASE_URL for localhost
 let currentBaseUrl = localStorage.getItem('assigned_server');
 
-if (!currentBaseUrl || !SERVERS.includes(currentBaseUrl)) {
+if (isLocal) {
+  // Always use local API when running in localhost
+  currentBaseUrl = API_BASE_URL;
+  localStorage.setItem('assigned_server', currentBaseUrl);
+} else if (!currentBaseUrl || !SERVERS.includes(currentBaseUrl)) {
   // Flip a coin to distribute load evenly across both servers
   currentBaseUrl = SERVERS[Math.floor(Math.random() * SERVERS.length)];
   localStorage.setItem('assigned_server', currentBaseUrl);
@@ -58,7 +76,7 @@ api.interceptors.response.use(
     // Check if error is due to server unavailability (network error, timeout, or 5xx)
     const isNetworkOrServerError = !error.response || (error.response && error.response.status >= 500);
 
-    if (isNetworkOrServerError && originalRequest && !originalRequest._retryCount) {
+    if (isNetworkOrServerError && originalRequest && !originalRequest._retryCount && API_SECONDARY_BASE_URL) {
       originalRequest._retryCount = 1;
       
       // Identify which server actually failed

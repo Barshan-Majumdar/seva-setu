@@ -222,10 +222,13 @@ model VolunteerRequest {
 
 model EmergencyEvent {
   clientEventId       String   @id @map("client_event_id")
-  deviceId            String   @map("device_id")
-  triggerType         String   @map("trigger_type")
-  triggeredAt         DateTime @map("triggered_at")
+  deviceId            String?  @map("device_id")
+  triggerType         String?  @default("VOICE") @map("trigger_type")
+  triggeredAt         DateTime @default(now()) @map("triggered_at")
   sessionId           String?  @map("session_id")
+  source              String?  @default("VOICE")
+  urgency             Float?   @default(1.0)
+  factsSeq            Int?     @default(0) @map("facts_seq")
   
   // Best available location
   lat                 Float?
@@ -233,6 +236,8 @@ model EmergencyEvent {
   accuracyMeters      Float?   @map("accuracy_meters")
   locationSource      String?  @map("location_source")
   locationConfidence  Float?   @map("location_confidence")
+  locationText        String?  @map("location_text")
+  locale              String?  @default("en-IN")
   
   // Snapshots & facts
   capabilitySnapshot  Json?    @map("capability_snapshot")

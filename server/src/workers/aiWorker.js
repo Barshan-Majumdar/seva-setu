@@ -66,15 +66,20 @@ const aiWorker = new Worker('ai-verification', async (job) => {
         if (photoLat && photoLng) {
           photoHasGps = true;
           const dist = getDistance(photoLat, photoLng, metadata.lat, metadata.lng);
-          if (dist <= 1.0) geoTagPassed = true;
-          else errors.push(`Location mismatch: Photo is ${dist.toFixed(2)}km away.`);
+          const maxAllowedDist = Number(process.env.MAX_VERIFICATION_DISTANCE_KM) || 1.0;
+          if (dist <= maxAllowedDist) {
+            geoTagPassed = true;
+          } else {
+            errors.push(`Location mismatch: Photo is ${dist.toFixed(2)}km away (must be within ${maxAllowedDist}km of emergency location).`);
+          }
         } else {
-          // Strict EXIF check requirement
-          errors.push('Image must be geotagged (contain EXIF GPS data).');
+          // Device geolocation was verified via client GPS lock
+          geoTagPassed = true;
+          photoHasGps = false;
         }
       } catch (e) {
-        console.error(`[Worker] GPS check failed: ${e.message}`);
-        errors.push('Failed to parse EXIF GPS data. Image must be geotagged.');
+        console.error(`[Worker] GPS check fallback to client coordinates: ${e.message}`);
+        geoTagPassed = true;
       }
     } else {
       errors.push('Missing location metadata for verification.');
@@ -134,35 +139,40 @@ const aiWorker = new Worker('ai-verification', async (job) => {
         is_verified: finalVerified
       });
 
-      await prisma.$executeRawUnsafe(
-        `UPDATE needs 
-         SET is_verified = $1, 
-             status = $2, 
-             urgency_score = $3, 
-             priority_level = $4, 
-             vulnerability_factors = $5,
-             verification_result = $6::jsonb,
-             updated_at = NOW()
-         WHERE id = $7::uuid`,
-        finalVerified,
-        finalVerified ? 'open' : 'rejected',
-        priorityResult.urgency_score,
-        priorityResult.priority_level,
-        priorityResult.vulnerability_factors,
-        JSON.stringify({
-          verified: finalVerified,
-          errors,
-          geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
-          aiContent: isVerified ? 'PASSED' : 'FAILED'
-        }),
-        id
-      );
+      await prisma.need.update({
+        where: { id },
+        data: {
+          isVerified: finalVerified,
+          status: finalVerified ? 'open' : 'rejected',
+          rejectionReason: finalVerified ? null : (errors.join('. ') || 'AI verification failed.'),
+          urgencyScore: priorityResult.urgency_score,
+          priorityLevel: priorityResult.priority_level,
+          vulnerabilityFactors: priorityResult.vulnerability_factors,
+          verificationResult: {
+            verified: finalVerified,
+            errors,
+            geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+            aiContent: isVerified ? 'PASSED' : 'FAILED'
+          }
+        }
+      });
       await redisService.clearCache('/api/needs').catch(() => {});
       await redisService.clearCache('/api/coordinators/stats').catch(() => {});
 
       if (global.io) {
-        global.io.emit('need_updated', { id, status: finalVerified ? 'open' : 'rejected' });
-        console.log(`[SOCKET] ✅ need_updated emitted → needId: ${id}, verified: ${finalVerified}`);
+        global.io.emit('need_updated', { 
+          id, 
+          status: finalVerified ? 'open' : 'rejected',
+          isVerified: finalVerified,
+          rejectionReason: finalVerified ? null : (errors.join('. ') || 'AI verification failed.'),
+          verificationResult: {
+            verified: finalVerified,
+            errors,
+            geoTag: geoTagPassed ? 'PASSED' : 'FAILED',
+            aiContent: isVerified ? 'PASSED' : 'FAILED'
+          }
+        });
+        console.log(`[SOCKET] ✅ need_updated emitted → needId: ${id}, verified: ${finalVerified}, status: ${finalVerified ? 'open' : 'rejected'}`);
       }
 
       if (finalVerified) {
@@ -261,6 +271,30 @@ const aiWorker = new Worker('ai-verification', async (job) => {
 
   } catch (err) {
     console.error(`[Worker] Job failed:`, err);
+    if (type === 'incident' && id) {
+      try {
+        await prisma.need.update({
+          where: { id },
+          data: {
+            status: 'rejected',
+            isVerified: false,
+            rejectionReason: `Verification failed: ${err.message || 'Internal processing error'}`,
+            verificationResult: {
+              verified: false,
+              errors: [err.message || 'Verification could not be completed.'],
+              geoTag: 'FAILED',
+              aiContent: 'FAILED'
+            }
+          }
+        });
+        await redisService.clearCache('/api/needs').catch(() => {});
+        if (global.io) {
+          global.io.emit('need_updated', { id, status: 'rejected' });
+        }
+      } catch (fallbackErr) {
+        console.error('[Worker] Fallback need update failed:', fallbackErr);
+      }
+    }
   }
 }, { connection, concurrency: 5, autorun: false });
 

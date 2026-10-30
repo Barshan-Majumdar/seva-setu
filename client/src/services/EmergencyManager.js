@@ -17,8 +17,8 @@ const activeEmergencyStore = localforage.createInstance({
 // Internal state — not on the exported object to avoid `this` confusion
 let _retryInterval = null;
 
-const API_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
-const AI_URL = import.meta.env.VITE_AI_URL || (Capacitor.isNativePlatform() ? 'http://10.103.7.193:8000' : 'http://localhost:8000');
+const API_URL = import.meta?.env?.VITE_API_URL || import.meta?.env?.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
+const AI_URL = import.meta?.env?.VITE_AI_URL || 'http://localhost:8000';
 
 /**
  * Ensure deviceId exists in localStorage (generated once, persisted forever).
@@ -95,10 +95,25 @@ export const EmergencyManager = {
         throw new Error('Offline');
       }
 
+      const payload = {
+        clientEventId: event.clientEventId,
+        source: event.source || event.triggerType || 'VOICE',
+        triggerConfidence: 1.0,
+        lat: event.location?.lat,
+        lng: event.location?.lng,
+        accuracy: event.location?.accuracyMeters || event.location?.accuracy,
+        capturedAt: event.triggeredAt,
+        locale: (typeof navigator !== 'undefined' && navigator.language) || 'en-IN',
+        deviceId: event.deviceId,
+        sessionId: event.sessionId,
+        location: event.location,
+        capabilitySnapshot: event.capabilitySnapshot
+      };
+
       const response = await fetch(`${API_URL}/api/emergency/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(event)
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -159,7 +174,7 @@ export const EmergencyManager = {
    * which applies deterministic safety rules.
    * This method is fire-and-forget — failure does NOT affect the minimum SOS.
    */
-  async enrichEmergencyWithVoice(clientEventId, transcript) {
+  async enrichEmergencyWithVoice(clientEventId, transcript, location = null) {
     try {
       if (!transcript || transcript.trim().length === 0) {
         console.warn('[EmergencyManager] Empty transcript, skipping enrichment.');
@@ -172,7 +187,10 @@ export const EmergencyManager = {
       const aiResponse = await fetch(`${AI_URL}/extract-facts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, language: 'en-IN' })
+        body: JSON.stringify({ 
+          transcript, 
+          language: (typeof navigator !== 'undefined' && navigator.language) || 'en-IN' 
+        })
       });
 
       if (!aiResponse.ok) {
@@ -182,11 +200,15 @@ export const EmergencyManager = {
       const enrichmentData = await aiResponse.json();
       console.log('[EmergencyManager] NLP Facts Extracted:', enrichmentData);
 
-      // 2. Submit to Node Server for persistence and Safety Rules
+      // 2. Submit to Node Server for persistence and Safety Rules (attach GPS location)
       const serverResponse = await fetch(`${API_URL}/api/emergency/${clientEventId}/facts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(enrichmentData)
+        body: JSON.stringify({ 
+          ...enrichmentData, 
+          factsSeq: Date.now(),
+          location 
+        })
       });
 
       if (serverResponse.ok) {

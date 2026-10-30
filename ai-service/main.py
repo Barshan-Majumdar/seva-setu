@@ -1,3 +1,15 @@
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import torch
@@ -65,7 +77,7 @@ print(f"[AI-SERVICE] Device: {device}")
 # Load model — token=None is safe, it just uses unauthenticated access
 model = CLIPModel.from_pretrained(MODEL_ID, token=HF_TOKEN if HF_TOKEN else None).to(device)
 processor = CLIPProcessor.from_pretrained(MODEL_ID, token=HF_TOKEN if HF_TOKEN else None)
-print(f"[AI-SERVICE] ✅ Model loaded successfully on {device}")
+print(f"[AI-SERVICE] [OK] Model loaded successfully on {device}")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -218,7 +230,7 @@ async def verify_image(
 
         # 1. If the top match is INVALID or below threshold → reject
         if detected_category == "INVALID" or top["similarity"] < 0.25:
-            print(f"[AI-SERVICE] ❌ REJECTED: Invalid or low confidence ({top['similarity']:.3f})")
+            print(f"[AI-SERVICE] [REJECTED]: Invalid or low confidence ({top['similarity']:.3f})")
             return {
                 "is_verified": False,
                 "reason": f"The image does not appear to show a valid disaster or relief scenario. AI detected: \"{top['label']}\" (confidence: {top['similarity']:.1%})",
@@ -236,7 +248,7 @@ async def verify_image(
             
             # If the request is for proof of relief but we detected an issue (or vice versa)
             if requested_type == "PROOF_OF_RELIEF" and detected_category != "PROOF_OF_RELIEF":
-                print(f"[AI-SERVICE] ❌ MISMATCH: Expected PROOF_OF_RELIEF, got {detected_category}")
+                print(f"[AI-SERVICE] [MISMATCH]: Expected PROOF_OF_RELIEF, got {detected_category}")
                 return {
                     "is_verified": False,
                     "reason": f"This image shows a disaster/incident scene, but proof of relief work (rescue, aid, treatment) is required. AI detected: \"{top['label']}\"",
@@ -246,7 +258,7 @@ async def verify_image(
                     "all_results": sim_results[:5],
                 }
             elif requested_type == "ISSUE_REGISTRATION" and detected_category != "ISSUE_REGISTRATION":
-                print(f"[AI-SERVICE] ❌ MISMATCH: Expected ISSUE_REGISTRATION, got {detected_category}")
+                print(f"[AI-SERVICE] [MISMATCH]: Expected ISSUE_REGISTRATION, got {detected_category}")
                 return {
                     "is_verified": False,
                     "reason": f"This image does not show a disaster or emergency incident. AI detected: \"{top['label']}\"",
@@ -256,8 +268,8 @@ async def verify_image(
                     "all_results": sim_results[:5],
                 }
 
-        # 3. Image is valid! ✅
-        print(f"[AI-SERVICE] ✅ VERIFIED: {detected_category} — \"{top['label']}\" ({top['similarity']:.3f})")
+        # 3. Image is valid!
+        print(f"[AI-SERVICE] [VERIFIED]: {detected_category} — \"{top['label']}\" ({top['similarity']:.3f})")
         return {
             "is_verified": True,
             "detected_type": detected_category,
@@ -267,7 +279,7 @@ async def verify_image(
         }
 
     except Exception as e:
-        print(f"[AI-SERVICE] ❌ CRASH: {str(e)}")
+        print(f"[AI-SERVICE] [CRASH]: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -284,7 +296,7 @@ async def extract_facts(req: FactExtractionRequest):
         result = nlp_module.extract_facts(req.transcript)
         return result
     except Exception as e:
-        print(f"[AI-SERVICE] ❌ NLP CRASH: {str(e)}")
+        print(f"[AI-SERVICE] [NLP CRASH]: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ══════════════════════════════════════════════════════════════════════

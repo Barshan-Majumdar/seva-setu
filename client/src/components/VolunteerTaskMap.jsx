@@ -75,13 +75,22 @@ const MapBoundsHandler = ({ volunteerCoords, taskCoords }) => {
   return null;
 };
 
-const VolunteerTaskMap = ({ taskLocation, volunteerLocation, heading = 0 }) => {
+const VolunteerTaskMap = ({
+  taskLocation,
+  volunteerLocation,
+  taskCoords,
+  volunteerCoords,
+  heading = 0,
+}) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const tLat = safeNum(taskLocation?.lat);
-  const tLng = safeNum(taskLocation?.lng);
-  const vLat = safeNum(volunteerLocation?.lat);
-  const vLng = safeNum(volunteerLocation?.lng);
+  const actualTask = taskLocation || taskCoords;
+  const actualVol = volunteerLocation || volunteerCoords;
+
+  const tLat = safeNum(actualTask?.lat);
+  const tLng = safeNum(actualTask?.lng);
+  const vLat = safeNum(actualVol?.lat);
+  const vLng = safeNum(actualVol?.lng);
 
   const hasTask = tLat !== null && tLng !== null;
   const hasVol = vLat !== null && vLng !== null;
@@ -109,6 +118,7 @@ const VolunteerTaskMap = ({ taskLocation, volunteerLocation, heading = 0 }) => {
         center={[tLat, tLng]}
         zoom={14}
         className="w-full h-full"
+        style={{ width: '100%', height: '100%', minHeight: isFullscreen ? '100vh' : '320px' }}
         zoomControl={false}
       >
         <TileLayer

@@ -263,7 +263,7 @@ const CameraWatermark = ({ onCapture, onCancel }) => {
                 {capturedImage.hasGps
                   ? <MapPin style={{ width: 13, height: 13 }} />
                   : <AlertTriangle style={{ width: 13, height: 13 }} />}
-                {capturedImage.hasGps ? 'GPS VERIFIED' : 'NO GPS'}
+                {capturedImage.hasGps ? 'GPS EMBEDDED' : 'NO GPS'}
               </span>
             </div>
 

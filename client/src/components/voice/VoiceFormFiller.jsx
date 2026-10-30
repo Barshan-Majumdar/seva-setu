@@ -60,12 +60,7 @@ export const VoiceFormFiller = ({ onApplyVoiceData }) => {
           }
         }
 
-        if (finalTrans) {
-          setTranscript((prev) => {
-            const combined = (prev + ' ' + finalTrans).trim();
-            return combined;
-          });
-        }
+        setTranscript(finalTrans.trim());
         setInterimText(currentInterim);
 
         // Reset silence timer: auto-stop after 3.5 seconds of silence once we have text

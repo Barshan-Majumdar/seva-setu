@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   MapPin, Send, Users, AlertTriangle,
   CheckCircle2, Crosshair, Loader2, Clock3, Camera, X,
@@ -22,14 +22,7 @@ const FieldForm = () => {
   const [isLiveFilling, setIsLiveFilling] = useState(false);
   const galleryInputRef = useRef(null);
 
-  // Open dedicated voice assistant modal on trigger (e.g. from bottom mic button or wake word)
-  useEffect(() => {
-    const handleVoiceTrigger = () => {
-      setShowVoiceAssistantModal(true);
-    };
-    window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
-    return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
-  }, []);
+
 
   const {
     formData, loading, locLoading, success, successMessage,
@@ -37,7 +30,17 @@ const FieldForm = () => {
     updateField, updateMultipleFields, resetForm, getLocation, setManualLocation, submitForm,
   } = useFieldForm();
 
-  const handleApplyVoiceData = (fields, photoFile, loc) => {
+  // Open dedicated voice assistant modal on trigger (e.g. from bottom mic button or wake word)
+  useEffect(() => {
+    const handleVoiceTrigger = () => {
+      resetForm();
+      setShowVoiceAssistantModal(true);
+    };
+    window.addEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+    return () => window.removeEventListener('sevasetu:activate-voice-form', handleVoiceTrigger);
+  }, [resetForm]);
+
+  const handleApplyVoiceData = useCallback((fields, photoFile, loc) => {
     if (fields && Object.keys(fields).length > 0) {
       updateMultipleFields(fields);
     }
@@ -50,7 +53,7 @@ const FieldForm = () => {
     } else if (!formData.lat) {
       getLocation();
     }
-  };
+  }, [updateMultipleFields, updateField, formData.lat, getLocation]);
 
   const handlePhotoCaptured = (file, loc) => {
     updateField('imageFile', file);
@@ -532,7 +535,7 @@ const FieldForm = () => {
                         color: urgencyPreview.isLifeThreatening || urgencyPreview.priority === 'High' ? '#dc2626' : urgencyPreview.priority === 'Medium' ? '#d97706' : '#64748b',
                         border: `1px solid ${urgencyPreview.priority === 'High' ? 'rgba(239, 68, 68, 0.3)' : urgencyPreview.priority === 'Medium' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`,
                       }}>
-                        {urgencyPreview.isLifeThreatening ? '🚨 Life Threat' : `${urgencyPreview.priority}`}
+                        {urgencyPreview.isLifeThreatening ? 'Life Threat' : `${urgencyPreview.priority}`}
                       </span>
                     )}
                   </div>
@@ -1096,7 +1099,11 @@ const FieldForm = () => {
 
       <VoiceVideoAssistantModal
         isOpen={showVoiceAssistantModal}
-        onClose={() => setShowVoiceAssistantModal(false)}
+        onClose={() => {
+          setShowVoiceAssistantModal(false);
+          resetForm();
+        }}
+        onResetForm={resetForm}
         onApplyData={handleApplyVoiceData}
         onSubmitForm={submitForm}
         formData={formData}

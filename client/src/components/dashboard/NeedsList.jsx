@@ -8,7 +8,7 @@ const StatusPill = ({ status }) => (
 );
 
 const PriorityBadge = ({ level = 'Medium', factors = [] }) => {
-  const normLevel = (level || 'Medium').toLowerCase();
+  const normLevel = typeof level === 'string' ? level.toLowerCase() : 'medium';
   const styles = {
     high: {
       bg: 'rgba(239, 68, 68, 0.1)',
@@ -81,7 +81,7 @@ const PriorityBadge = ({ level = 'Medium', factors = [] }) => {
                 maxWidth: '130px',
               }}
             >
-              ⚡ {factor}
+              {factor}
             </span>
           ))}
           {factors.length > 2 && (
@@ -143,6 +143,7 @@ const NeedsList = ({
     <section className="dashboard-card">
       <div className="dashboard-card-header">
         <h2 className="dashboard-card-title">Needs List</h2>
+        <span className="table-scroll-hint" style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600 }}>Scroll horizontally to view details &rarr;</span>
       </div>
 
       <div className="dashboard-needs-table-wrap">
@@ -220,21 +221,12 @@ const NeedsList = ({
                 </td>
                 <td>{need.district || '-'}</td>
                 <td>{need.ward || '-'}</td>
-                <td className="capitalize">{need.need_type}</td>
+                <td className="capitalize">{typeof need.need_type === 'string' ? need.need_type : 'Other'}</td>
                 <td>
                   <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: Number(need.urgency_score || 0) > 7 ? '#c35d51' : '#0f172a' }}>{Number(need.urgency_score || 0).toFixed(1)}</span>
                 </td>
                 <td>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{need.people_affected || 0}</span>
-                    {(Number(need.children_count) > 0 || Number(need.adults_count) > 0 || Number(need.pregnant_count) > 0) && (
-                      <span style={{ fontSize: '0.62rem', color: '#64748b', fontWeight: 600 }}>
-                        {Number(need.children_count) > 0 && `👶 ${need.children_count}c `}
-                        {Number(need.adults_count) > 0 && `🧑 ${need.adults_count}a `}
-                        {Number(need.pregnant_count) > 0 && `🤰 ${need.pregnant_count}p`}
-                      </span>
-                    )}
-                  </div>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{need.people_affected || 0}</span>
                 </td>
                 <td>
                   <div className="flex flex-col gap-1.5 items-start">

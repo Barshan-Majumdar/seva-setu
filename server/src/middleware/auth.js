@@ -130,6 +130,21 @@ module.exports = async (req, res, next) => {
       }
     }
 
+    // Auto-promote if email is in coordinator whitelist
+    if (dbUser && dbUser.role !== 'coordinator') {
+      const isWhitelisted = await prisma.coordinatorEmail.findFirst({
+        where: { email: { equals: dbUser.email, mode: 'insensitive' } },
+      });
+      if (isWhitelisted) {
+        console.log(`[auth] Auto-promoting ${dbUser.email} to coordinator based on whitelist`);
+        dbUser = await prisma.user.update({
+          where: { id: dbUser.id },
+          data: { role: 'coordinator' },
+          select: { id: true, role: true, email: true, name: true, volunteer: { select: { updatedAt: true } } }
+        });
+      }
+    }
+
     // ── Step 4: Throttled Heartbeat (Fire-and-forget) ───────────
     if (dbUser.role === 'volunteer') {
       if (!dbUser.volunteer) {

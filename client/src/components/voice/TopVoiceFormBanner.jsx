@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Mic, MicOff, Sparkles, Loader2, CheckCircle2, AlertTriangle,
@@ -56,6 +57,21 @@ export const extractLiveFormFields = (text) => {
     if (!isNaN(count)) {
       fields.children_count = String(count);
       matches.children_count = { value: count, matched_text: cMatch[0] };
+    }
+  }
+
+  // 2.2b Women Count
+  const womenRegex = /(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|ek|do|teen|char|panch|chhah|saat|aath|nau|das)\s*(?:women|woman|ladies|lady|female|females|mahila|mohila)/i;
+  const wmMatch = lower.match(womenRegex);
+  if (wmMatch) {
+    const rawVal = wmMatch[1].toLowerCase();
+    const count = numWordMap[rawVal] || parseInt(rawVal, 10);
+    if (!isNaN(count)) {
+      fields.women_count = String(count);
+      matches.women_count = { value: count, matched_text: wmMatch[0] };
+      if (!fields.adults_count || parseInt(fields.adults_count, 10) < count) {
+        fields.adults_count = String(count);
+      }
     }
   }
 
@@ -179,6 +195,7 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
       }, 150);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
   // Listen for global activate event (e.g. from bottom mic or wake word)
@@ -192,6 +209,7 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
     return () => {
       window.removeEventListener('sevasetu:activate-voice-form', handleGlobalTrigger);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startListening = () => {
@@ -249,16 +267,12 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
           }
         }
 
-        if (finalTrans) {
-          setTranscript((prev) => {
-            const combined = (prev + ' ' + finalTrans).trim();
-            return combined;
-          });
-        }
+        const totalFinal = finalTrans.trim();
+        setTranscript(totalFinal);
         setInterimText(currentInterim);
 
         // ── LIVE FORM FILLING AS USER SPEAKS IN REAL TIME ──
-        const fullLiveSpeech = (finalTrans ? (transcript + ' ' + finalTrans) : (transcript + ' ' + currentInterim)).trim();
+        const fullLiveSpeech = (totalFinal + ' ' + currentInterim).trim();
         if (fullLiveSpeech) {
           const liveExtracted = extractLiveFormFields(fullLiveSpeech);
           setLiveFields(liveExtracted.fields);
@@ -275,7 +289,7 @@ export const TopVoiceFormBanner = ({ onApplyVoiceData, onClose, autoStart = fals
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = setTimeout(() => {
           stopListening();
-          const fullText = (transcript + ' ' + finalTrans + ' ' + currentInterim).trim();
+          const fullText = (totalFinal + ' ' + currentInterim).trim();
           if (fullText) {
             handleAnalyze(fullText);
           }

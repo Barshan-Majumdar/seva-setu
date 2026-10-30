@@ -75,7 +75,11 @@ const PostLoginRedirect = () => {
         }
       } catch (err) {
         console.error('PostLoginRedirect error:', err);
-        if (!cancelled) setPhase('redirect'); // fallback
+        if (!cancelled) {
+          const fallbackRole = localStorage.getItem('dbRole');
+          if (fallbackRole) setDbRole(fallbackRole);
+          setPhase('redirect'); // fallback
+        }
       }
     };
 
