@@ -243,6 +243,7 @@ class VoiceController {
     clearTimeout(this._silenceTimer);
     clearTimeout(this._restartTimer);
     this._audioLevel = 0.0;
+    this._isRecognitionActive = false;
 
     if (this._recognition) {
       try {
@@ -259,6 +260,13 @@ class VoiceController {
 
   _startRecognition(expectedState) {
     if (this._state !== expectedState) return;
+
+    // Seamless stream reuse: if recognition is already running, keep the warm audio stream active!
+    if (this._recognition && this._isRecognitionActive) {
+      console.log(`[VoiceController] 🎙️ Reusing active microphone stream for state: ${this._state}`);
+      return;
+    }
+
     this._stopRecognition();
 
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -274,17 +282,29 @@ class VoiceController {
       rec.continuous = true;
       rec.interimResults = true;
       rec.maxAlternatives = 1;
-      rec.lang = this._locale || 'en-IN';
+      rec.lang = 'en-IN'; // Optimized for Indian English, accent variations, and local terms
 
       rec.onstart = () => {
-        if (this._generation !== currentGen) return;
+        this._isRecognitionActive = true;
         this._backoffMs = 500;
-        console.log(`[VoiceController] 🎙️ Mic active in state: ${this._state}`);
+        console.log(`[VoiceController] 🎙️ Mic active and listening in state: ${this._state}`);
         this._notify();
       };
 
+      rec.onaudiostart = () => {
+        console.log('[VoiceController] 🔊 Audio hardware capture started');
+      };
+
+      rec.onspeechstart = () => {
+        console.log('[VoiceController] 🗣️ Speech detected by browser');
+      };
+
       rec.onresult = (event) => {
-        if (this._generation !== currentGen) return;
+        // If system is speaking or in software mute, suppress audio feedback without killing mic
+        if (this._isSpeakingMuted || this._state === VoiceState.PROMPTING || this._state === VoiceState.CONFIRMING) {
+          console.log('[VoiceController] 🔇 Software suppressed audio feedback while speaking');
+          return;
+        }
 
         let sessionFinal = '';
         let sessionInterim = '';
@@ -311,8 +331,9 @@ class VoiceController {
         }
 
         if (err === 'not-allowed' || err === 'service-not-allowed') {
+          this._isRecognitionActive = false;
           this._stopRecognition();
-          this._transition(VoiceState.OFF, { error: 'Microphone permission denied' });
+          this._transition(VoiceState.OFF, { error: 'Microphone permission required' });
           return;
         }
 
@@ -322,14 +343,15 @@ class VoiceController {
       };
 
       rec.onend = () => {
-        if (this._generation !== currentGen) return;
+        this._isRecognitionActive = false;
         this._recognition = null;
+        console.log(`[VoiceController] Mic session ended in state: ${this._state}`);
 
-        // Auto-restart if we should still be listening
+        // Calm restart if we should still be listening
         if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
           clearTimeout(this._restartTimer);
           this._restartTimer = setTimeout(() => {
-            if (this._generation === currentGen) {
+            if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
               this._startRecognition(this._state);
             }
           }, this._backoffMs);
@@ -340,9 +362,10 @@ class VoiceController {
       rec.start();
     } catch (err) {
       console.warn('[VoiceController] Failed to start recognition:', err);
+      this._isRecognitionActive = false;
       clearTimeout(this._restartTimer);
       this._restartTimer = setTimeout(() => {
-        if (this._generation === currentGen) {
+        if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
           this._startRecognition(expectedState);
         }
       }, 1000);
