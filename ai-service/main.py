@@ -311,14 +311,14 @@ import tempfile
 if hasattr(torch, 'set_num_threads'):
     torch.set_num_threads(max(1, min(4, (os.cpu_count() or 4))))
 
-print("[AI-SERVICE] Loading local Whisper 'base.en' model...")
+print("[AI-SERVICE] Loading local Whisper 'tiny.en' model for ultra-low latency...")
 try:
-    whisper_model = whisper.load_model('base.en')
-    print("[AI-SERVICE] [OK] Local Whisper base.en English STT model loaded successfully")
+    whisper_model = whisper.load_model('tiny.en')
+    print("[AI-SERVICE] [OK] Local Whisper tiny.en English STT model loaded successfully")
 except Exception as e:
     try:
-        whisper_model = whisper.load_model('tiny.en')
-        print("[AI-SERVICE] [OK] Local Whisper tiny.en English STT model loaded successfully")
+        whisper_model = whisper.load_model('base.en')
+        print("[AI-SERVICE] [OK] Local Whisper base.en English STT model loaded successfully")
     except Exception as e2:
         whisper_model = None
         print(f"[AI-SERVICE] [WARNING] Could not load local Whisper: {e2}")
@@ -328,13 +328,13 @@ async def transcribe_audio(file: UploadFile = File(...)):
     """
     Accepts an audio file (16kHz 16-bit mono WAV) and
     returns a text transcription using local Whisper STT (instant, offline).
-    Forces English decoding with beam_size=5, temperature=0.0, and domain prompt.
+    Forces English decoding with beam_size=1, temperature=0.0, without_timestamps=True, and domain prompt.
     """
     audio_data = await file.read()
     if len(audio_data) < 500:
         return {"text": "", "error": "Audio too short"}
 
-    # 1. Primary: Local Whisper (offline, deterministic, high-accuracy base.en)
+    # 1. Primary: Local Whisper (offline, deterministic, ultra-fast tiny.en)
     if whisper_model is not None:
         try:
             suffix = ".wav"
@@ -355,7 +355,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
                     best_of=1,
                     temperature=0.0,
                     condition_on_previous_text=False,
-                    initial_prompt="Emergency disaster relief fire accident trapped injured medical help flood rescue SevaSetu",
+                    without_timestamps=True,
+                    initial_prompt="Hey SevaSetu, Seva Setu, Seba Setu, Emergency disaster relief fire accident trapped injured medical help flood rescue",
                     fp16=False
                 )
                 transcript = (result.get("text") or "").strip()

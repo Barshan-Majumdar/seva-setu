@@ -110,9 +110,9 @@ class NlpModule:
             }
 
         # Direct connection checks
-        if any(h in t for h in ["can you hear me", "are you listening", "hello", "hi"]):
+        if any(h in t for h in ["can you hear me", "can you hear", "can you listen me", "can you listen to me", "are you listening", "are you hearing me", "can you understand me", "listen to me", "hello", "hi"]):
             # Only if not combined with an emergency word
-            if not any(e in t for e in ["fire", "injured", "hurt", "trapped", "flood", "accident", "edc", "help", "ambulance"]):
+            if not any(e in t for e in ["fire", "injured", "hurt", "trapped", "flood", "accident", "edc", "help", "ambulance", "bleeding"]):
                 return {
                     "intent": "QUERY_DETAILS",
                     "facts": self._empty_facts(),

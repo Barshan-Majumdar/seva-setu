@@ -31,6 +31,7 @@ export const VoiceState = {
 };
 
 const WAKE_WORDS = [
+  // Combined compounds with salutations
   'heysevasetu', 'hisevasetu', 'hellosevasetu', 'oksevasetu', 'oyesevasetu',
   'heyseva', 'hiseva', 'helloseva', 'okseva', 'oyeseva',
   'heyseba', 'hiseba', 'helloseba', 'okseba',
@@ -38,8 +39,15 @@ const WAKE_WORDS = [
   'heysewa', 'hisewa',
   'heysebasetu', 'heyshebasetu', 'heysevasethu', 'heysebasethu', 'heyshevasethu',
   'heysevashitu', 'heysevashito', 'heysevaseeto', 'heysevaseto', 'heysevasitu',
+  'heysivasetu', 'heyshivasetu', 'heysabasetu', 'heyshabasetu', 'heyshabhasetu',
   'heyseverity', 'heysevercity', 'heyseversetu', 'heyseversitu', 'heysevenitu', 'heysevensetu',
-  'heysaveasatu', 'heysaveasetu', 'heyservicesetu', 'heysayvasetu'
+  'heysaveasatu', 'heysaveasetu', 'heyservicesetu', 'heysayvasetu',
+
+  // Brand name standalone & compound variants (so if "hey" is dropped by mic/VAD, it still triggers!)
+  'sevasetu', 'sebasetu', 'sevasethu', 'sebasethu', 'shevasetu', 'shebasetu',
+  'sevashitu', 'sevashito', 'sevaseeto', 'sevaseto', 'sevasitu',
+  'sivasetu', 'shivasetu', 'sabasetu', 'shabasetu', 'shabhasetu',
+  'saveasatu', 'saveasetu', 'servicesetu', 'sayvasetu'
 ];
 
 /**
@@ -177,8 +185,20 @@ class VoiceController {
 
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && !this._isRecognitionActive && !this._isStarting) {
-            console.log('[VoiceController] Tab visible again — re-starting recognition.');
+          // Immediately resume AudioContext if browser suspended it during tab backgrounding
+          if (this._monitorCtx && this._monitorCtx.state === 'suspended') {
+            this._monitorCtx.resume().catch(() => {});
+          }
+
+          const track = this._monitorStream?.getAudioTracks()?.[0];
+          if (track && track.readyState === 'ended') {
+            console.warn('[VoiceController] Mic track ended during background; re-acquiring stream...');
+            this._monitorStream = null;
+            this._startAudioMonitor();
+          }
+
+          if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
+            console.log('[VoiceController] Tab visible again — recycling fresh recognition session.');
             this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
           }
         }
@@ -321,6 +341,24 @@ class VoiceController {
         await this._monitorCtx.resume();
       }
 
+      this._monitorCtx.onstatechange = () => {
+        if (this._monitorCtx && this._monitorCtx.state === 'suspended') {
+          console.log('[VoiceController] AudioContext suspended; auto-resuming...');
+          this._monitorCtx.resume().catch(() => {});
+        }
+      };
+
+      const track = this._monitorStream.getAudioTracks()[0];
+      if (track) {
+        track.onended = () => {
+          console.warn('[VoiceController] Mic track ended. Re-acquiring stream...');
+          this._monitorStream = null;
+          if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE || this._state === VoiceState.LISTENING_USER) {
+            this._startAudioMonitor();
+          }
+        };
+      }
+
       this._monitorAnalyser = this._monitorCtx.createAnalyser();
       this._monitorAnalyser.fftSize = 256;
       this._monitorSource = this._monitorCtx.createMediaStreamSource(this._monitorStream);
@@ -334,6 +372,13 @@ class VoiceController {
           if (this._isRecordingAudio) {
             const inputData = e.inputBuffer.getChannelData(0);
             this._pcmChunks.push(new Float32Array(inputData));
+
+            // Prevent memory bloat & giant WAV buffers when open for a long time:
+            // 4096 samples at 44.1kHz = ~93ms per chunk.
+            const maxChunks = (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) ? 40 : 130;
+            if (this._pcmChunks.length > maxChunks) {
+              this._pcmChunks.shift();
+            }
           }
         };
         // Connect to a 0-gain node to prevent microphone audio leaking through speakers
@@ -408,12 +453,12 @@ class VoiceController {
         // ── VAD Processing in ARMED_LISTENING_FOR_WAKE state ──
         if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && this._isRecordingAudio && !this._isTranscribing) {
           const now = Date.now();
-          if (avg > 6.0) {
+          if (avg > 3.5) {
             this._lastSpeechTime = now;
             if (!this._vadSpeechActive) {
               if (!this._speechStartTime) {
                 this._speechStartTime = now;
-              } else if (now - this._speechStartTime >= 100) {
+              } else if (now - this._speechStartTime >= 80) {
                 this._vadSpeechActive = true;
               }
             }
@@ -421,8 +466,8 @@ class VoiceController {
             if (this._vadSpeechActive) {
               const silenceDuration = now - this._lastSpeechTime;
               const speechDuration = this._lastSpeechTime - this._speechStartTime;
-              // Snappy wake silence: 380ms silence after wake utterance triggers Whisper immediately (reduced from 1200ms)
-              if ((speechDuration >= 200 && silenceDuration >= 380) || (now - this._speechStartTime >= 5000)) {
+              // Ultra-snappy wake silence: 200ms silence after wake utterance triggers Whisper immediately
+              if ((speechDuration >= 180 && silenceDuration >= 200) || (now - this._speechStartTime >= 4000)) {
                 console.log(`[VoiceController] ⏱️ VAD: Wake speech phrase ended (Spoke: ${speechDuration}ms, Silence: ${silenceDuration}ms). Checking wake word...`);
                 this._checkWakeWordViaWhisper();
               }
@@ -650,33 +695,52 @@ class VoiceController {
     if (typeof window === 'undefined') return;
 
     this._watchdogTimer = setInterval(() => {
-      // 1. Only run heartbeat when ARMED_LISTENING_FOR_WAKE
+      const now = Date.now();
+
+      // Release stuck starting lock (>2500ms)
+      if (this._isStarting && this._startingTimestamp && (now - this._startingTimestamp > 2500)) {
+        console.warn('[VoiceController] [Watchdog] _isStarting held for >2.5s; clearing start lock');
+        this._isStarting = false;
+        this._startingTimestamp = 0;
+      }
+
+      // If monitor AudioContext is suspended, resume it
+      if (this._monitorCtx && this._monitorCtx.state === 'suspended') {
+        this._monitorCtx.resume().catch(() => {});
+      }
+
+      // 1. Heartbeat when ARMED_LISTENING_FOR_WAKE
       if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
-        const now = Date.now();
-
-        // 1a. Release stuck starting lock (>2500ms)
-        if (this._isStarting && this._startingTimestamp && (now - this._startingTimestamp > 2500)) {
-          console.warn('[VoiceController] [Watchdog] _isStarting held for >2.5s; clearing start lock');
-          this._isStarting = false;
-          this._startingTimestamp = 0;
-        }
-
-        // 1b. If monitor AudioContext is suspended, resume it
-        if (this._monitorCtx && this._monitorCtx.state === 'suspended') {
-          console.log('[VoiceController] [Watchdog] Resuming suspended AudioContext');
-          this._monitorCtx.resume().catch(() => {});
-        }
-
-        // 1c. Ensure VAD recording is active
+        // Ensure VAD recording is active
         if (!this._isRecordingAudio && !this._isTranscribing) {
           this._startVADRecording();
         }
 
-        // 1d. Ensure SpeechRecognition is alive
+        // Verify mic stream health (e.g. after sleep/wake or audio device change)
+        const track = this._monitorStream?.getAudioTracks()?.[0];
+        if (track && track.readyState === 'ended') {
+          console.warn('[VoiceController] [Watchdog] Mic track ended. Re-acquiring stream...');
+          this._monitorStream = null;
+          this._startAudioMonitor();
+        }
+
+        // Ensure SpeechRecognition is alive
         const isEngineActive = Boolean(this._recognition && this._isRecognitionActive);
         if (!isEngineActive && !this._isStarting) {
           console.log('[VoiceController] [Watchdog] Speech recognition idle in ARMED state; reviving listener...');
           this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
+        } else if (isEngineActive && !this._vadSpeechActive && !this._isTranscribing && (now - this._sessionStartTime > 55000)) {
+          // Proactive periodic socket cycle: after 55s of continuous streaming without active speech,
+          // cleanly restart the recognition instance so Chrome's cloud socket and event.results never go stale!
+          console.log('[VoiceController] [Watchdog] Proactively cycling 55s recognition session for freshness...');
+          this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
+        }
+      } else if (this._state === VoiceState.LISTENING_USER && !this._isTranscribing) {
+        // 2. Heartbeat when LISTENING_USER: ensure active speech recognition is alive
+        const isEngineActive = Boolean(this._recognition && this._isRecognitionActive);
+        if (!isEngineActive && !this._isStarting) {
+          console.log('[VoiceController] [Watchdog] Speech recognition idle in LISTENING_USER; reviving...');
+          this._startRecognition(VoiceState.LISTENING_USER);
         }
       }
     }, 1500);
@@ -724,38 +788,14 @@ class VoiceController {
 
     const r = this._recognition;
     this._recognition = null;
+    r.onstart = null;
+    r.onresult = null;
+    r.onend = null;
+    r.onerror = null;
 
-    await new Promise((resolve) => {
-      let settled = false;
-      const done = () => {
-        if (!settled) {
-          settled = true;
-          resolve();
-        }
-      };
-
-      const safetyTimer = setTimeout(done, 400);
-
-      r.onstart = null;
-      r.onresult = null;
-      r.onend = () => {
-        clearTimeout(safetyTimer);
-        done();
-      };
-      r.onerror = () => {
-        clearTimeout(safetyTimer);
-        done();
-      };
-
-      try {
-        r.abort();
-      } catch (_) {
-        clearTimeout(safetyTimer);
-        done();
-      }
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    try {
+      r.abort();
+    } catch (_) {}
   }
 
   async _startRecognition(expectedState) {
@@ -781,6 +821,8 @@ class VoiceController {
       return;
     }
 
+    this._lastProcessedResultIndex = 0;
+
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       this._isStarting = false;
@@ -803,8 +845,18 @@ class VoiceController {
       const rec = new SpeechRec();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.maxAlternatives = 1;
-      rec.lang = this._locale || 'en-US';
+      rec.maxAlternatives = 3;
+
+      // Select optimal regional speech model: default to Indian English (en-IN)
+      // which properly recognizes Indian accents, names (SevaSetu), and phonetics.
+      const loc = (this._locale || 'en-IN').toLowerCase();
+      if (loc.startsWith('hi')) {
+        rec.lang = 'hi-IN';
+      } else if (loc.startsWith('bn')) {
+        rec.lang = 'bn-IN';
+      } else {
+        rec.lang = 'en-IN';
+      }
 
       rec.onstart = () => {
         clearTimeout(startSafetyTimeout);
@@ -814,7 +866,7 @@ class VoiceController {
         this._isRecognitionActive = true;
         this._sessionStartTime = Date.now();
         this._backoffMs = 500;
-        console.log(`[VoiceController] 🎤 Speech recognition ACTIVE for: ${expectedState} (sessionId: ${sessionId})`);
+        console.log(`[VoiceController] 🎤 Speech recognition ACTIVE for: ${expectedState} (sessionId: ${sessionId}, lang: ${rec.lang})`);
         this._notify();
       };
 
@@ -824,22 +876,48 @@ class VoiceController {
 
         // 1. Wake Detection if ARMED_LISTENING_FOR_WAKE
         if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE) {
-          let recentPhrase = '';
+          let detectedTarget = '';
+
+          // Check individual result segments and all candidate alternatives
           for (let i = event.resultIndex; i < event.results.length; i++) {
-            recentPhrase += event.results[i][0].transcript + ' ';
+            const res = event.results[i];
+            for (let a = 0; a < res.length; a++) {
+              const altText = (res[a].transcript || '').trim();
+              if (this._isWakeWord(altText)) {
+                detectedTarget = altText;
+                break;
+              }
+            }
+            if (detectedTarget) break;
           }
-          recentPhrase = recentPhrase.trim();
 
-          let fullPhrase = '';
-          for (let i = 0; i < event.results.length; i++) {
-            fullPhrase += event.results[i][0].transcript + ' ';
+          // If not detected in single segments, check recent accumulated phrase
+          if (!detectedTarget) {
+            let recentPhrase = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              recentPhrase += event.results[i][0].transcript + ' ';
+            }
+            recentPhrase = recentPhrase.trim();
+            if (this._isWakeWord(recentPhrase)) {
+              detectedTarget = recentPhrase;
+            }
           }
-          fullPhrase = fullPhrase.trim();
 
-          const targetText = this._isWakeWord(recentPhrase) ? recentPhrase : (this._isWakeWord(fullPhrase) ? fullPhrase : '');
-          if (targetText) {
-            console.log('[VoiceController] ⚡ INSTANT WAKE WORD via WebSpeech:', targetText);
-            const trailingSpeech = this._stripWakePrefix(targetText);
+          // Check full session phrase
+          if (!detectedTarget) {
+            let fullPhrase = '';
+            for (let i = 0; i < event.results.length; i++) {
+              fullPhrase += event.results[i][0].transcript + ' ';
+            }
+            fullPhrase = fullPhrase.trim();
+            if (this._isWakeWord(fullPhrase)) {
+              detectedTarget = fullPhrase;
+            }
+          }
+
+          if (detectedTarget) {
+            console.log('[VoiceController] ⚡ INSTANT WAKE WORD via WebSpeech:', detectedTarget);
+            const trailingSpeech = this._stripWakePrefix(detectedTarget);
             this.triggerEmergencySession('VOICE_WAKE', trailingSpeech);
             return;
           }
@@ -949,7 +1027,15 @@ class VoiceController {
             if (this._state === VoiceState.ARMED_LISTENING_FOR_WAKE && !this._isRecognitionActive && !this._isStarting) {
               this._startRecognition(VoiceState.ARMED_LISTENING_FOR_WAKE);
             }
-          }, 350);
+          }, 60);
+        } else if (this._state === VoiceState.LISTENING_USER && !this._isTranscribing) {
+          clearTimeout(this._restartTimer);
+          this._restartTimer = setTimeout(() => {
+            if (this._state === VoiceState.LISTENING_USER && !this._isRecognitionActive && !this._isStarting && !this._isTranscribing) {
+              console.log('[VoiceController] Reviving WebSpeech for active turn...');
+              this._startRecognition(VoiceState.LISTENING_USER);
+            }
+          }, 60);
         }
       };
 
@@ -1010,30 +1096,34 @@ class VoiceController {
     const lower = text.toLowerCase().trim();
     const clean = lower.replace(/[^a-z0-9]/g, '');
 
-    // 1. Direct concatenated match with required salutation (e.g. "heysevasetu", "hisevasetu", "oksevasetu")
+    // 1. Direct concatenated match (e.g. "heysevasetu", "sevasetu", "hisevasetu", "oksevasetu")
     if (WAKE_WORDS.some(kw => clean.includes(kw))) return true;
 
-    // 2. Explicit salutation prefix REQUIRED (hey / hi / hello / ok / okay / oye / ay)
-    // Followed by SevaSetu variations:
+    // 2. Salutation prefix + SevaSetu / Severity phonetic variants:
     // e.g. "hey seva setu", "hi seva setu", "hello seva setu", "ok seva setu", "hey seva sethu",
     //      "hey seba setu", "hey sheva setu", "hey sever setu", "hey save a setu", "hey sever city"
-    if (/\b(?:hey|hi|hello|ok|okay|ay|oye)\s+(?:seva|sewa|seba|sheba|sheva|sayva|saver|sever|seven|service|save\s*a)\s*(?:setu|sethu|seeto|setoo|shetu|situ|city|to|2)?\b/i.test(lower)) {
+    if (/\b(?:hey|hi|hello|ok|okay|ay|oye|eh|he)\s+(?:seva|sewa|seba|sheba|sheva|sayva|saver|sever|seven|service|siva|shiva|sabha|saba|shaba|save\s*a)\s*(?:setu|sethu|seeto|setoo|shetu|situ|city|to|2)?\b/i.test(lower)) {
       return true;
     }
 
     // 3. Salutation prefix + compound tokens (e.g. "hey sevasetu", "hi sevasetu", "hey severity", "hey severcity")
-    if (/\b(?:hey|hi|hello|ok|okay|ay|oye)\s*(?:sevasetu|sewasetu|sebasetu|shevasetu|severity|severcity|servicesetu)\b/i.test(lower)) {
+    if (/\b(?:hey|hi|hello|ok|okay|ay|oye|eh|he)\s*(?:sevasetu|sewasetu|sebasetu|shevasetu|severity|severcity|servicesetu|sivasetu|shivasetu)\b/i.test(lower)) {
       return true;
     }
 
-    // Standalone "sevasetu" or "severity" without "hey/hi/hello/ok" is explicitly rejected
+    // 4. Standalone SevaSetu phonetic brand name with two tokens (e.g. "seva setu", "seba setu", "siva setu", "shiva setu", "seva sethu", "sever setu")
+    // Note: Standalone single words like "severity", "seven", "service" without setu or salutation are excluded.
+    if (/\b(?:seva|sewa|seba|sheba|sheva|sayva|siva|shiva|sabha|saba|shaba|save\s*a)\s+(?:setu|sethu|seeto|setoo|shetu|situ|city|to|2)\b/i.test(lower)) {
+      return true;
+    }
+
     return false;
   }
 
   _stripWakePrefix(text) {
     if (!text) return '';
     let trailing = text.trim();
-    const wakeStripRegex = /^(?:hey|hi|hello|ok|okay|ay|oye)\s*(?:severity|severcity|sevasetu|sewasetu|sebasetu|servicesetu)?\s*(?:seva|sewa|siva|shiva|seba|sheba|sheva|sayva|save\s*a|saver|sever|seven|service|shoba|shubha)?\s*(?:setu|sethu|setoo|seeto|sitoo|situ|shetu|chetu|city|said\s*to|say\s*to|stay\s*to|set|to|2|c2)?\b[,.]?\s*/i;
+    const wakeStripRegex = /^(?:hey|hi|hello|ok|okay|ay|oye|eh|he)?\s*(?:sevasetu|sewasetu|sebasetu|shevasetu|severity|severcity|servicesetu|sivasetu|shivasetu)?\s*(?:seva|sewa|siva|shiva|seba|sheba|sheva|sayva|save\s*a|saver|sever|seven|service|shoba|shubha)?\s*(?:setu|sethu|setoo|seeto|sitoo|situ|shetu|chetu|city|said\s*to|say\s*to|stay\s*to|set|to|2|c2)?\b[,.]?\s*/i;
     trailing = trailing.replace(wakeStripRegex, '').trim();
     return trailing;
   }
@@ -1098,11 +1188,13 @@ class VoiceController {
         }
 
         try {
-          window.speechSynthesis.cancel();
+          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            window.speechSynthesis.cancel();
+          }
         } catch (_) {}
 
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
+        utterance.rate = 1.1; // Snappy, natural cadence
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
@@ -1120,18 +1212,13 @@ class VoiceController {
         const done = () => {
           if (resolved) return;
           resolved = true;
-          try {
-            if (typeof window !== 'undefined' && window.speechSynthesis) {
-              window.speechSynthesis.cancel();
-            }
-          } catch (_) {}
           resolve();
         };
 
         utterance.onend = done;
         utterance.onerror = done;
 
-        const durationEstimate = Math.max(2500, (text.length / 10) * 1000 + 1000);
+        const durationEstimate = Math.max(2000, (text.length / 12) * 1000 + 800);
         setTimeout(done, durationEstimate);
 
         window.__currentVoiceUtterance = utterance;
@@ -1141,8 +1228,8 @@ class VoiceController {
 
     if (this._generation !== currentGen) return;
 
-    console.log('[VoiceController] 🛡️ 250ms acoustic guard...');
-    await new Promise((r) => setTimeout(r, 250));
+    console.log('[VoiceController] 🛡️ 120ms acoustic guard...');
+    await new Promise((r) => setTimeout(r, 120));
   }
 
   async arm() {
@@ -1290,10 +1377,10 @@ class VoiceController {
       if (this._generation !== extractGen) return;
 
       const intent = (nlpResult.intent || 'UNKNOWN').toUpperCase();
-      const isEmergency = intent !== 'SAFE' && intent !== 'CANCEL' && intent !== 'INFO' && intent !== 'QUERY_DETAILS';
+      const isEmergency = Boolean(nlpResult.isEmergency) && intent !== 'SAFE' && intent !== 'CANCEL' && intent !== 'INFO' && intent !== 'QUERY_DETAILS';
       const defaultReply = isEmergency 
         ? 'We have received your distress signal. You are not alone. Assistance is being coordinated.' 
-        : 'Understood.';
+        : 'I am listening. Please describe what is happening.';
       const reply = nlpResult.reply || defaultReply;
 
       if (intent === 'SAFE' || intent === 'CANCEL') {
@@ -1312,19 +1399,21 @@ class VoiceController {
         this._partialTranscript = '';
         this._transcript = '';
         this._turnAccumulator = '';
+        this._lastProcessedResultIndex = 0;
         this._hasAutoDispatched = false;
         this._transition(VoiceState.LISTENING_USER);
         await this._startRecognition(VoiceState.LISTENING_USER);
         return;
       }
 
-      if (intent === 'QUERY_DETAILS' && !nlpResult.isEmergency) {
+      if (!isEmergency || intent === 'QUERY_DETAILS' || intent === 'UNKNOWN') {
         const promptGen = this._transition(VoiceState.PROMPTING, { systemReply: reply });
         await this._speakHalfDuplex(reply);
         if (this._generation !== promptGen) return;
         this._partialTranscript = '';
         this._transcript = '';
         this._turnAccumulator = '';
+        this._lastProcessedResultIndex = 0;
         this._hasAutoDispatched = false;
         this._transition(VoiceState.LISTENING_USER);
         await this._startRecognition(VoiceState.LISTENING_USER);

@@ -17,7 +17,9 @@ const WAKE_WORDS = [
   'hey sevasetu', 'hey seva setu', 'hi sevasetu', 'hi seva setu', 
   'hello sevasetu', 'hello seva setu', 'ok sevasetu', 'ok seva setu',
   'hey seba setu', 'hey sheva setu', 'hey seva sethu', 'hey save a satu',
-  'hey seva set to', 'hey seva', 'hi seva', 'hello seva'
+  'hey seva set to', 'hey seva', 'hi seva', 'hello seva', 'hey seba',
+  'sevasetu', 'seva setu', 'seba setu', 'siva setu', 'shiva setu',
+  'hey severity', 'hey sever setu', 'hey sever city', 'hey save a setu'
 ];
 
 class NativeSpeechBridge {

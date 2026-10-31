@@ -114,11 +114,32 @@ export function evaluateEmergencyIntent(transcript) {
       intent: 'INFO',
       isNegated: false,
       facts: createEmptyFacts(),
-      confidence: 0.99
+      confidence: 0.99,
+      reply: 'I am Seva Setu, your disaster and emergency relief assistant. Is there an emergency right now?'
     };
   }
 
-  // 3. Demographic parsing
+  // 3. Conversational connection check ("can you hear me", "can you listen me", "are you listening")
+  const connectionPhrases = [
+    'can you hear me', 'can you hear', 'can you listen to me', 'can you listen me',
+    'are you listening', 'are you hearing me', 'listen to me', 'can you understand me',
+    'hello', 'hi'
+  ];
+  if (connectionPhrases.some(p => lower.includes(p))) {
+    const hasEmergencyKeyword = ['fire', 'injured', 'hurt', 'trapped', 'flood', 'accident', 'edc', 'help', 'ambulance', 'bleeding'].some(w => lower.includes(w));
+    if (!hasEmergencyKeyword) {
+      return {
+        isEmergency: false,
+        intent: 'QUERY_DETAILS',
+        isNegated: false,
+        facts: createEmptyFacts(),
+        confidence: 0.95,
+        reply: "Yes, I can hear you clearly! Please describe what is happening."
+      };
+    }
+  }
+
+  // 4. Demographic parsing
   const facts = createEmptyFacts();
 
   const childMatch = lower.match(new RegExp(`${NUM_REGEX_STR}\\s*(?:children|child|kids|kid|babies|baby|infants|infant|minors|minor|bacche|baccha|sishu)`, 'i'));
@@ -170,32 +191,54 @@ export function evaluateEmergencyIntent(transcript) {
     return false;
   };
 
-  if (checkCategory('ACCIDENT', TRIGGERS.ACCIDENT)) {
-    detectedIntent = 'ACCIDENT';
-    facts.severitySignals.push('accident');
-    if (checkCategory('MEDICAL', TRIGGERS.MEDICAL)) {
-      facts.severitySignals.push('injury');
-    }
-  } else if (checkCategory('FIRE', TRIGGERS.FIRE)) {
-    detectedIntent = 'FIRE';
+  const hasAccident = checkCategory('ACCIDENT', TRIGGERS.ACCIDENT);
+  const hasFire = checkCategory('FIRE', TRIGGERS.FIRE);
+  const hasRescue = checkCategory('RESCUE', TRIGGERS.RESCUE);
+  const hasMedical = checkCategory('MEDICAL', TRIGGERS.MEDICAL);
+  const hasFlood = checkCategory('FLOOD', TRIGGERS.FLOOD);
+  const hasEdc = checkCategory('EDC', TRIGGERS.EDC);
+  const hasHelp = checkCategory('HELP', TRIGGERS.HELP);
+
+  if (hasFire) {
     facts.fire = true;
     facts.severitySignals.push('fire');
-  } else if (checkCategory('RESCUE', TRIGGERS.RESCUE)) {
-    detectedIntent = 'RESCUE';
+  }
+  if (hasRescue) {
     facts.trapped = true;
     facts.severitySignals.push('trapped');
-  } else if (checkCategory('MEDICAL', TRIGGERS.MEDICAL)) {
-    detectedIntent = 'MEDICAL';
+  }
+  if (hasMedical || (facts.injuredCount && facts.injuredCount > 0)) {
     facts.severitySignals.push('injury');
-  } else if (checkCategory('FLOOD', TRIGGERS.FLOOD)) {
-    detectedIntent = 'FLOOD';
+  }
+  if (hasAccident) {
+    facts.severitySignals.push('accident');
+  }
+  if (hasFlood) {
     facts.severitySignals.push('flood');
-  } else if (checkCategory('EDC', TRIGGERS.EDC)) {
-    detectedIntent = 'EDC';
+  }
+  if (hasEdc) {
     facts.severitySignals.push('edc');
-  } else if (checkCategory('HELP', TRIGGERS.HELP)) {
-    detectedIntent = 'HELP';
+  }
+  if (hasHelp) {
     facts.severitySignals.push('help');
+  }
+
+  // Determine Primary Intent by Strict Priority:
+  // ACCIDENT > FIRE > RESCUE > MEDICAL > FLOOD > EDC > HELP
+  if (hasAccident) {
+    detectedIntent = 'ACCIDENT';
+  } else if (hasFire) {
+    detectedIntent = 'FIRE';
+  } else if (hasRescue) {
+    detectedIntent = 'RESCUE';
+  } else if (hasMedical || (facts.injuredCount && facts.injuredCount > 0)) {
+    detectedIntent = 'MEDICAL';
+  } else if (hasFlood) {
+    detectedIntent = 'FLOOD';
+  } else if (hasEdc) {
+    detectedIntent = 'EDC';
+  } else if (hasHelp) {
+    detectedIntent = 'HELP';
   }
 
   // Also check if injuredCount was set even if no other medical word triggered
@@ -213,7 +256,7 @@ export function evaluateEmergencyIntent(transcript) {
     isNegated: hasNegation,
     facts,
     confidence: isEmergency ? 0.95 : 0.5,
-    reply: isEmergency ? emergencyMessage : (hasNegation ? 'Understood.' : undefined)
+    reply: isEmergency ? emergencyMessage : (hasNegation ? 'Understood.' : 'I am listening. Please describe your emergency or let me know what assistance you need.')
   };
 }
 
