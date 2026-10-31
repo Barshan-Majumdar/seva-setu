@@ -181,12 +181,14 @@ process.on('SIGTERM', async () => {
 });
 
 const { startReBroadcastJob } = require('./jobs/reBroadcast');
+const { startOutboxSweeperJob } = require('./jobs/outboxSweeper');
 
 // ── Start Cron Jobs ──────────────────────────────────────────────────
 try {
   startReBroadcastJob();
+  startOutboxSweeperJob();
 } catch (cronErr) {
-  console.error('[CRON] Failed to start re-broadcast job:', cronErr);
+  console.error('[CRON] Failed to start cron jobs:', cronErr);
 }
 
 // ── Start Server ─────────────────────────────────────────────────────

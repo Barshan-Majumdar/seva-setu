@@ -156,5 +156,16 @@ test('VoiceController singleton exposes complete snapshot contract', async () =>
   assert.ok('systemReply' in snap);
   assert.ok('isListening' in snap);
   assert.ok('isSpeaking' in snap);
+  assert.ok('hasAutoDispatched' in snap);
 });
 
+test('VoiceController buffer state resets on session re-arm', async () => {
+  const { voiceController } = await import('./VoiceController.js');
+  voiceController._hasAutoDispatched = true;
+  voiceController._turnAccumulator = 'Old emergency statement';
+  
+  voiceController.arm();
+  
+  assert.equal(voiceController._hasAutoDispatched, false);
+  assert.equal(voiceController._turnAccumulator, '');
+});

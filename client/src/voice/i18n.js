@@ -9,7 +9,7 @@ export const STRINGS = {
     intro: "I am Seva Setu, your disaster and emergency relief assistant. Is there an emergency right now?",
     queryDetails: "I am listening. What kind of emergency is happening? Please describe what you see or need.",
     safeClose: "Glad to hear that. Closing the session now. Stay safe!",
-    emergencyAck: "Emergency reported. Dispatching rescue teams to your location immediately. Please stay safe.",
+    emergencyAck: "We have received your distress signal. You are not alone. Assistance is being coordinated.",
     stayOnLine: "Stay on the line. First responders have been notified with your GPS coordinates.",
     micError: "Microphone access error. Please grant permission in your browser address bar.",
     statusOff: "Assistant Inactive",
