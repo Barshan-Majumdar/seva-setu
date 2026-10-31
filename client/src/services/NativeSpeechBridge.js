@@ -1,4 +1,4 @@
-﻿import { Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
 import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 
 /**
@@ -14,9 +14,10 @@ import { SpeechRecognition } from '@capacitor-community/speech-recognition';
  */
 
 const WAKE_WORDS = [
-  'seva setu', 'seba setu', 'sheva setu', 'seva sethu', 
-  'save a satu', 'seva set to', 'seva set u',
-  'sevasetu', 'sebasetu', 'shevasetu', 'hey sevasetu', 'hey seva setu'
+  'hey sevasetu', 'hey seva setu', 'hi sevasetu', 'hi seva setu', 
+  'hello sevasetu', 'hello seva setu', 'ok sevasetu', 'ok seva setu',
+  'hey seba setu', 'hey sheva setu', 'hey seva sethu', 'hey save a satu',
+  'hey seva set to', 'hey seva', 'hi seva', 'hello seva'
 ];
 
 class NativeSpeechBridge {

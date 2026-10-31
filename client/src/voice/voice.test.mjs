@@ -5,14 +5,15 @@ import { t, getLocale } from './i18n.js';
 
 // Re-create the wake-word matcher for isolated deterministic testing
 const WAKE_WORDS = [
-  'sevasetu', 'sevashitu', 'sebasetu', 'shevasetu', 'shivasetu', 'sivasetu',
-  'sevasethu', 'sebasethu', 'shevasethu', 'heysevasetu', 'hisevasetu', 'oksevasetu',
-  'heyseva', 'hiseva', 'saveasatu', 'saveasetu', 'servicesetu', 'sayvasetu',
-  'sevaset', 'sebaset', 'heysheba', 'shebasetu', 'saywasetu', 'sewasetu',
-  'sevasatu', 'sevashitu', 'shevashitu', 'sayvaseto', 'saybasetu',
-  'servicesethu', 'heyseba', 'heysheba', 'heysewa', 'heysebasetu', 'heyshebasetu',
-  'sevaseeto', 'sevaseetu', 'sevaseto', 'sevasitoo', 'sevasitu', 'sebasitu',
-  'sevashito', 'sebaseto', 'seversetu'
+  'heysevasetu', 'hisevasetu', 'hellosevasetu', 'oksevasetu', 'oyesevasetu',
+  'heyseva', 'hiseva', 'helloseva', 'okseva', 'oyeseva',
+  'heyseba', 'hiseba', 'helloseba', 'okseba',
+  'heysheba', 'hisheba', 'hellosheba',
+  'heysewa', 'hisewa',
+  'heysebasetu', 'heyshebasetu', 'heysevasethu', 'heysebasethu', 'heyshevasethu',
+  'heysevashitu', 'heysevashito', 'heysevaseeto', 'heysevaseto', 'heysevasitu',
+  'heyseverity', 'heysevercity', 'heyseversetu', 'heyseversitu', 'heysevenitu', 'heysevensetu',
+  'heysaveasatu', 'heysaveasetu', 'heyservicesetu', 'heysayvasetu'
 ];
 
 function isWakeWord(text) {
@@ -22,13 +23,10 @@ function isWakeWord(text) {
 
   if (WAKE_WORDS.some(kw => clean.includes(kw))) return true;
 
-  if (/\b(?:hey|hi|hello|ok|okay|ay|oye)?\s*(?:seva|sewa|seba|sheba|sheva|sayva|saver|sever)\s+(?:setu|sethu|seeto|setoo|shetu|situ|to|2)\b/i.test(lower)) {
+  if (/\b(?:hey|hi|hello|ok|okay|ay|oye)\s+(?:seva|sewa|seba|sheba|sheva|sayva|saver|sever|seven|service|save\s*a)\s*(?:setu|sethu|seeto|setoo|shetu|situ|city|to|2)?\b/i.test(lower)) {
     return true;
   }
-  if (/\b(?:hey|hi|hello|ok)\s+(?:seva|seba|sheba|sewa)\b/i.test(lower)) {
-    return true;
-  }
-  if (/\b(?:seva|seba|sheva)\s+(?:setu|sethu|situ|seeto)\b/i.test(lower)) {
+  if (/\b(?:hey|hi|hello|ok|okay|ay|oye)\s*(?:sevasetu|sewasetu|sebasetu|shevasetu|severity|severcity|servicesetu)\b/i.test(lower)) {
     return true;
   }
   return false;
@@ -37,7 +35,7 @@ function isWakeWord(text) {
 function stripWakePrefix(text) {
   if (!text) return '';
   let trailing = text.trim();
-  const wakeStripRegex = /^(?:hey|hi|hello|ok|okay|ay|oye)?\s*(?:seva|sewa|siva|shiva|seba|sheba|sheva|sayva|save\s*a|saver|shoba|shubha)\s*(?:setu|sethu|setoo|seeto|sitoo|situ|shetu|chetu|sitoo|said\s*to|say\s*to|stay\s*to|set|to|2|c2)?\b[,.]?\s*/i;
+  const wakeStripRegex = /^(?:hey|hi|hello|ok|okay|ay|oye)\s*(?:severity|severcity|sevasetu|sewasetu|sebasetu|servicesetu)?\s*(?:seva|sewa|siva|shiva|seba|sheba|sheva|sayva|save\s*a|saver|sever|seven|service|shoba|shubha)?\s*(?:setu|sethu|setoo|seeto|sitoo|situ|shetu|chetu|city|said\s*to|say\s*to|stay\s*to|set|to|2|c2)?\b[,.]?\s*/i;
   trailing = trailing.replace(wakeStripRegex, '').trim();
   return trailing;
 }
@@ -57,21 +55,25 @@ function calculateUrgency(currentUrgency, facts = {}) {
 // TEST SUITE
 // ─────────────────────────────────────────────────────────────
 
-test('Wake Word Fuzzy Matcher recognizes diverse speech variations', () => {
+test('Wake Word Fuzzy Matcher recognizes "Hey SevaSetu" and salutation variations', () => {
   const positiveCases = [
     'Hey SevaSetu',
     'hey seva setu',
-    'SevaSetu',
-    'seva setu',
     'hey seba setu',
-    'seba setu',
-    'sheva setu',
-    'seva sethu',
-    'save a satu',
-    'sevaseeto',
+    'hey sheva setu',
+    'hey seva sethu',
+    'hey save a satu',
+    'hey sevaseeto',
     'hey seva',
     'oye seva setu help',
-    'hello sevasetu I need help'
+    'hello sevasetu I need help',
+    'hi sevasetu',
+    'ok sevasetu',
+    'hey severity',
+    'hey sever setu',
+    'hey sever city',
+    'hey seven setu',
+    'hey save a setu'
   ];
 
   for (const phrase of positiveCases) {
@@ -79,8 +81,15 @@ test('Wake Word Fuzzy Matcher recognizes diverse speech variations', () => {
   }
 });
 
-test('Wake Word Matcher rejects unrelated speech', () => {
+test('Wake Word Matcher rejects standalone sevasetu and unrelated speech without Hey prefix', () => {
   const negativeCases = [
+    'sevasetu',
+    'seva setu',
+    'seba setu',
+    'sheva setu',
+    'severity',
+    'what is the severity of this issue',
+    'I was checking sevasetu dashboard',
     'hello how are you',
     'good morning',
     'turn on the light',
@@ -97,9 +106,14 @@ test('Wake Word Matcher rejects unrelated speech', () => {
 test('Wake Prefix Stripping extracts trailing user utterance cleanly', () => {
   const cases = [
     { input: 'Hey SevaSetu fire in my kitchen', expected: 'fire in my kitchen' },
-    { input: 'seva setu, two people trapped', expected: 'two people trapped' },
+    { input: 'hey seva setu, two people trapped', expected: 'two people trapped' },
     { input: 'Hey Seba Setu someone is hurt', expected: 'someone is hurt' },
-    { input: 'SevaSetu', expected: '' }
+    { input: 'hey severity someone fell down', expected: 'someone fell down' },
+    { input: 'hey sever setu need ambulance', expected: 'need ambulance' },
+    { input: 'hey sever city help me', expected: 'help me' },
+    { input: 'Hey SevaSetu', expected: '' },
+    { input: 'hey severity', expected: '' },
+    { input: 'hey sever setu', expected: '' }
   ];
 
   for (const c of cases) {
@@ -168,4 +182,31 @@ test('VoiceController buffer state resets on session re-arm', async () => {
   
   assert.equal(voiceController._hasAutoDispatched, false);
   assert.equal(voiceController._turnAccumulator, '');
+});
+
+test('VoiceController wake-word matcher recognizes phonetics with salutation and rejects standalone', async () => {
+  const { voiceController } = await import('./VoiceController.js');
+  // Positive with salutation
+  assert.equal(voiceController._isWakeWord('hey sevasetu'), true);
+  assert.equal(voiceController._isWakeWord('hey severity'), true);
+  assert.equal(voiceController._isWakeWord('hey sever setu'), true);
+  assert.equal(voiceController._isWakeWord('hi sevasetu'), true);
+  assert.equal(voiceController._isWakeWord('hello sevasetu'), true);
+
+  // Negative without salutation
+  assert.equal(voiceController._isWakeWord('severity'), false);
+  assert.equal(voiceController._isWakeWord('sevasetu'), false);
+  assert.equal(voiceController._isWakeWord('sever setu'), false);
+
+  assert.equal(voiceController._stripWakePrefix('hey severity'), '');
+  assert.equal(voiceController._stripWakePrefix('hey sevasetu someone broke their leg'), 'someone broke their leg');
+});
+
+test('VoiceController arm guarantees ARMED_LISTENING_FOR_WAKE state', async () => {
+  const { voiceController } = await import('./VoiceController.js');
+  voiceController.disarm();
+  assert.equal(voiceController.getSnapshot().state, VoiceState.OFF);
+
+  voiceController.arm();
+  assert.equal(voiceController.getSnapshot().state, VoiceState.ARMED_LISTENING_FOR_WAKE);
 });
